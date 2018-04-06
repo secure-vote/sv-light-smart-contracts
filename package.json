@@ -1,0 +1,29 @@
+{
+  "name": "sv-light-smart-contracts",
+  "version": "1.2.0",
+  "description": "All SvLight Eth Smart Contracts",
+  "main": "index.js",
+  "repository": "git@github.com:secure-vote/sv-light-smart-contracts.git",
+  "author": "Max Kaye <max@secure.vote>",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "async-parallel": "^1.2.3",
+    "colors": "^1.2.1",
+    "ethereumjs-util": "^5.1.5",
+    "js-nacl": "^1.2.2",
+    "prompt-confirm": "^1.2.0",
+    "ramda": "^0.25.0",
+    "sanctuary": "^0.14.1",
+    "truffle": "^4.1.5",
+    "truffle-fast-compile": "^0.0.3",
+    "web3": "^1.0.0-beta.33",
+    "yargs": "^11.0.0"
+  },
+  "scripts": {
+    "sol-test": "cd contract && truffle test",
+    "sol-test-watch": "cd contract && reflex truffle test",
+    "sol-deploy": "node ./bin/deploy.js",
+    "sol-cli": "node -i ./bin/contractCli.js --name"
+  }
+}
