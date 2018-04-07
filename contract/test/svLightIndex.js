@@ -1,4 +1,5 @@
 const LGIndex = artifacts.require("./SVLightIndex.sol");
+const SVAdminPx = artifacts.require("./SVLightAdminProxy.sol");
 const LBB = artifacts.require("./SVLightBallotBox.sol");
 
 require("./testUtils")();
@@ -12,7 +13,7 @@ const bytes32zero =
     "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 async function testOwner(accounts) {
-    const lg = await LGIndex.new({gas: 6000000});
+    const lg = await LGIndex.new({gas: 6500000});
 
     assert.equal(await lg.owner(), accounts[0], "owner set");
     assert.equal(await lg.payTo(), accounts[0], "payTo set");
@@ -42,6 +43,8 @@ async function testOwner(accounts) {
 
     await lg.setPaymentEnabled(true, {from: accounts[0]});
 
+    console.log("Fees set and payment enabled.");
+
     // ensure noone can set the price
     await asyncAssertThrow(
         () => lg.setEth([5, 5], {from: accounts[1]}),
@@ -56,11 +59,13 @@ async function testOwner(accounts) {
     // log("mk democ okay paid");
     const balBefore = await getBalance(accounts[1]);
     // log(await getBlockNumber())
+    console.log("init'ing democracy")
     const democId_ = await lg.initDemoc("some democ", {
         from: accounts[1],
-        value: dPrice1 + 938,
+        value: dPrice1 + 900000000000000,
         gasPrice: 0
     });
+    console.log("democ init'd")
     // log(await getBlockNumber())
     // log("democCreationTx: ", democId_.tx, "---   nLogs:", democId_.logs.length);
     const balAfter = await getBalance(accounts[1]);
@@ -74,7 +79,9 @@ async function testOwner(accounts) {
     );
     // log("init done!");
     const democId = await lg.democList(0);
-    // log("democId", democId);
+    const [democName, democAdmin] = await lg.democs(democId);
+
+    const lgPx = LGIndex.at(democAdmin);
 
     await lg.setPaymentEnabled(false, {from: accounts[0]});
     assert.equal(await lg.paymentEnabled(), false, "payment null now");
@@ -88,7 +95,7 @@ async function testOwner(accounts) {
     );
     await asyncAssertThrow(
         () =>
-            lg.addBallot(democId, democId, accounts[1], {
+            lgPx.addBallot(democId, democId, accounts[1], {
                 from: accounts[1]
             }),
         "no free lunch (issue)"
@@ -99,9 +106,9 @@ async function testOwner(accounts) {
     // log("created LBB to work with... adding a ballot");
 
     // make sure we can still pay for a ballot though
-    await lg.addBallot(democId, democId, lbb.address, {from: accounts[1], value: iPrice1});
+    await lgPx.addBallot(democId, democId, lbb.address, {from: accounts[1], value: iPrice1});
     // log("addballot okay paid");
-    await lg.addBallot(democId, democId, lbb.address, {
+    await lgPx.addBallot(democId, democId, lbb.address, {
         from: accounts[1],
         value: iPrice1,
         gasPrice: 0
@@ -109,7 +116,7 @@ async function testOwner(accounts) {
     // log("ballot added!");
     await lg.setPaymentEnabled(false, {from: accounts[0]});
     // log("add ballot okay free");
-    await lg.addBallot(democId, democId, lbb.address, {
+    await lgPx.addBallot(democId, democId, lbb.address, {
         from: accounts[1]
     });
 
@@ -118,7 +125,7 @@ async function testOwner(accounts) {
     await lg.setPaymentEnabled(true, {from: accounts[0]});
     await asyncAssertThrow(
         () =>
-            lg.addBallot(democId, democId, accounts[1], {
+            lgPx.addBallot(democId, democId, accounts[1], {
                 from: accounts[1]
             }),
         "no free lunch (issue)"
@@ -126,7 +133,7 @@ async function testOwner(accounts) {
     // log("give accounts[1] whitelist access")
     await lg.setWhitelistBallot(accounts[1], true);
     // log("accounts 1 makes ballot with no payment")
-    await lg.addBallot(democId, democId, lbb.address, {
+    await lgPx.addBallot(democId, democId, lbb.address, {
         from: accounts[1]
     });
 
@@ -143,7 +150,7 @@ async function testOwner(accounts) {
     // make sure whitelists are still blocking ppl
     await asyncAssertThrow(
         () =>
-            lg.addBallot(democId, democId, bytes32zero, {
+            lgPx.addBallot(democId, democId, bytes32zero, {
                 from: accounts[1]
             }),
         "no free lunch (issue)"
@@ -165,7 +172,7 @@ async function testOwner(accounts) {
     await asyncAssertThrow(() => lg.getNthBallot(democId, nBallotsPre), "nonexistant democ will throw");
 
     // log("confirmed there is not ballot there yet - deploying now")
-    await lg.deployBallot(democId, democId, bytes32zero, [0, 20000000000], [false, false], {from: accounts[1]});
+    await lgPx.deployBallot(democId, democId, bytes32zero, [0, 20000000000], [false, false], {from: accounts[1]});
     // log("deployed...")
     const newBallot = await lg.getNthBallot(democId, nBallotsPre);
     // log("got new ballot!", newBallot);
@@ -186,7 +193,7 @@ const testPayments = async (acc) => {
 
     const [democPrice, ballotPrice] = S.map(a => web3.toWei(a, 'ether'), [0.05, 0.01]);
 
-    const lg = await LGIndex.new({gas: 5500000});
+    const lg = await LGIndex.new({gas: 6500000});
     await lg.setEth([democPrice, ballotPrice], {from: admin});
     await lg.setWhitelistDemoc(userFree, true, {from: admin});
     await lg.setWhitelistBallot(userFree, true, {from: admin});
@@ -204,9 +211,11 @@ const testPayments = async (acc) => {
     const _dInitEvent = getEventFromTxR("DemocInit", _democInitPaid);
     const democId = _dInitEvent.args.democHash;
 
+    const lgPx = LGIndex.at(democAdmin);
+
     // test a payment for democId
-    await asyncAssertThrow(() => lg.deployBallot(democId, democId, democId, [0, 0], [true, true], {from: userPaid}), "userPaid can't publish issues for free");
-    const _ballotTxR = await lg.deployBallot(democId, democId, democId, [0, 0], [true, true], {
+    await asyncAssertThrow(() => lgPx.deployBallot(democId, democId, democId, [0, 0], [true, true], {from: userPaid}), "userPaid can't publish issues for free");
+    const _ballotTxR = await lgPx.deployBallot(democId, democId, democId, [0, 0], [true, true], {
         from: userPaid,
         value: ballotPrice
     });
@@ -215,7 +224,7 @@ const testPayments = async (acc) => {
     // test userFree can do this for free
     const _democFreeE = getEventFromTxR("DemocInit", await lg.initDemoc("free democ", {from: userFree}));
     const _freeDemocId = _democFreeE.args.democHash;
-    await lg.deployBallot(_freeDemocId, _freeDemocId, _freeDemocId, [0, 0], [true, true], {from: userFree});
+    await lgPx.deployBallot(_freeDemocId, _freeDemocId, _freeDemocId, [0, 0], [true, true], {from: userFree});
 }
 
 

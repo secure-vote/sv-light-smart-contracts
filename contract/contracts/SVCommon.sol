@@ -16,6 +16,7 @@ contract descriptiveErrors {
         if (condition == false) {
             // note: this doesn't actually work unless we return from the function successfully (i.e. with `return`)
             emit Error(errMsg);
+            return;
         }
         require(condition);
     }
@@ -56,6 +57,16 @@ contract copyMemAddrArray {
 }
 
 
+// https://stackoverflow.com/a/40939341
+contract canCheckOtherContracts {
+    function isContract(address addr) constant internal returns (bool) {
+        uint size;
+        assembly { size := extcodesize(addr) }
+        return size > 0;
+    }
+}
+
+
 // interface for ENS reverse registrar
 interface ReverseRegistrar {
     function claim(address owner) external returns (bytes32);
@@ -63,14 +74,15 @@ interface ReverseRegistrar {
 
 
 // contract to allow claiming a reverse ENS lookup
-contract claimReverseENS {
-
+contract claimReverseENS is canCheckOtherContracts {
     function initReverseENS(address _owner) internal {
-        // 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069 is ENS ReverseRegistrar on Mainnet
-        ReverseRegistrar ens = ReverseRegistrar(0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069);
-        ens.claim(_owner);
+        address ensRevAddr = 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069;
+        if (isContract(ensRevAddr)) {
+            // 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069 is ENS ReverseRegistrar on Mainnet
+            ReverseRegistrar ens = ReverseRegistrar(0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069);
+            ens.claim(_owner);
+        }
     }
-
 }
 
 

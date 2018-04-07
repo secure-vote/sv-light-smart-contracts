@@ -148,8 +148,6 @@ const main = async () => {
 
         const compiledSendParams = R.merge(sendParams, {data: binaryData});
 
-        console.log("Gas estimate: ", estGas);
-
         if (args.deploy) {
             log("About to deploy...")
             log("NOTE:".yellow + " The cli will become unresponsive until the transaction confirms. Please be patient. \n\n")
@@ -180,6 +178,8 @@ const main = async () => {
             log("Contract to deploy:\n".green.bold);
             log(JSON.stringify(compiledSendParams, null, 2))
             log("\n\n^^^ Contract parameters to deploy are above ^^^\n".green.bold)
+
+            console.log("Gas estimate: ", estGas);
         }
     }
 

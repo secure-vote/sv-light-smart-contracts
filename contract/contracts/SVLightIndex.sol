@@ -91,7 +91,7 @@ contract SVLightIndex is upgradable {
                 // if there's no fee for the individual user then set it to the general fee
                 v = genFee;
             }
-            require(msg.value >= v);
+            doRequire(msg.value >= v, "Payment sent too low");
 
             // handle payments
             uint128 remainder = uint128(msg.value) - v;
@@ -162,7 +162,8 @@ contract SVLightIndex is upgradable {
         bytes32 democHash = keccak256(democName, msg.sender, democList.length, this);
         democList.push(democHash);
         democs[democHash].name = democName;
-        democs[democHash].admin = msg.sender;
+        SVLightAdminProxy adminPx = new SVLightAdminProxy(msg.sender, address(this));
+        democs[democHash].admin = address(adminPx);
         emit DemocInit(democName, democHash, msg.sender);
         return democHash;
     }

@@ -21,7 +21,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
     }
 
 
-    function SVLightAdminProxy (address initAdmin, address _fwdTo) public {
+    function SVLightAdminProxy(address initAdmin, address _fwdTo) public {
         // this will mostly be called by SVLightIndex so we shouldn't use msg.sender.
         addNewAdmin(initAdmin);
         initReverseENS(initAdmin);
