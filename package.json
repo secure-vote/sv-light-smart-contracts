@@ -22,9 +22,9 @@
     "yargs": "^11.0.0"
   },
   "scripts": {
-    "sol-test": "cd contract && truffle test",
-    "sol-test-watch": "cd contract && reflex truffle test",
-    "sol-deploy": "node ./bin/deploy.js",
-    "sol-cli": "node -i ./bin/contractCli.js --name"
+    "test": "cd contract && truffle test",
+    "test-watch": "cd contract && reflex truffle test",
+    "deploy": "node ./bin/deploy.js",
+    "cli": "node -i ./bin/contractCli.js --name"
   }
 }

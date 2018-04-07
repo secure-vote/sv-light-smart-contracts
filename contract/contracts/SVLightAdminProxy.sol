@@ -8,6 +8,7 @@ pragma solidity ^0.4.21;
 import { descriptiveErrors, claimReverseENS, copyMemAddrArray } from "./SVCommon.sol";
 
 contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArray {
+    bool public isProxyContract = true;
 
     // storage variables
     mapping (address => bool) public admins;
@@ -26,7 +27,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
         }
     }
 
-    // we want to be able to handle refunds - this modifier allows the call if 
+    // we want to be able to handle refunds - this modifier allows the call if
     // we're either an admin or a call is active
     modifier adminOrInCall() {
         if(doRequire(admins[msg.sender] || callActive, ERR_PX_FORBIDDEN))
