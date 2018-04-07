@@ -10,15 +10,53 @@ pragma solidity ^0.4.21;
 
 // contract to enable descriptive errors that emit events through use of `doRequire`
 contract descriptiveErrors {
-    event Error(string error);
 
-    function doRequire(bool condition, string errMsg) internal {
+    // general errors
+    uint constant ERR_FORBIDDEN = 403;
+    uint constant ERR_500 = 500;
+    uint constant ERR_TESTING_REQ = 599;
+
+    // ballot box
+    uint constant ERR_BALLOT_CLOSED = 420001;
+    uint constant ERR_EARLY_SECKEY = 420100;
+    uint constant ERR_ENC_REQ = 420200;
+    uint constant ERR_DO_NOT_USE_ENC = 420201;
+
+    // democ index
+    uint constant ERR_BAD_PAYMENT = 421010;
+    
+    // admin proxy
+    uint constant ERR_CANNOT_REMOVE_SELF = 428001;
+    uint constant ERR_CALL_FWD_FAILED = 428500;
+    uint constant ERR_PX_ETH_TFER_FAILED = 428501;
+    uint constant ERR_PX_FORBIDDEN = 428403;
+
+    // upgradable
+    uint constant ERR_ALREADY_UPGRADED = 429001;
+    uint constant ERR_NOT_UPGRADED = 429002;
+    uint constant ERR_NO_UNDO_FOREVER = 429010;
+    uint constant ERR_CALL_UPGRADED_FAILED = 429500;
+
+
+    event Error(uint code);
+    event Passed(uint code);
+
+    modifier req(bool condition, uint statusCode) {
+        if (condition == false) {
+            emit Error(statusCode);
+        } else {
+            _;
+        }
+    }
+
+    function doRequire(bool condition, uint statusCode) internal returns (bool) {
         if (condition == false) {
             // note: this doesn't actually work unless we return from the function successfully (i.e. with `return`)
-            emit Error(errMsg);
-            return;
+            emit Error(statusCode);
+        } else {
+            emit Passed(statusCode);
         }
-        require(condition);
+        return condition;
     }
 }
 
@@ -28,8 +66,9 @@ contract owned is descriptiveErrors {
     address public owner;
 
     modifier isOwner() {
-        doRequire(msg.sender == owner, "Sender is not owner.");
-        _;
+        if(doRequire(msg.sender == owner, ERR_FORBIDDEN)) { 
+            _; 
+        }
     }
 
     function owned() public {
@@ -91,6 +130,8 @@ contract upgradable is descriptiveErrors, owned {
     bool public upgraded = false;
     address public upgradeAddr;
     uint public upgradeTimestamp;
+    
+    uint ONE_DAY_IN_SEC = 60 * 60 * 24;
 
     event ContractUpgraded(uint upgradeTime, address newScAddr);
 
@@ -99,24 +140,24 @@ contract upgradable is descriptiveErrors, owned {
         // the new contract to get data out of the old contract for those methods
         // TODO: is there a case where we actually want this? Or are most methods okay to leave as old ones?
         if (upgraded && msg.sender != upgradeAddr) {
-            doRequire(upgradeAddr.call.value(msg.value)(msg.data), "unable to forward data to upgrade contract - some error occured");
+            doRequire(upgradeAddr.call.value(msg.value)(msg.data), ERR_CALL_UPGRADED_FAILED);
         } else {
             _;
         }
     }
 
-    function deprecateAndUpgrade(address _newSC) isOwner() public {
-        doRequire(upgraded == false, "cannot upgrade a contract more than once");
+    function deprecateAndUpgrade(address _newSC) isOwner() req(upgraded == false, ERR_ALREADY_UPGRADED) public {
         upgraded = true;
         upgradeAddr = _newSC;
         upgradeTimestamp = block.timestamp;
         emit ContractUpgraded(upgradeTimestamp, upgradeAddr);
     }
 
-    function undoUpgrade() isOwner() public {
-        doRequire(upgraded == true, "cannot do an upgrade that hasn't occured");
-        uint oneDay = (60 * 60 * 24);
-        doRequire(block.timestamp < (upgradeTimestamp + oneDay), "can only undo upgrade in first 24 hrs");
+    function undoUpgrade() isOwner() 
+                           req(upgraded == true, ERR_NOT_UPGRADED) 
+                           req(block.timestamp < (upgradeTimestamp + ONE_DAY_IN_SEC), ERR_NO_UNDO_FOREVER)
+                           public {
+        // todo
     }
 }
 
@@ -150,9 +191,6 @@ interface ERC20Interface {
     // Triggered whenever approve(address _spender, uint256 _value) is called.
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 }
-
-
-
 
 
 

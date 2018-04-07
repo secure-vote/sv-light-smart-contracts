@@ -81,24 +81,24 @@ contract SVLightBallotBox is descriptiveErrors, owned {
 
     //// ** Modifiers
 
-    modifier ballotOpen {
-        doRequire(uint64(block.timestamp) >= startTime && uint64(block.timestamp) < endTime, "ballot is not open");
-        _;
+    modifier ballotOpen() {
+        if(doRequire(uint64(block.timestamp) >= startTime && uint64(block.timestamp) < endTime, ERR_BALLOT_CLOSED))
+            _;
     }
 
-    modifier onlyTesting {
-        doRequire(testMode, "testing mode is required but not active");
-        _;
+    modifier onlyTesting() {
+        if(doRequire(testMode, ERR_TESTING_REQ))
+            _;
     }
 
     modifier isTrue(bool _b) {
-        doRequire(_b == true, "a condition was required to be true but was not");
-        _;
+        if(doRequire(_b == true, ERR_500))
+            _;
     }
 
     modifier isFalse(bool _b) {
-        doRequire(_b == false, "a condition was required to be false but was not");
-        _;
+        if(doRequire(_b == false, ERR_500))
+            _;
     }
 
     //// ** Functions
@@ -130,12 +130,12 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     }
 
     // Ballot submission
-    function submitBallotWithPk(bytes32 encryptedBallot, bytes32 senderPubkey) isTrue(useEncryption) ballotOpen public {
+    function submitBallotWithPk(bytes32 encryptedBallot, bytes32 senderPubkey) req(useEncryption == true, ERR_ENC_REQ) ballotOpen() public {
         addBallotAndVoterWithPk(encryptedBallot, senderPubkey);
         emit SuccessfulPkVote(msg.sender, encryptedBallot, senderPubkey);
     }
 
-    function submitBallotNoPk(bytes32 ballot) isFalse(useEncryption) ballotOpen public {
+    function submitBallotNoPk(bytes32 ballot) req(useEncryption == false, ERR_DO_NOT_USE_ENC) ballotOpen public {
         addBallotAndVoterNoPk(ballot);
         emit SuccessfulVote(msg.sender, ballot);
     }
@@ -155,9 +155,7 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     }
 
     // Allow the owner to reveal the secret key after ballot conclusion
-    function revealSeckey(bytes32 _secKey) isOwner() public {
-        doRequire(block.timestamp > endTime, "cannot reveal the SecKey before ballot is over");
-
+    function revealSeckey(bytes32 _secKey) isOwner() req(block.timestamp > endTime, ERR_EARLY_SECKEY) public {
         ballotEncryptionSeckey = _secKey;
         seckeyRevealed = true; // this flag allows the contract to be locked
         emit SeckeyRevealed(_secKey);
@@ -168,7 +166,7 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     }
 
     // Test functions
-    function setEndTime(uint64 newEndTime) onlyTesting isOwner() public {
+    function setEndTime(uint64 newEndTime) onlyTesting() isOwner() public {
         endTime = newEndTime;
     }
 

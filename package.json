@@ -10,6 +10,7 @@
   "dependencies": {
     "async-parallel": "^1.2.3",
     "colors": "^1.2.1",
+    "ethereumjs-testrpc": "^6.0.3",
     "ethereumjs-util": "^5.1.5",
     "js-nacl": "^1.2.2",
     "prompt-confirm": "^1.2.0",

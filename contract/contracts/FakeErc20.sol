@@ -11,7 +11,7 @@ pragma solidity ^0.4.8;
 // https://github.com/ethereum/EIPs/issues/20
 contract ERC20Interface {
     // Get the account balance of another account with address _owner
-    function balanceOf(address _owner) constant returns (uint256 balance);
+    function balanceOf(address _owner) public constant returns (uint256 balance);
 }
 
 contract FakeErc20 is ERC20Interface {
@@ -23,12 +23,13 @@ contract FakeErc20 is ERC20Interface {
     address public owner;
 
     // Constructor
-    function FakeErc20()  public {
+    function FakeErc20() public {
         owner = msg.sender;
     }
 
     // What is the balance of a particular account?
-    function balanceOf(address _owner) constant returns (uint256 balance) {
+    function balanceOf(address _owner) public constant returns (uint256 balance) {
+        _owner = address(0);  // removes warning about unused function parameter;
         return 1337000000000000000000;
     }
 }

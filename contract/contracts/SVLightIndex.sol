@@ -11,10 +11,10 @@ pragma solidity ^0.4.19;
 
 import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
-import { upgradable } from "./SVCommon.sol";
+import { upgradable, canCheckOtherContracts } from "./SVCommon.sol";
 
 
-contract SVLightIndex is upgradable {
+contract SVLightIndex is upgradable, canCheckOtherContracts {
     address public owner;
 
     struct Ballot {
@@ -69,11 +69,14 @@ contract SVLightIndex is upgradable {
     event SetFees(uint128[2] _newFees);
     event PaymentEnabled(bool _feeEnabled);
 
+    event PaymentTooLow(uint msgValue, uint feeReq);
+
     //* MODIFIERS /
 
     modifier onlyBy(address _account) {
-        require(msg.sender == _account);
-        _;
+        if(doRequire(msg.sender == _account, ERR_FORBIDDEN)) {
+            _;
+        }
     }
 
     modifier payReq(uint8 paymentType) {
@@ -91,15 +94,19 @@ contract SVLightIndex is upgradable {
                 // if there's no fee for the individual user then set it to the general fee
                 v = genFee;
             }
-            doRequire(msg.value >= v, "Payment sent too low");
 
-            // handle payments
-            uint128 remainder = uint128(msg.value) - v;
-            payTo.transfer(v); // .transfer so it throws on failure
-            if (!msg.sender.send(remainder)){
-                payTo.transfer(remainder);
+            if (doRequire(msg.value >= v, ERR_BAD_PAYMENT)) {
+                // handle payments
+                uint128 remainder = uint128(msg.value) - v;
+                payTo.transfer(v); // .transfer so it throws on failure
+                if (!msg.sender.send(remainder)){
+                    payTo.transfer(remainder);
+                }
+                emit PaymentMade([v, remainder]);
+            } else {
+                emit PaymentTooLow(msg.value, v);
+                return;
             }
-            emit PaymentMade([v, remainder]);
         }
 
         // do main
@@ -159,12 +166,21 @@ contract SVLightIndex is upgradable {
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
     function initDemoc(string democName) payReq(PAY_DEMOC) public payable returns (bytes32) {
+        address admin;
+        if(isContract(msg.sender)) {
+            // if the caller is a contract we presume they can handle multisig themselves...
+            admin = msg.sender;
+        } else {
+            // otherwise let's create a proxy sc for them
+            SVLightAdminProxy adminPx = new SVLightAdminProxy(msg.sender, address(this));
+            admin = address(adminPx);
+        }
+
         bytes32 democHash = keccak256(democName, msg.sender, democList.length, this);
         democList.push(democHash);
         democs[democHash].name = democName;
-        SVLightAdminProxy adminPx = new SVLightAdminProxy(msg.sender, address(this));
-        democs[democHash].admin = address(adminPx);
-        emit DemocInit(democName, democHash, msg.sender);
+        democs[democHash].admin = admin;
+        emit DemocInit(democName, democHash, admin);
         return democHash;
     }
 
