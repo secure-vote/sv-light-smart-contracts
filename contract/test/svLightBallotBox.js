@@ -1,4 +1,4 @@
-var LittleBallotBox = artifacts.require("./SVLightBallotBox.sol");
+var SVBallotBox = artifacts.require("./SVLightBallotBox.sol");
 
 require("./testUtils")();
 
@@ -24,22 +24,23 @@ async function testEarlyBallot(accounts) {
     var startTime = mkStartTime() + 2;
     var endTime = startTime + 600;
 
-    const vc = await LittleBallotBox.new(specHash, [startTime, endTime], mkFlags({useEnc: true, testing: true}));
-    await asyncAssertThrow(() => vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
+    const vc = await SVBallotBox.new(specHash, [startTime, endTime], mkFlags({useEnc: true, testing: true}));
+    await assertErrStatus(ERR_BALLOT_CLOSED, await vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
 }
 
 
 async function testSetOwner(acc) {
     const start = mkStartTime() - 1;
-    const vc = await LittleBallotBox.new(specHash, [start, start + 60], mkFlags({useEnc: false, testing: false}));
+    const vc = await SVBallotBox.new(specHash, [start, start + 60], mkFlags({useEnc: false, testing: false}));
     const owner1 = await vc.owner();
     assert.equal(acc[0], owner1, "owner should be acc[0]");
 
     // fraud set owner
-    await asyncAssertThrow(() => vc.setOwner(acc[2], {from: acc[1]}), "should throw if setOwner called by non-owner");
+    await assert403(() => vc.setOwner(acc[2], {from: acc[1]}), "should throw if setOwner called by non-owner");
 
     // good set owner
-    await vc.setOwner(acc[1]);
+    const soTxr = await vc.setOwner(acc[1]);
+    assertNoErr(soTxr);
     const owner2 = await vc.owner();
     assert.equal(acc[1], owner2, "owner should change when legit req");
 }
@@ -53,18 +54,19 @@ async function testEncryptionBranching(accounts) {
     /* ENCRYPTION */
 
     // best BB with enc
-    const vcEnc = await LittleBallotBox.new(specHash, [startTime, endTime], [true, true]);
+    const vcEnc = await SVBallotBox.new(specHash, [startTime, endTime], [true, true]);
 
     // check we're using enc
     assert.isTrue(await vcEnc.useEncryption(), "encryption should be enabled");
 
     // check submissions with enc
     const bData = hexPk;
-    asyncAssertThrow(() => vcEnc.submitBallotNoPk(bData), "throw when not using encryption");
+    assertErrStatus(ERR_NO_ENC_DISABLED, await vcEnc.submitBallotNoPk(bData), "throw when not using encryption");
     assert.equal(await vcEnc.nVotesCast(), 0, "no votes yet");
 
     const tempPk = specHash;
     const _wEnc = await vcEnc.submitBallotWithPk(bData, tempPk);
+    assertNoErr(_wEnc);
     assert.equal(await vcEnc.nVotesCast(), 1, "1 vote");
     assertOnlyEvent("SuccessfulPkVote", _wEnc);
     const ballot = await vcEnc.ballotMap(0);
@@ -77,13 +79,14 @@ async function testEncryptionBranching(accounts) {
     /* NO ENCRYPTION */
 
     // create ballot box with no enc
-    const vcNoEnc = await LittleBallotBox.new(specHash, [startTime, endTime], [false, true]);
+    const vcNoEnc = await SVBallotBox.new(specHash, [startTime, endTime], [false, true]);
 
     // assert useEnc is false with no enc
     assert.isFalse(await vcNoEnc.useEncryption(), "encryption should be disabled");
     // test ballot submissions w no enc
     const _bData = hexSk;
     const _noEnc = await vcNoEnc.submitBallotNoPk(_bData);
+    assertNoErr(_noEnc);
     assertOnlyEvent("SuccessfulVote", _noEnc);
     const _bReturned = await vcNoEnc.ballotMap(0);
     assert.equal(_bReturned[0], _bData, "ballot data matches");
@@ -91,7 +94,7 @@ async function testEncryptionBranching(accounts) {
     assert.equal(await vcNoEnc.associatedPubkeys(0), bytes32zero, "pubkey is zero");
 
     assert.equal(await vcEnc.nVotesCast(), 1, "1 vote");
-    await asyncAssertThrow(() => vcNoEnc.submitBallotWithPk(hexSk, hexSk), "should throw with enc disabled");
+    assertErrStatus(ERR_ENC_DISABLED, await vcNoEnc.submitBallotWithPk(hexSk, hexSk), "should throw with enc disabled");
     assert.equal(await vcEnc.nVotesCast(), 1, "still only 1 vote");
 }
 
@@ -100,7 +103,7 @@ async function testInstantiation(accounts) {
     var endTime = startTime + 600;
     var shortEndTime = 0;
 
-    const vc = await LittleBallotBox.new(specHash, [startTime, endTime], [true, true]);
+    const vc = await SVBallotBox.new(specHash, [startTime, endTime], [true, true]);
 
     // log(accounts[0]);
     assert.equal(await vc.owner(), accounts[0], "Owner must be set on launch.");
@@ -147,23 +150,25 @@ async function testInstantiation(accounts) {
 
     assert.equal((await vc.nVotesCast()).toNumber(), nVotes + 1, "should have cast " + (nVotes + 1).toString() + " votes thus far");
 
-    await asyncAssertThrow(() => vc.revealSeckey(hexSk), "should throw on early reveal");
+    assertErrStatus(ERR_EARLY_SECKEY, await vc.revealSeckey(hexSk), "should throw on early reveal");
 
     // jump to after ballot is closed
     // note: originally used testrpc's evm_increaseTime RPC call, but you can't go backwards or undo, so it screws up other test 👿
-    await vc.setEndTime(0);
+    _setTxR = await vc.setEndTime(0);
+    assertNoErr(_setTxR)
 
-    await asyncAssertThrow(() => vc.revealSeckey(hexSk, { from: accounts[4] }), "throw on bad reveal from non-admin");
+    await assert403(() => vc.revealSeckey(hexSk, { from: accounts[4] }), "cannot reveal seckey from non-admin");
 
     const _revealSK = await vc.revealSeckey(hexSk);
     assertOnlyEvent("SeckeyRevealed", _revealSK);
+    assertNoErr(_revealSK);
 
-    await asyncAssertThrow(() => vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
+    assertErrStatus(ERR_BALLOT_CLOSED, await vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
 }
 
 async function testTestMode(accounts) {
-    var vc = await LittleBallotBox.new(specHash, [0, 1], [false, false]);
-    await asyncAssertThrow(() => vc.setEndTime(0), "throws on set end time when not in testing");
+    var vc = await SVBallotBox.new(specHash, [0, 1], [false, false]);
+    assertErrStatus(ERR_TESTING_REQ, await vc.setEndTime(0), "throws on set end time when not in testing");
 }
 
 const testABallot = accounts => async (_vc = S.Nothing, account = S.Nothing, msg = "no message provided") => {
@@ -179,8 +184,8 @@ const testABallot = accounts => async (_vc = S.Nothing, account = S.Nothing, msg
     const _submitBallotWithPk = await asyncAssertDoesNotThrow(() => vc.submitBallotWithPk(encBallot, vtrPubkey, {
         from: myAddr
     }), msg);
-
     assertOnlyEvent("SuccessfulPkVote", _submitBallotWithPk);
+    assertNoErr(_submitBallotWithPk);
 
     // const _nVotesRet = await vc.nVotesCast();
     const _ballotId = await vc.voterToBallotID(myAddr);

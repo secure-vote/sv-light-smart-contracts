@@ -12,9 +12,6 @@ const S = create({checkTypes: true, env});
 const bytes32zero =
     "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-const assert403 = (f, msg) => asyncErrStatus(403, f, msg);
-const assertNoErr = (tx) => assert.eventDoesNotOccur("Error", tx);
-
 async function testOwner(accounts) {
     const svIx = await SVIndex.new({gas: 6500000});
 
@@ -227,7 +224,7 @@ const testPayments = async (acc) => {
     const _democFreeE = getEventFromTxR("DemocInit", _democFreeTxR);
     const _freeDemocId = _democFreeE.args.democHash;
     const ixPxForFree = SVIndex.at(_democFreeE.args.admin);
-    
+
     // set whitelist for issues to the proxySC - not user themselves
     assertNoErr(await svIx.setWhitelistBallot(_democFreeE.args.admin, true, {from: admin}));
 

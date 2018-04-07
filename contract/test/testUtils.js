@@ -95,12 +95,15 @@ module.exports = function () {
     }
 
     assert.eventDoesNotOccur = (eventName, tx) => {
-        if (tx.logs === undefined) 
+        if (tx.logs === undefined)
             throw Error(`No logs object for txR: ${tx}`);
         const logs = tx.logs.filter(({event}) => event == eventName);
-        if (logs.length !== 0) 
+        if (logs.length !== 0)
             throw Error(`Expected not to find event ${eventName} but did!\n  TxReceipt: ${toJson(tx.logs)}`);
     }
+
+    this.assert403 = (f, msg) => asyncErrStatus(403, f, msg);
+    this.assertNoErr = (tx) => assert.eventDoesNotOccur("Error", tx);
 
     this.getEventFromTxR = function(eventName, txR) {
         for (let i = 0; i < txR.logs.length; i++) {
@@ -122,6 +125,8 @@ module.exports = function () {
         return toRet;
     }
 
+    this.bytes32zero = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    this.zeroAddr = "0x0000000000000000000000000000000000000000";
 
     // general errors
     this.ERR_FORBIDDEN = 403;
@@ -131,12 +136,12 @@ module.exports = function () {
     // ballot box
     this.ERR_BALLOT_CLOSED = 420001;
     this.ERR_EARLY_SECKEY = 420100;
-    this.ERR_ENC_REQ = 420200;
-    this.ERR_DO_NOT_USE_ENC = 420201;
+    this.ERR_ENC_DISABLED = 420200;
+    this.ERR_NO_ENC_DISABLED = 420201;
 
     // democ index
     this.ERR_BAD_PAYMENT = 421010;
-    
+
     // admin proxy
     this.ERR_CANNOT_REMOVE_SELF = 428001;
     this.ERR_CALL_FWD_FAILED = 428500;

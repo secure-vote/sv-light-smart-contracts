@@ -19,12 +19,12 @@ contract descriptiveErrors {
     // ballot box
     uint constant ERR_BALLOT_CLOSED = 420001;
     uint constant ERR_EARLY_SECKEY = 420100;
-    uint constant ERR_ENC_REQ = 420200;
-    uint constant ERR_DO_NOT_USE_ENC = 420201;
+    uint constant ERR_ENC_DISABLED = 420200;
+    uint constant ERR_NO_ENC_DISABLED = 420201;
 
     // democ index
     uint constant ERR_BAD_PAYMENT = 421010;
-    
+
     // admin proxy
     uint constant ERR_CANNOT_REMOVE_SELF = 428001;
     uint constant ERR_CALL_FWD_FAILED = 428500;
@@ -39,7 +39,7 @@ contract descriptiveErrors {
 
 
     event Error(uint code);
-    event Passed(uint code);
+    // event Passed(uint code);
 
     modifier req(bool condition, uint statusCode) {
         if (condition == false) {
@@ -54,7 +54,7 @@ contract descriptiveErrors {
             // note: this doesn't actually work unless we return from the function successfully (i.e. with `return`)
             emit Error(statusCode);
         } else {
-            emit Passed(statusCode);
+            // emit Passed(statusCode);
         }
         return condition;
     }
@@ -66,8 +66,8 @@ contract owned is descriptiveErrors {
     address public owner;
 
     modifier isOwner() {
-        if(doRequire(msg.sender == owner, ERR_FORBIDDEN)) { 
-            _; 
+        if(doRequire(msg.sender == owner, ERR_FORBIDDEN)) {
+            _;
         }
     }
 
@@ -130,7 +130,7 @@ contract upgradable is descriptiveErrors, owned {
     bool public upgraded = false;
     address public upgradeAddr;
     uint public upgradeTimestamp;
-    
+
     uint ONE_DAY_IN_SEC = 60 * 60 * 24;
 
     event ContractUpgraded(uint upgradeTime, address newScAddr);
@@ -153,8 +153,8 @@ contract upgradable is descriptiveErrors, owned {
         emit ContractUpgraded(upgradeTimestamp, upgradeAddr);
     }
 
-    function undoUpgrade() isOwner() 
-                           req(upgraded == true, ERR_NOT_UPGRADED) 
+    function undoUpgrade() isOwner()
+                           req(upgraded == true, ERR_NOT_UPGRADED)
                            req(block.timestamp < (upgradeTimestamp + ONE_DAY_IN_SEC), ERR_NO_UNDO_FOREVER)
                            public {
         // todo

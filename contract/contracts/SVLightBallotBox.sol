@@ -130,12 +130,12 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     }
 
     // Ballot submission
-    function submitBallotWithPk(bytes32 encryptedBallot, bytes32 senderPubkey) req(useEncryption == true, ERR_ENC_REQ) ballotOpen() public {
+    function submitBallotWithPk(bytes32 encryptedBallot, bytes32 senderPubkey) req(useEncryption == true, ERR_ENC_DISABLED) ballotOpen() public {
         addBallotAndVoterWithPk(encryptedBallot, senderPubkey);
         emit SuccessfulPkVote(msg.sender, encryptedBallot, senderPubkey);
     }
 
-    function submitBallotNoPk(bytes32 ballot) req(useEncryption == false, ERR_DO_NOT_USE_ENC) ballotOpen public {
+    function submitBallotNoPk(bytes32 ballot) req(useEncryption == false, ERR_NO_ENC_DISABLED) ballotOpen public {
         addBallotAndVoterNoPk(ballot);
         emit SuccessfulVote(msg.sender, ballot);
     }

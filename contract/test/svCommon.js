@@ -7,8 +7,6 @@ const AsyncPar = require("async-parallel");
 const {create, env} = require("sanctuary");
 const S = create({checkTypes: true, env});
 
-const bytes32zero =
-    "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 async function testOwner(accounts) {
 }
