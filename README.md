@@ -9,7 +9,7 @@ Most of the time you should check a condition and emit an `Error` event with a s
 
 ### Status Codes
 
-See: `descriptiveErrors` in [./contract/contracts/SVCommon.sol](./blob/master/contract/contracts/SVCommon.sol)
+See: `descriptiveErrors` in [./contract/contracts/SVCommon.sol](./contract/contracts/SVCommon.sol)
 
 ## Upgrading
 
