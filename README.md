@@ -1,4 +1,7 @@
 # sv-light-smart-contracts
+
+![build-status-image](https://travis-ci.org/secure-vote/sv-light-smart-contracts.svg?branch=master)
+
 Repo for all smart contracts associated with SV Light
 
 ## Error Handling
