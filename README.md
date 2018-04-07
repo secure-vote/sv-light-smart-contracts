@@ -20,7 +20,6 @@ Upgradable contracts should inherit the `upgradable` SC (in `SVCommon.sol`)
 
 It's up to each contract to implement the logic around upgrades (e.g. how to handle state).
 
-
 ## Scripts
 
 See `package.json`, but you probably want to be using `yarn test` or `yarn test-watch`
