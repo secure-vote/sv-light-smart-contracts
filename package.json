@@ -10,6 +10,7 @@
   "dependencies": {
     "async-parallel": "^1.2.3",
     "colors": "^1.2.1",
+    "eth-ens-namehash": "^2.0.8",
     "ethereumjs-testrpc": "^6.0.3",
     "ethereumjs-util": "^5.1.5",
     "js-nacl": "^1.2.2",
@@ -26,6 +27,7 @@
     "test-watch": "cd svLight && reflex truffle test",
     "deploy": "node ./bin/deploy.js",
     "cli": "node -i ./bin/contractCli.js --name",
-    "compile-sv-light": "for f in $(ls ./svLight/contracts | grep sol); do ./bin/compile.sh -d svLight -c $f; done"
+    "compile-sv-light": "for f in $(ls ./svLight/contracts | grep sol); do ./bin/compile.sh -d svLight -c $f; done",
+    "compile-ens": "for f in $(ls ./ensSCs/contracts | grep sol); do ./bin/compile.sh -d ensSCs -c $f -o _distEns; done"
   }
 }

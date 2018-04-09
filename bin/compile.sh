@@ -8,16 +8,28 @@ LGREEN='\033[1;32m'
 LBLUE='\033[1;34m'
 LCYAN='\033[1;36m'
 
+if [ "$1" == "help" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    echo "Args:"
+    echo "    -c CONTRACT_NAME  (note: include the .sol)"
+    echo "    -d CONTRACT_DIR  (note: full path will be ./CONTRACT_DIR/contracts/CONTRACT_NAME)"
+    echo "    -o OUTPUT_DIR  (e.g. _solDist)"
+    exit 1
+fi
+
 # getopts
 CONTRACT_NAME="UNKNOWN.sol"
 CONTRACT_DIR="svLight"
-while getopts ":c:d:" opt; do
+OUTPUT_DIR="_solDist"
+while getopts ":c:d:o:" opt; do
     case $opt in
         c)
             CONTRACT_NAME="$OPTARG"
         ;;
         d)
             CONTRACT_DIR="$OPTARG"
+        ;;
+        o)
+            OUTPUT_DIR="$OPTARG"
         ;;
         \?)
             echo "invalid option -$OPTARG"
@@ -32,7 +44,6 @@ done
 
 # params
 CONTRACT_PATH="./$CONTRACT_DIR/contracts/$CONTRACT_NAME"
-OUTPUT_DIR="_solDist"
 
 if [ $(pwd | grep "bin") ]; then
     echo -e 'Please run this with Yarn from the source root.\n'
@@ -48,7 +59,7 @@ fi
 
 if [ ! -e "$CONTRACT_PATH" ]; then
     echo -e "${RED}Error:${NC} Cannot find $CONTRACT_PATH\n"
-    echo -e "Are you running this from `./sv-light-smart-contracts/` with yarn?\n"
+    echo -e "Are you running this from ./ with yarn?\n"
     exit 1
 fi
 

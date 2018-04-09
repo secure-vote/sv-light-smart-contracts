@@ -2,14 +2,14 @@ const fs = require('fs');
 const colors = require('colors');
 
 
-const loadDetails = (contractName) => {
+const loadDetails = (contractName, contractDir) => {
     if (contractName === undefined) {
         throw Error("No contract name provided...")
     }
 
     try {
         // console.log("Running from", process.cwd())
-        const solDist = "_solDist"
+        const solDist = contractDir || "_solDist";
         var prefix = ""
         for (var i = 0; i < 7; i++) {
             if (fs.existsSync("./" + prefix + solDist)) {

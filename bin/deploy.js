@@ -41,6 +41,11 @@ const main = async () => {
             describe: "The contract name of an alternate contract to deploy, do not include '.sol'",
             demand: true
         },
+        "contractDir": {
+            type: 'string',
+            describe: 'contract build dir to use (expects ./CONTRACT_DIR/CONTRACT_NAME.bin to exist)',
+            demand: false,
+        },
         "argsJson": {
             type: 'string',
             describe: "Args to provide with contractName in json encoding - required for deploying arbitrary",
@@ -91,6 +96,11 @@ const main = async () => {
             describe: "The contract name of an alternate contract to deploy, do not include '.sol'",
             type: 'string'
         },
+        "contractDir": {
+            type: 'string',
+            describe: 'contract dir to use (expects ./CONTRACT_DIR/contracts folder to exist)',
+            default: 'svLight'
+        },
         "argsJson": {
             type: 'string',
             describe: "Args to provide with contractName in json encoding - required for deploying arbitrary"
@@ -108,7 +118,7 @@ const main = async () => {
     }
 
     const contractName = args.contractName || "LittleBallotBox";
-    const [abi, bin] = loadDetails(contractName);
+    const [abi, bin] = loadDetails(contractName, args.contractDir);
 
     web3.setProvider(new Web3.providers.HttpProvider(args.web3Provider));
     const coinbase = await web3.eth.getCoinbase();

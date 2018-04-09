@@ -31,16 +31,16 @@ contract SvEnsRegistrar {
         owner = msg.sender;
     }
 
-    function addAdmin(address newAdmin) req(admins[msg.sender]) public {
+    function addAdmin(address newAdmin) req(admins[msg.sender]) external {
         admins[newAdmin] = true;
     }
 
-    function remAdmin(address oldAdmin) req(admins[msg.sender]) public {
+    function remAdmin(address oldAdmin) req(admins[msg.sender]) external {
         require(oldAdmin != msg.sender && oldAdmin != owner);
         admins[oldAdmin] = false;
     }
 
-    function chOwner(address newOwner, bool remPrevOwnerAsAdmin) req(msg.sender == owner) public {
+    function chOwner(address newOwner, bool remPrevOwnerAsAdmin) req(msg.sender == owner) external {
         if (remPrevOwnerAsAdmin) {
             admins[owner] = false;
         }
@@ -53,8 +53,8 @@ contract SvEnsRegistrar {
      * @param subnode The hash of the label to register.
      * @param _owner The address of the new owner.
      */
-    function register(bytes32 subnode, address _owner) req(admins[msg.sender]) public {
-        _setSubnodeOwner(rootNode, subnode, _owner);
+    function register(bytes32 subnode, address _owner) req(admins[msg.sender]) external {
+        _setSubnodeOwner(subnode, _owner);
     }
 
     /**
@@ -62,18 +62,18 @@ contract SvEnsRegistrar {
      * @param subnodeStr The label to register.
      * @param _owner The address of the new owner.
      */
-    function registerName(string subnodeStr, address _owner) req(admins[msg.sender]) public {
+    function registerName(string subnodeStr, address _owner) req(admins[msg.sender]) external {
+        // labelhash
         bytes32 subnode = keccak256(subnodeStr);
-        _setSubnodeOwner(rootNode, subnode, _owner);
+        _setSubnodeOwner(subnode, _owner);
     }
 
     /**
      * INTERNAL - Register a name that's not currently registered
-     * @param rootNode - rootNode of this registrar
      * @param subnode The hash of the label to register.
      * @param _owner The address of the new owner.
      */
-    function _setSubnodeOwner(bytes32 rootNode, bytes32 subnode, address _owner) internal {
+    function _setSubnodeOwner(bytes32 subnode, address _owner) internal {
         require(!knownNodes[subnode]);
         knownNodes[subnode] = true;
         ens.setSubnodeOwner(rootNode, subnode, _owner);

@@ -23,7 +23,7 @@ contract SvEnsRegistry is ENS {
     /**
      * @dev Constructs a new ENS registrar.
      */
-    function ENSRegistry() public {
+    function SvEnsRegistry() public {
         records[0x0].owner = msg.sender;
     }
 
@@ -32,8 +32,8 @@ contract SvEnsRegistry is ENS {
      * @param node The node to transfer ownership of.
      * @param owner The address of the new owner.
      */
-    function setOwner(bytes32 node, address owner) public only_owner(node) {
-        Transfer(node, owner);
+    function setOwner(bytes32 node, address owner) external only_owner(node) {
+        emit Transfer(node, owner);
         records[node].owner = owner;
     }
 
@@ -43,10 +43,11 @@ contract SvEnsRegistry is ENS {
      * @param label The hash of the label specifying the subnode.
      * @param owner The address of the new owner.
      */
-    function setSubnodeOwner(bytes32 node, bytes32 label, address owner) public only_owner(node) {
-        var subnode = keccak256(node, label);
-        NewOwner(node, label, owner);
+    function setSubnodeOwner(bytes32 node, bytes32 label, address owner) external only_owner(node) returns (bytes32) {
+        bytes32 subnode = keccak256(node, label);
+        emit NewOwner(node, label, owner);
         records[subnode].owner = owner;
+        return subnode;
     }
 
     /**
@@ -54,8 +55,8 @@ contract SvEnsRegistry is ENS {
      * @param node The node to update.
      * @param resolver The address of the resolver.
      */
-    function setResolver(bytes32 node, address resolver) public only_owner(node) {
-        NewResolver(node, resolver);
+    function setResolver(bytes32 node, address resolver) external only_owner(node) {
+        emit NewResolver(node, resolver);
         records[node].resolver = resolver;
     }
 
@@ -64,8 +65,8 @@ contract SvEnsRegistry is ENS {
      * @param node The node to update.
      * @param ttl The TTL in seconds.
      */
-    function setTTL(bytes32 node, uint64 ttl) public only_owner(node) {
-        NewTTL(node, ttl);
+    function setTTL(bytes32 node, uint64 ttl) external only_owner(node) {
+        emit NewTTL(node, ttl);
         records[node].ttl = ttl;
     }
 
@@ -74,7 +75,7 @@ contract SvEnsRegistry is ENS {
      * @param node The specified node.
      * @return address of the owner.
      */
-    function owner(bytes32 node) public view returns (address) {
+    function owner(bytes32 node) external view returns (address) {
         return records[node].owner;
     }
 
@@ -83,7 +84,7 @@ contract SvEnsRegistry is ENS {
      * @param node The specified node.
      * @return address of the resolver.
      */
-    function resolver(bytes32 node) public view returns (address) {
+    function resolver(bytes32 node) external view returns (address) {
         return records[node].resolver;
     }
 
@@ -92,7 +93,7 @@ contract SvEnsRegistry is ENS {
      * @param node The specified node.
      * @return ttl of the node.
      */
-    function ttl(bytes32 node) public view returns (uint64) {
+    function ttl(bytes32 node) external view returns (uint64) {
         return records[node].ttl;
     }
 
