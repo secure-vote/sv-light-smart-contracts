@@ -21,3 +21,7 @@ You can see a test of this at [max-test.0.secvote.eth](https://etherscan.io/ensl
 ## ENS General info
 
 See [the ENS docs](https://docs.ens.domains/en/latest/introduction.html) for an intro overview of ENS.
+
+## Some Domains
+
+* `kov.sv` (Mainnet) - Points to registrar for `kov.sv` domains on Kovan
