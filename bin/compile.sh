@@ -9,11 +9,15 @@ LBLUE='\033[1;34m'
 LCYAN='\033[1;36m'
 
 # getopts
-CONTRACT_NAME="LittleBallotBox.sol"
-while getopts ":c:" opt; do
+CONTRACT_NAME="UNKNOWN.sol"
+CONTRACT_DIR="svLight"
+while getopts ":c:d:" opt; do
     case $opt in
         c)
             CONTRACT_NAME="$OPTARG"
+        ;;
+        d)
+            CONTRACT_DIR="$OPTARG"
         ;;
         \?)
             echo "invalid option -$OPTARG"
@@ -27,7 +31,7 @@ while getopts ":c:" opt; do
 done
 
 # params
-CONTRACT_PATH="./contract/contracts/$CONTRACT_NAME"
+CONTRACT_PATH="./$CONTRACT_DIR/contracts/$CONTRACT_NAME"
 OUTPUT_DIR="_solDist"
 
 if [ $(pwd | grep "bin") ]; then
@@ -44,7 +48,7 @@ fi
 
 if [ ! -e "$CONTRACT_PATH" ]; then
     echo -e "${RED}Error:${NC} Cannot find $CONTRACT_PATH\n"
-    echo -e "Are you running this from `./sv-voting-mvp/` with yarn?\n"
+    echo -e "Are you running this from `./sv-light-smart-contracts/` with yarn?\n"
     exit 1
 fi
 

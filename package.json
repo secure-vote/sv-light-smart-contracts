@@ -22,9 +22,10 @@
     "yargs": "^11.0.0"
   },
   "scripts": {
-    "test": "cd contract && truffle test",
-    "test-watch": "cd contract && reflex truffle test",
+    "test": "cd svLight && truffle test",
+    "test-watch": "cd svLight && reflex truffle test",
     "deploy": "node ./bin/deploy.js",
-    "cli": "node -i ./bin/contractCli.js --name"
+    "cli": "node -i ./bin/contractCli.js --name",
+    "compile-sv-light": "for f in $(ls ./svLight/contracts | grep sol); do ./bin/compile.sh -d svLight -c $f; done"
   }
 }
