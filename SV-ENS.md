@@ -1,5 +1,9 @@
 # SecureVote ENS For Stuff!
 
+We use the `.sv` ENS tld via our own ENS contracts.
+
+We then break things down by network: `kov.sv`, `eth.sv`, (TODO: `etc.sv`, `rop.sv`)
+
 ## Kovan
 
 * Registry: `0xd6F4f22eeC158c434b17d01f62f5dF33b108Ae93` (stores `.kov.sv` names and allows admin of them - kovan only)
@@ -18,6 +22,29 @@ The `0.secvote.eth` domain on Eth Mainnet has a registrar set up at `0x2d070f5e3
 
 You can see a test of this at [max-test.0.secvote.eth](https://etherscan.io/enslookup?q=max-test.0.secvote.eth) initialized by [this tx](https://etherscan.io/tx/0x0a9b74340c59a87f874f074dfd398f5d03ff3bc3d2cf691fb44f542f9f022546).
 
+## Registering a name:
+
+### AutoDeployer
+
+If you have permissions with the auto-deployer send a tx to:
+
+* Kovan: `autodeploy.kov.sv` -- `0x8e53e35224da62d6d59feb28f6a5ccfce8577965`
+* Mainnet: `autodeploy.eth.sv` -- `0x644226C0513D860395ac6ed3Aec4D8Ba761aBEF9`
+* `0.secvote.eth`: `autodeploy.0.secvote.eth` -- `0x5a8894775e14d238209080f66f4b3d886a298ea5`
+
+ABI: `./_distEns/SvEnsEverythingPx.abi`
+
+Tx: `regName(string name, address toResolveTo)` - name should _just_ be the subdomain - e.g. `autodeploy` in `autodeploy.eth.sv`
+
+### Manually
+
+* Choose network: `.eth.sv`, `.etc.sv`, `.kov.sv`, `.rop.sv`
+* On the relevant network
+  * Call `registerName` on the **Registrar** (note: you need to use an account with admin permissions) - set your eth address as the owner
+  * Calculate the `node` (namehash) using node package `eth-ens-namehash` => `namehash.hash('my-name.kov.sv')`
+  * Call `setResolver` on the **Registry** for your chosen name w/ our resolver
+  * Call `setAddr` on the **Resolver**
+
 ## ENS General info
 
 See [the ENS docs](https://docs.ens.domains/en/latest/introduction.html) for an intro overview of ENS.
@@ -25,3 +52,5 @@ See [the ENS docs](https://docs.ens.domains/en/latest/introduction.html) for an 
 ## Some Domains
 
 * `kov.sv` (Mainnet) - Points to registrar for `kov.sv` domains on Kovan
+* `autodeployer.kov.sv` - allows autodeploying names super quick in 1 tx
+* `autodeployer.eth.sv` - as above
