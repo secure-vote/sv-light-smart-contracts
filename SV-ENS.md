@@ -34,6 +34,12 @@ If you have permissions with the auto-deployer send a tx to:
 
 ABI: `./_distEns/SvEnsEverythingPx.abi`
 
+ABI Fragment:
+
+```
+[{"constant":false,"inputs":[{"name":"name","type":"string"},{"name":"resolveTo","type":"address"}],"name":"regName","outputs":[{"name":"node","type":"bytes32"}],"payable":false,"stateMutability":"nonpayable","type":"function"}]
+```
+
 Tx: `regName(string name, address toResolveTo)` - name should _just_ be the subdomain - e.g. `autodeploy` in `autodeploy.eth.sv`
 
 ### Manually
