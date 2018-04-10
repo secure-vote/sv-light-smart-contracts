@@ -134,10 +134,11 @@ module.exports = function () {
     this.zeroAddr = "0x0000000000000000000000000000000000000000";
 
     // submissionBits flags
-    this.USE_ETH = 1;
-    this.USE_SIGNED = 2;
-    this.USE_NO_ENC = 4;
-    this.USE_ENC = 8;
+    this.USE_ETH = 2**0;
+    this.USE_SIGNED = 2**1;
+    this.USE_NO_ENC = 2**2;
+    this.USE_ENC = 2**3;
+    this.USE_TESTING = 2**15;
 
     // general errors
     this.ERR_FORBIDDEN = 403;

@@ -92,7 +92,7 @@ async function testEndToEndIsh(svIx, accounts) {
         balAfter.toString()
     );
     // log("init done!");
-    const {args: {democHash: democId, admin: d1PxAddr}} = getEventFromTxR("DemocInit", initSomeDemocTxR);
+    const {args: {democHash: democId, admin: d1PxAddr}} = getEventFromTxR("DemocAdded", initSomeDemocTxR);
     const d1Px = SVIndex.at(d1PxAddr);
 
     assertNoErr(await svIx.setPaymentEnabled(false, {from: accounts[0]}))
@@ -111,7 +111,7 @@ async function testEndToEndIsh(svIx, accounts) {
     );
     // log("bad ballots over, confirming we can still make them...")
 
-    const lbb = await SVBallotBox.new(democId, 0, 0, USE_ETH | USE_ENC, false);
+    const lbb = await SVBallotBox.new(democId, 0, 0, USE_ETH | USE_ENC);
     // log("created LBB to work with... adding a ballot");
 
     // make sure we can still pay for a ballot though
@@ -157,7 +157,7 @@ async function testEndToEndIsh(svIx, accounts) {
     // log("confirm whitelist works")
     const d2Txr = await svIx.initDemoc("actually free lunch (good)", {from: d1Admin})
     assertNoErr(d2Txr);
-    const {args: {democHash: d2Hash, admin: d2PxAddr}} = getEventFromTxR("DemocInit", d2Txr);
+    const {args: {democHash: d2Hash, admin: d2PxAddr}} = getEventFromTxR("DemocAdded", d2Txr);
     const d2Px = SVIndex.at(d2PxAddr)
 
     // make sure whitelists are still blocking ppl
@@ -211,16 +211,16 @@ const testPayments = async (svIx, acc) => {
 
     // test making a payment and getting change
     const _userPaidBalPre = await getBalance(userPaid);
-    const _democInitPaid = await svIx.initDemoc("userPaidGood", {from: userPaid, value: democPrice + 1337, gasPrice: 0});
+    const _DemocAddedPaid = await svIx.initDemoc("userPaidGood", {from: userPaid, value: democPrice + 1337, gasPrice: 0});
     const _userPaidBalPost = await getBalance(userPaid);
     assert.isTrue(_userPaidBalPre.eq(_userPaidBalPost.add(democPrice)), "extra wei should be refunded");
 
     // assert event and get democId
-    assertNoErr(_democInitPaid);
-    getEventFromTxR("PaymentMade", _democInitPaid);
-    const {args: {democHash: democId, admin: proxySC}} = getEventFromTxR("DemocInit", _democInitPaid);
+    assertNoErr(_DemocAddedPaid);
+    getEventFromTxR("PaymentMade", _DemocAddedPaid);
+    const {args: {democHash: democId, admin: proxySC}} = getEventFromTxR("DemocAdded", _DemocAddedPaid);
     // note: this even _is_ emitted but truffle doesn't automatically process it like SVIndex events...
-    // const {address: proxySC2} = getEventFromTxR("AddedAdminToPx", _democInitPaid);
+    // const {address: proxySC2} = getEventFromTxR("AddedAdminToPx", _DemocAddedPaid);
 
     const ixPxForPaid = SVIndex.at(proxySC);
     const pxRaw = SVAdminPx.at(proxySC);
@@ -237,7 +237,7 @@ const testPayments = async (svIx, acc) => {
     // test userFree can do this for free
     const _democFreeTxR = await svIx.initDemoc("free democ", {from: userFree});
     assertNoErr(_democFreeTxR)
-    const _democFreeE = getEventFromTxR("DemocInit", _democFreeTxR);
+    const _democFreeE = getEventFromTxR("DemocAdded", _democFreeTxR);
     const _freeDemocId = _democFreeE.args.democHash;
     const ixPxForFree = SVIndex.at(_democFreeE.args.admin);
 
@@ -256,7 +256,7 @@ const testUpgrade = async (svIx1, acc) => {
     await svIx1.setPaymentEnabled(false);
 
     const _tx1o1 = await svIx1.initDemoc("democ1");
-    const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocInit", _tx1o1);
+    const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocAdded", _tx1o1);
     assertNoErr(_tx1o1);
 
     // let's make sure we can make a ballot still

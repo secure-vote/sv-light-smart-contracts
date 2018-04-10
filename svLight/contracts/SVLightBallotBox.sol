@@ -27,9 +27,6 @@ import "./SVCommon.sol";
 contract SVLightBallotBox is descriptiveErrors, owned {
     //// ** Storage Variables
 
-    // test mode - operations like changing start/end times
-    bool public testMode = false;
-
     // struct for ballot
     struct Ballot {
         bytes32 ballotData;
@@ -85,7 +82,7 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     }
 
     modifier onlyTesting() {
-        if(doRequire(testMode, ERR_TESTING_REQ))
+        if(doRequire(isTesting(), ERR_TESTING_REQ))
             _;
     }
 
@@ -124,7 +121,7 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     // Constructor function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
     // flags are [_useEncryption, enableTesting]
-    function SVLightBallotBox(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits, bool _testMode) public {
+    function SVLightBallotBox(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits) public {
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
         submissionBits = _submissionBits;
         bool okaySubmissionBits = isEthNoEnc() || isEthWithEnc() || isSignedNoEnc() || isSignedWithEnc();
@@ -132,8 +129,8 @@ contract SVLightBallotBox is descriptiveErrors, owned {
             revert();
         }
 
-        if (_testMode) {
-            testMode = true;
+        bool _testing = isTesting();
+        if (_testing) {
             emit TestingEnabled();
         }
         specHash = _specHash;
@@ -143,7 +140,7 @@ contract SVLightBallotBox is descriptiveErrors, owned {
 
         // take the max of the start time provided and the blocks timestamp to avoid a DoS against recent token holders
         // (which someone might be able to do if they could set the timestamp in the past)
-        startTime = _testMode ? _startTs : max(_startTs, uint64(block.timestamp));
+        startTime = _testing ? _startTs : max(_startTs, uint64(block.timestamp));
         endTime = endTs;
 
         emit CreatedBallot(specHash, startTime, endTime, _submissionBits);
@@ -219,24 +216,42 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     uint16 constant USE_NO_ENC = 4;
     uint16 constant USE_ENC = 8;
 
+    uint16 constant USE_TESTING = 32768;
+    uint16 constant TESTING_MASK = 0xFFFF ^ USE_TESTING;  // do (bits & TESTING_MASK) to set testing bit to 0
+
     function isEthNoEnc() constant internal returns (bool) {
-        uint16 expected = USE_ETH | USE_NO_ENC;
-        return submissionBits & expected == expected;
+        uint16 expected = (USE_ETH | USE_NO_ENC) & TESTING_MASK;
+        return checkFlags(expected);
     }
 
     function isEthWithEnc() constant internal returns (bool) {
-        uint16 expected = USE_ETH | USE_ENC;
-        return submissionBits & expected == expected;
+        uint16 expected = (USE_ETH | USE_ENC) & TESTING_MASK;
+        return checkFlags(expected);
     }
 
     function isSignedNoEnc() constant internal returns (bool) {
-        uint16 expected = USE_SIGNED | USE_NO_ENC;
-        return submissionBits & expected == expected;
+        uint16 expected = (USE_SIGNED | USE_NO_ENC) & TESTING_MASK;
+        return checkFlags(expected);
     }
 
     function isSignedWithEnc() constant internal returns (bool) {
-        uint16 expected = USE_SIGNED | USE_ENC;
-        return submissionBits & expected == expected;
+        uint16 expected = (USE_SIGNED | USE_ENC) & TESTING_MASK;
+        return checkFlags(expected);
     }
 
+    function isTesting() constant public returns (bool) {
+        return submissionBits & USE_TESTING == USE_TESTING;
+    }
+
+    function checkFlags(uint16 expected) constant internal returns (bool) {
+        // this should ignore ONLY the testing bit - all other bits are significant
+        uint16 sBitsNoTesting = submissionBits & TESTING_MASK;
+        // then we want ONLY expected
+        return sBitsNoTesting == expected;
+    }
+
+    function checkBit(uint16 bitToTest) constant internal returns (bool) {
+        // first remove the testing bit, then check the bitToTest
+        return (submissionBits & TESTING_MASK) & bitToTest > 0;
+    }
 }

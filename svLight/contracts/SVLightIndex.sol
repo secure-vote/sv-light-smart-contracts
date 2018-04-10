@@ -23,18 +23,21 @@ contract SVAdminPxFactory {
 
 
 contract SVBBoxFactory {
-    function spawn(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits, bool _testMode, address admin) external returns (SVLightBallotBox bb) {
-        bb = new SVLightBallotBox(_specHash, _startTs, endTs, _submissionBits, _testMode);
+    function spawn(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits, address admin) external returns (SVLightBallotBox bb) {
+        bb = new SVLightBallotBox(_specHash, _startTs, endTs, _submissionBits);
         bb.setOwner(admin);
     }
 }
 
 
 contract SVIndexBackend is permissioned {
+    event LowLevelNewBallot(bytes32 democHash, uint id);
+    event LowLevelNewDemoc(bytes32 democHash);
+
     struct Ballot {
         bytes32 specHash;
         bytes32 extraData;
-        address votingContract;
+        SVLightBallotBox bb;
         uint64 startTs;
         uint64 endTs;
     }
@@ -56,13 +59,13 @@ contract SVIndexBackend is permissioned {
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
-    function initDemoc(string democName, address admin) only_editors() external returns (bytes32) {
+    function initDemoc(string democName, address admin) only_editors() external returns (bytes32 democHash) {
         // generating the democHash in this way guarentees it'll be unique (particularly because `this` is part of the hash)
-        bytes32 democHash = keccak256(democName, admin, democList.length, this);
+        democHash = keccak256(democName, admin, democList.length, this);
         democList.push(democHash);
         democs[democHash].name = democName;
         democs[democHash].admin = admin;
-        return democHash;
+        emit LowLevelNewDemoc(democHash);
     }
 
     function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 nBallots) {
@@ -85,32 +88,35 @@ contract SVIndexBackend is permissioned {
         return democs[democHash].ballots.length;
     }
 
-    function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTime, uint64 endTime) {
+    function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, SVLightBallotBox bb, uint64 startTime, uint64 endTime) {
         Ballot memory b = democs[democHash].ballots[n];
-        return (b.specHash, b.extraData, b.votingContract, b.startTs, b.endTs);
+        return (b.specHash, b.extraData, b.bb, b.startTs, b.endTs);
+    }
+
+    function getBallotBox(bytes32 democHash, uint id) external constant returns (SVLightBallotBox bb) {
+        bb = democs[democHash].ballots[id].bb;
     }
 
     //* ADD BALLOT TO RECORD */
 
-    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTs, uint64 endTs) internal {
-        democs[democHash].ballots.push(Ballot(specHash, extraData, votingContract, startTs, endTs));
+    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, SVLightBallotBox bb, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
+        ballotId = democs[democHash].ballots.length;
+        democs[democHash].ballots.push(Ballot(specHash, extraData, bb, startTs, endTs));
+        emit LowLevelNewBallot(democHash, ballotId);
     }
 
-    function addBallot(bytes32 democHash, bytes32 extraData, address votingContract) only_editors() external {
-        SVLightBallotBox bb = SVLightBallotBox(votingContract);
+    function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb) only_editors() external returns (uint ballotId) {
         bytes32 specHash = bb.specHash();
         uint64 startTs = bb.startTime();
         uint64 endTs = bb.endTime();
-        _commitBallot(democHash, specHash, extraData, votingContract, startTs, endTs);
+        ballotId = _commitBallot(democHash, specHash, extraData, bb, startTs, endTs);
     }
 
-    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits, SVBBoxFactory bbF, address admin) only_editors() external returns (SVLightBallotBox) {
+    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits, SVBBoxFactory bbF, address admin) only_editors() external returns (uint id) {
         // the start time is max(startTime, block.timestamp) to avoid a DoS whereby a malicious electioneer could disenfranchise
         // token holders who have recently acquired tokens.
-        SVLightBallotBox votingContract = bbF.spawn(specHash, _startTs, endTs, _submissionBits, false, admin);
-        uint64 startTs = votingContract.startTime();
-        _commitBallot(democHash, specHash, extraData, address(votingContract), startTs, endTs);
-        return votingContract;
+        SVLightBallotBox bb = bbF.spawn(specHash, _startTs, endTs, _submissionBits, admin);
+        id = _commitBallot(democHash, specHash, extraData, bb, bb.startTime(), endTs);
     }
 
     // utils
@@ -160,8 +166,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
     event PaymentMade(uint[2] valAndRemainder);
     event SetFees(uint[2] _newFees);
     event PaymentEnabled(bool _feeEnabled);
-    event DemocInit(string name, bytes32 democHash, address admin);
-    event BallotAdded(bytes32 democHash, bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTs, uint64 endTs);
+    event DemocAdded(bytes32 democHash, address admin);
+    event BallotAdded(bytes32 democHash, uint id);
 
     event PaymentTooLow(uint msgValue, uint feeReq);
 
@@ -276,7 +282,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
         }
 
         bytes32 democHash = backend.initDemoc(democName, admin);
-        emit DemocInit(democName, democHash, admin);
+        emit DemocAdded(democHash, admin);
         return democHash;
     }
 
@@ -298,26 +304,24 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
     //* ADD BALLOT TO RECORD */
 
-    function addBallot(bytes32 democHash, bytes32 extraData, address votingContract)
+    function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb)
                       onlyBy(backend.getDAdmin(democHash))
                       payReq(PAY_BALLOT)
                       public
                       payable
+                      returns (uint id)
                       {
-        backend.addBallot(democHash, extraData, votingContract);
-        SVLightBallotBox bb = SVLightBallotBox(votingContract);
-        bytes32 specHash = bb.specHash();
-        uint64 startTs = bb.startTime();
-        uint64 endTs = bb.endTime();
-        emit BallotAdded(democHash, specHash, extraData, votingContract, startTs, endTs);
+        id = backend.addBallot(democHash, extraData, bb);
+        emit BallotAdded(democHash, id);
     }
 
     function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits)
                           onlyBy(backend.getDAdmin(democHash))
                           payReq(PAY_BALLOT)
-                          public payable {
-        SVLightBallotBox bb = backend.deployBallot(democHash, specHash, extraData, _startTs, endTs, _submissionBits, bbFactory, msg.sender);
-        emit BallotAdded(democHash, specHash, extraData, bb, bb.startTime(), endTs);
+                          public payable
+                          returns (uint id) {
+        id = backend.deployBallot(democHash, specHash, extraData, _startTs, endTs, _submissionBits, bbFactory, msg.sender);
+        emit BallotAdded(democHash, id);
     }
 
     // utils

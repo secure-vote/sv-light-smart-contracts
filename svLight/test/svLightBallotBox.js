@@ -24,14 +24,14 @@ async function testEarlyBallot(accounts) {
     var startTime = mkStartTime() + 2;
     var endTime = startTime + 600;
 
-    const vc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC, true);
+    const vc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC | USE_TESTING);
     await assertErrStatus(ERR_BALLOT_CLOSED, await vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
 }
 
 
 async function testSetOwner(acc) {
     const start = mkStartTime() - 1;
-    const vc = await SVBallotBox.new(specHash, start, start + 60, USE_ETH | USE_NO_ENC, false);
+    const vc = await SVBallotBox.new(specHash, start, start + 60, USE_ETH | USE_NO_ENC);
     const owner1 = await vc.owner();
     assert.equal(acc[0], owner1, "owner should be acc[0]");
 
@@ -54,10 +54,10 @@ async function testEncryptionBranching(accounts) {
     /* ENCRYPTION */
 
     // best BB with enc
-    const vcEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC, true);
+    const vcEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC | USE_TESTING);
 
     // check we're using enc
-    assert.equal(await vcEnc.submissionBits(), 9, "encryption should be enabled");
+    assert.equal(await vcEnc.submissionBits(), USE_ETH | USE_ENC | USE_TESTING, "encryption should be enabled");
 
     // check submissions with enc
     const bData = hexPk;
@@ -79,10 +79,10 @@ async function testEncryptionBranching(accounts) {
     /* NO ENCRYPTION */
 
     // create ballot box with no enc
-    const vcNoEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_NO_ENC, true);
+    const vcNoEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING);
 
     // assert useEnc is false with no enc
-    assert.equal(await vcNoEnc.submissionBits(), USE_ETH | USE_NO_ENC, "encryption should be disabled");
+    assert.equal(await vcNoEnc.submissionBits(), USE_ETH | USE_NO_ENC | USE_TESTING, "encryption should be disabled");
     // test ballot submissions w no enc
     const _bData = hexSk;
     const _noEnc = await vcNoEnc.submitBallotNoPk(_bData);
@@ -99,7 +99,7 @@ async function testEncryptionBranching(accounts) {
 
     /* NO ENC SIGNED */
 
-    vcSignedNoEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_NO_ENC, true);
+    vcSignedNoEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_NO_ENC | USE_TESTING);
 
     const _txSignedNoEnc = await vcSignedNoEnc.submitBallotSignedNoEnc(_bData, tempPk, [tempPk, tempPk]);
     assertNoErr(_txSignedNoEnc);
@@ -110,7 +110,7 @@ async function testEncryptionBranching(accounts) {
 
     /* ENC SIGNED */
 
-    vcSigned = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_ENC, true);
+    vcSigned = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING);
 
     const _tx5o1 = await vcSigned.submitBallotSignedNoEnc(_bData, tempPk, [tempPk, tempPk]);
     assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC, _tx5o1, "should throw when submitting signed no enc when enc enabled");
@@ -124,7 +124,7 @@ async function testInstantiation(accounts) {
     var endTime = startTime + 600;
     var shortEndTime = 0;
 
-    const vc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC, true);
+    const vc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC | USE_TESTING);
 
     // log(accounts[0]);
     assert.equal(await vc.owner(), accounts[0], "Owner must be set on launch.");
@@ -137,7 +137,7 @@ async function testInstantiation(accounts) {
     const _endTime = await vc.endTime();
     assert.equal(endTime, _endTime.toNumber(), "endTime matches");
 
-    const _testMode = await vc.testMode();
+    const _testMode = await vc.isTesting();
     assert.equal(_testMode, true, "We should be in test mode");
 
     const _nVotes = await vc.nVotesCast();
@@ -188,7 +188,7 @@ async function testInstantiation(accounts) {
 }
 
 async function testTestMode(accounts) {
-    var vc = await SVBallotBox.new(specHash, 0, 1, USE_ETH | USE_NO_ENC, false);
+    var vc = await SVBallotBox.new(specHash, 0, 1, USE_ETH | USE_NO_ENC);
     assertErrStatus(ERR_TESTING_REQ, await vc.setEndTime(0), "throws on set end time when not in testing");
 }
 
