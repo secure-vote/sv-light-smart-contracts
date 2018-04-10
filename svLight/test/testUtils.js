@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const Web3 = require('web3');
 
 module.exports = function () {
     this.toJson = (obj) => {
@@ -125,8 +126,18 @@ module.exports = function () {
         return toRet;
     }
 
+    this.bytes32AddrToAddr = (bytes32Addr) => {
+        return Web3.utils.bytesToHex(Web3.utils.hexToBytes(bytes32Addr).slice(12));
+    }
+
     this.bytes32zero = "0x0000000000000000000000000000000000000000000000000000000000000000";
     this.zeroAddr = "0x0000000000000000000000000000000000000000";
+
+    // submissionBits flags
+    this.USE_ETH = 1;
+    this.USE_SIGNED = 2;
+    this.USE_NO_ENC = 4;
+    this.USE_ENC = 8;
 
     // general errors
     this.ERR_FORBIDDEN = 403;
@@ -137,7 +148,11 @@ module.exports = function () {
     this.ERR_BALLOT_CLOSED = 420001;
     this.ERR_EARLY_SECKEY = 420100;
     this.ERR_ENC_DISABLED = 420200;
-    this.ERR_NO_ENC_DISABLED = 420201;
+
+    this.ERR_NOT_BALLOT_ETH_NO_ENC = 420400;
+    this.ERR_NOT_BALLOT_ETH_WITH_ENC = 420401;
+    this.ERR_NOT_BALLOT_SIGNED_NO_ENC = 420402;
+    this.ERR_NOT_BALLOT_SIGNED_WITH_ENC = 420403;
 
     // democ index
     this.ERR_BAD_PAYMENT = 421010;
@@ -152,4 +167,11 @@ module.exports = function () {
     this.ERR_NOT_UPGRADED = 429002;
     this.ERR_NO_UNDO_FOREVER = 429010;
     this.ERR_CALL_UPGRADED_FAILED = 429500;
+
+    // hasAdmins
+    this.ERR_NO_ADMIN_PERMISSIONS = 100001;
+
+    // permissioned
+    this.ERR_NO_EDIT_PERMISSIONS = 200001;
+    this.ERR_ADMINS_LOCKED_DOWN = 201001;
 };

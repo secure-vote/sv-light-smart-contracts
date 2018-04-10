@@ -11,17 +11,32 @@ pragma solidity ^0.4.19;
 
 import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
-import { upgradable, canCheckOtherContracts } from "./SVCommon.sol";
+import { canCheckOtherContracts, permissioned, hasAdmins, owned, upgradePtr } from "./SVCommon.sol";
 
 
-contract SVLightIndex is upgradable, canCheckOtherContracts {
-    address public owner;
 
+contract SVAdminPxFactory {
+    function spawn(address initAdmin, address fwdTo) external returns (SVLightAdminProxy px) {
+        px = new SVLightAdminProxy(initAdmin, fwdTo);
+    }
+}
+
+
+contract SVBBoxFactory {
+    function spawn(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits, bool _testMode, address admin) external returns (SVLightBallotBox bb) {
+        bb = new SVLightBallotBox(_specHash, _startTs, endTs, _submissionBits, _testMode);
+        bb.setOwner(admin);
+    }
+}
+
+
+contract SVIndexBackend is permissioned {
     struct Ballot {
         bytes32 specHash;
         bytes32 extraData;
         address votingContract;
         uint64 startTs;
+        uint64 endTs;
     }
 
     struct Democ {
@@ -33,6 +48,86 @@ contract SVLightIndex is upgradable, canCheckOtherContracts {
     mapping (bytes32 => Democ) public democs;
     bytes32[] public democList;
 
+    //* GLOBAL INFO */
+
+    function nDemocs() external constant returns (uint256) {
+        return democList.length;
+    }
+
+    //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
+
+    function initDemoc(string democName, address admin) only_editors() external returns (bytes32) {
+        // generating the democHash in this way guarentees it'll be unique (particularly because `this` is part of the hash)
+        bytes32 democHash = keccak256(democName, admin, democList.length, this);
+        democList.push(democHash);
+        democs[democHash].name = democName;
+        democs[democHash].admin = admin;
+        return democHash;
+    }
+
+    function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 nBallots) {
+        return (democs[democHash].name, democs[democHash].admin, democs[democHash].ballots.length);
+    }
+
+    function getDName(bytes32 democHash) external constant returns (string) {
+        return democs[democHash].name;
+    }
+
+    function getDAdmin(bytes32 democHash) external constant returns (address) {
+        return democs[democHash].admin;
+    }
+
+    function setAdmin(bytes32 democHash, address newAdmin) only_editors() external {
+        democs[democHash].admin = newAdmin;
+    }
+
+    function nBallots(bytes32 democHash) external constant returns (uint256) {
+        return democs[democHash].ballots.length;
+    }
+
+    function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTime, uint64 endTime) {
+        Ballot memory b = democs[democHash].ballots[n];
+        return (b.specHash, b.extraData, b.votingContract, b.startTs, b.endTs);
+    }
+
+    //* ADD BALLOT TO RECORD */
+
+    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTs, uint64 endTs) internal {
+        democs[democHash].ballots.push(Ballot(specHash, extraData, votingContract, startTs, endTs));
+    }
+
+    function addBallot(bytes32 democHash, bytes32 extraData, address votingContract) only_editors() external {
+        SVLightBallotBox bb = SVLightBallotBox(votingContract);
+        bytes32 specHash = bb.specHash();
+        uint64 startTs = bb.startTime();
+        uint64 endTs = bb.endTime();
+        _commitBallot(democHash, specHash, extraData, votingContract, startTs, endTs);
+    }
+
+    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits, SVBBoxFactory bbF, address admin) only_editors() external returns (SVLightBallotBox) {
+        // the start time is max(startTime, block.timestamp) to avoid a DoS whereby a malicious electioneer could disenfranchise
+        // token holders who have recently acquired tokens.
+        uint64 startTs = max(_startTs, uint64(block.timestamp));
+        SVLightBallotBox votingContract = bbF.spawn(specHash, startTs, endTs, _submissionBits, false, admin);
+        _commitBallot(democHash, specHash, extraData, address(votingContract), startTs, endTs);
+        return votingContract;
+    }
+
+    // utils
+    function max(uint64 a, uint64 b) pure internal returns(uint64) {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+}
+
+
+contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
+    SVIndexBackend public backend;
+    SVAdminPxFactory public adminPxFactory;
+    SVBBoxFactory public bbFactory;
+
     // addresses that do not have to pay for democs
     mapping (address => bool) public democWhitelist;
     // democs that do not have to pay for issues
@@ -41,16 +136,16 @@ contract SVLightIndex is upgradable, canCheckOtherContracts {
     // payment details
     address public payTo;
     // uint128's used because they account for amounts up to 3.4e38 wei or 3.4e20 ether
-    uint128 public democFee = 0.05 ether; // 0.05 ether; about $50 at 3 March 2018
-    mapping (address => uint128) democFeeFor;
-    uint128 public ballotFee = 0.01 ether; // 0.01 ether; about $10 at 3 March 2018
-    mapping (address => uint128) ballotFeeFor;
+    uint public democFee = 0.125 ether; // 0.125 ether; about $50 at 10 Apr 2018
+    mapping (address => uint) democFeeFor;
+    uint public ballotFee = 0.025 ether; // 0.025 ether; about $10 at 10 Apr 2018
+    mapping (address => uint) ballotFeeFor;
     bool public paymentEnabled = true;
 
     uint8 constant PAY_DEMOC = 0;
     uint8 constant PAY_BALLOT = 1;
 
-    function getPaymentParams(uint8 paymentType) internal constant returns (bool, uint128, uint128) {
+    function getPaymentParams(uint8 paymentType) internal constant returns (bool, uint, uint) {
         if (paymentType == PAY_DEMOC) {
             return (democWhitelist[msg.sender], democFee, democFeeFor[msg.sender]);
         } else if (paymentType == PAY_BALLOT) {
@@ -62,12 +157,11 @@ contract SVLightIndex is upgradable, canCheckOtherContracts {
 
     //* EVENTS /
 
-    event PaymentMade(uint128[2] valAndRemainder);
-    event DemocInit(string name, bytes32 democHash, address admin);
-    event BallotInit(bytes32 specHash, uint64[2] openPeriod, bool[2] flags);
-    event BallotAdded(bytes32 democHash, bytes32 specHash, bytes32 extraData, address votingContract);
-    event SetFees(uint128[2] _newFees);
+    event PaymentMade(uint[2] valAndRemainder);
+    event SetFees(uint[2] _newFees);
     event PaymentEnabled(bool _feeEnabled);
+    event DemocInit(string name, bytes32 democHash, address admin);
+    event BallotAdded(bytes32 democHash, bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTs, uint64 endTs);
 
     event PaymentTooLow(uint msgValue, uint feeReq);
 
@@ -82,11 +176,11 @@ contract SVLightIndex is upgradable, canCheckOtherContracts {
     modifier payReq(uint8 paymentType) {
         // get our whitelist, generalFee, and fee's for particular addresses
         bool wl;
-        uint128 genFee;
-        uint128 feeFor;
+        uint genFee;
+        uint feeFor;
         (wl, genFee, feeFor) = getPaymentParams(paymentType);
         // init v to something large in case of exploit or something
-        uint128 v = 1000 ether;
+        uint v = 1000 ether;
         // check whitelists - do not require payment in some cases
         if (paymentEnabled && !wl) {
             v = feeFor;
@@ -97,7 +191,7 @@ contract SVLightIndex is upgradable, canCheckOtherContracts {
 
             if (doRequire(msg.value >= v, ERR_BAD_PAYMENT)) {
                 // handle payments
-                uint128 remainder = uint128(msg.value) - v;
+                uint remainder = msg.value - v;
                 payTo.transfer(v); // .transfer so it throws on failure
                 if (!msg.sender.send(remainder)){
                     payTo.transfer(remainder);
@@ -118,119 +212,112 @@ contract SVLightIndex is upgradable, canCheckOtherContracts {
 
 
     // constructor
-    function SVLightIndex() public {
-        owner = msg.sender;
+    function SVLightIndex(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory) public {
         payTo = msg.sender;
+        backend = _backend;
+        adminPxFactory = _pxFactory;
+        bbFactory = _bbFactory;
+    }
+
+    //* UPGRADE STUFF */
+
+    function doUpgrade(address nextSC) only_owner() not_upgraded() public {
+        backend.upgradeMe(nextSC);
+        doUpgradeInternal(nextSC);
     }
 
     //* GLOBAL INFO */
 
     function nDemocs() public constant returns (uint256) {
-        return democList.length;
+        return backend.nDemocs();
     }
 
     //* PAYMENT AND OWNER FUNCTIONS */
 
-    function setPayTo(address newPayTo) onlyBy(owner) public {
+    function setPayTo(address newPayTo) only_owner() public {
         payTo = newPayTo;
     }
 
-    function setEth(uint128[2] newFees) onlyBy(owner) public {
+    function setEth(uint128[2] newFees) only_owner() public {
         democFee = newFees[PAY_DEMOC];
         ballotFee = newFees[PAY_BALLOT];
         emit SetFees([democFee, ballotFee]);
     }
 
-    function setOwner(address _owner) onlyBy(owner) public {
-        owner = _owner;
-    }
-
-    function setPaymentEnabled(bool _enabled) onlyBy(owner) public {
+    function setPaymentEnabled(bool _enabled) only_owner() public {
         paymentEnabled = _enabled;
         emit PaymentEnabled(_enabled);
     }
 
-    function setWhitelistDemoc(address addr, bool _free) onlyBy(owner) public {
+    function setWhitelistDemoc(address addr, bool _free) only_owner() public {
         democWhitelist[addr] = _free;
     }
 
-    function setWhitelistBallot(address addr, bool _free) onlyBy(owner) public {
+    function setWhitelistBallot(address addr, bool _free) only_owner() public {
         ballotWhitelist[addr] = _free;
     }
 
-    function setFeeFor(address addr, uint128[2] fees) onlyBy(owner) public {
+    function setFeeFor(address addr, uint128[2] fees) only_owner() public {
         democFeeFor[addr] = fees[PAY_DEMOC];
         ballotFeeFor[addr] = fees[PAY_BALLOT];
     }
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
-    function initDemoc(string democName) payReq(PAY_DEMOC) public payable returns (bytes32) {
+    function initDemoc(string democName) payReq(PAY_DEMOC) not_upgraded() public payable returns (bytes32) {
         address admin;
         if(isContract(msg.sender)) {
             // if the caller is a contract we presume they can handle multisig themselves...
             admin = msg.sender;
         } else {
             // otherwise let's create a proxy sc for them
-            SVLightAdminProxy adminPx = new SVLightAdminProxy(msg.sender, address(this));
+            SVLightAdminProxy adminPx = adminPxFactory.spawn(msg.sender, address(this));
             admin = address(adminPx);
         }
 
-        bytes32 democHash = keccak256(democName, msg.sender, democList.length, this);
-        democList.push(democHash);
-        democs[democHash].name = democName;
-        democs[democHash].admin = admin;
+        bytes32 democHash = backend.initDemoc(democName, admin);
         emit DemocInit(democName, democHash, admin);
         return democHash;
     }
 
-    function getDemocInfo(bytes32 democHash) public constant returns (string name, address admin, uint256 nBallots) {
-        return (democs[democHash].name, democs[democHash].admin, democs[democHash].ballots.length);
+    function getAdmin(bytes32 democHash) external constant returns (address) {
+        return backend.getDAdmin(democHash);
     }
 
-    function setAdmin(bytes32 democHash, address newAdmin) onlyBy(democs[democHash].admin) public {
-        democs[democHash].admin = newAdmin;
+    function setAdmin(bytes32 democHash, address newAdmin) onlyBy(backend.getDAdmin(democHash)) external {
+        backend.setAdmin(democHash, newAdmin);
     }
 
-    function nBallots(bytes32 democHash) public constant returns (uint256) {
-        return democs[democHash].ballots.length;
+    function nBallots(bytes32 democHash) external constant returns (uint256) {
+        return backend.nBallots(democHash);
     }
 
-    function getNthBallot(bytes32 democHash, uint256 n) public constant returns (bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTime) {
-        return (democs[democHash].ballots[n].specHash, democs[democHash].ballots[n].extraData, democs[democHash].ballots[n].votingContract, democs[democHash].ballots[n].startTs);
+    function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTime, uint64 endTime) {
+        return backend.getNthBallot(democHash, n);
     }
 
     //* ADD BALLOT TO RECORD */
 
-    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTs) internal {
-        democs[democHash].ballots.push(Ballot(specHash, extraData, votingContract, startTs));
-        emit BallotAdded(democHash, specHash, extraData, votingContract);
-    }
-
     function addBallot(bytes32 democHash, bytes32 extraData, address votingContract)
-                      onlyBy(democs[democHash].admin)
+                      onlyBy(backend.getDAdmin(democHash))
                       payReq(PAY_BALLOT)
                       public
                       payable
                       {
+        backend.addBallot(democHash, extraData, votingContract);
         SVLightBallotBox bb = SVLightBallotBox(votingContract);
         bytes32 specHash = bb.specHash();
         uint64 startTs = bb.startTime();
-        _commitBallot(democHash, specHash, extraData, votingContract, startTs);
+        uint64 endTs = bb.endTime();
+        emit BallotAdded(democHash, specHash, extraData, votingContract, startTs, endTs);
     }
 
-    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData,
-                          uint64[2] openPeriod, bool[2] flags)
-                          onlyBy(democs[democHash].admin)
+    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits)
+                          onlyBy(backend.getDAdmin(democHash))
                           payReq(PAY_BALLOT)
                           public payable {
-        // the start time is max(startTime, block.timestamp) to avoid a DoS whereby a malicious electioneer could disenfranchise
-        // token holders who have recently acquired tokens.
-        uint64 startTs = max(openPeriod[0], uint64(block.timestamp));
-        SVLightBallotBox votingContract = new SVLightBallotBox(specHash, [startTs, openPeriod[1]], flags);
-        votingContract.setOwner(msg.sender);
-        _commitBallot(democHash, specHash, extraData, address(votingContract), startTs);
-        emit BallotInit(specHash, [startTs, openPeriod[1]], flags);
+        SVLightBallotBox bb = backend.deployBallot(democHash, specHash, extraData, _startTs, endTs, _submissionBits, bbFactory, msg.sender);
+        emit BallotAdded(democHash, specHash, extraData, bb, bb.startTime(), endTs);
     }
 
     // utils

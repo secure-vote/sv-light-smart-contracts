@@ -5,14 +5,15 @@ pragma solidity ^0.4.21;
 // Author: Max Kaye <max@secure.vote>
 // Released under MIT licence
 
-import { descriptiveErrors, claimReverseENS, copyMemAddrArray } from "./SVCommon.sol";
+import { descriptiveErrors, claimReverseENS, copyMemAddrArray, upgradePtr } from "./SVCommon.sol";
+
 
 contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArray {
     bool public isProxyContract = true;
 
     // storage variables
     mapping (address => bool) public admins;
-    address public forwardTo;
+    upgradePtr public forwardTo;
     address[] adminLog;
 
     bool callActive = false;
@@ -39,7 +40,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
         // this will mostly be called by SVLightIndex so we shouldn't use msg.sender.
         _addNewAdmin(initAdmin);
         initReverseENS(initAdmin);
-        forwardTo = _fwdTo;
+        forwardTo = upgradePtr(_fwdTo);
     }
 
     // fallback function - forwards all value and data to the `forwardTo` address.
@@ -49,12 +50,38 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
         } else {
             callActive = true;
             caller = msg.sender;
+            // need to check if the SVIndex at forwardTo has been upgraded...
+
+            address _ptr = forwardTo.getUpgradePointer();
+            if (_ptr != address(0)) {
+                forwardTo = upgradePtr(_ptr);
+            }
+
             // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
             // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
-            if(!doRequire(forwardTo.call.value(msg.value)(msg.data), ERR_CALL_FWD_FAILED)){
+            if(!doRequire(address(forwardTo).call.value(msg.value)(msg.data), ERR_CALL_FWD_FAILED)){
                 emit FailedToFwdCall(msg.value, msg.data);
             }
             callActive = false;
+        }
+    }
+
+    function fwdData(address toAddr, bytes data) isAdmin() public {
+        if(!doRequire(toAddr.call(data), ERR_CALL_FWD_FAILED)){
+            emit FailedToFwdCall(0, data);
+        }
+    }
+
+    function fwdPayment(address toAddr) isAdmin() public payable {
+        if(!doRequire(toAddr.send(msg.value), ERR_CALL_FWD_FAILED)){
+
+            emit FailedToFwdCall(msg.value, new bytes(0));
+        }
+    }
+
+    function fwdPaymentAndData(address toAddr, bytes data) isAdmin() public payable {
+        if(!doRequire(toAddr.call.value(msg.value)(data), ERR_CALL_FWD_FAILED)){
+            emit FailedToFwdCall(msg.value, data);
         }
     }
 

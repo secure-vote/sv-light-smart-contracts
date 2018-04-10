@@ -1,6 +1,9 @@
 const SVIndex = artifacts.require("./SVLightIndex.sol");
 const SVAdminPx = artifacts.require("./SVLightAdminProxy.sol");
 const SVBallotBox = artifacts.require("./SVLightBallotBox.sol");
+const BBFactory = artifacts.require("./SVBBoxFactory.sol");
+const PxFactory = artifacts.require("./SVAdminPxFactory.sol");
+const IxBackend = artifacts.require("./SVIndexBackend.sol");
 
 require("./testUtils")();
 
@@ -12,9 +15,23 @@ const S = create({checkTypes: true, env});
 const bytes32zero =
     "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-async function testOwner(accounts) {
-    const svIx = await SVIndex.new({gas: 6500000});
 
+
+const wrapTestIx = (accounts, f) => {
+    return async () => {
+        const be = await IxBackend.new();
+        const pxF = await PxFactory.new();
+        const bbF = await BBFactory.new();
+        const ix = await SVIndex.new(be.address, pxF.address, bbF.address);
+        await be.setPermissions(ix.address, true);
+        await be.doLockdown();
+        assertErrStatus(ERR_ADMINS_LOCKED_DOWN, await be.setPermissions(ix.address, true), "should throw error after lockdown")
+        return await f(ix, accounts);
+    };
+};
+
+
+async function testEndToEndIsh(svIx, accounts) {
     assert.equal(await svIx.owner(), accounts[0], "owner set");
     assert.equal(await svIx.payTo(), accounts[0], "payTo set");
 
@@ -94,7 +111,7 @@ async function testOwner(accounts) {
     );
     // log("bad ballots over, confirming we can still make them...")
 
-    const lbb = await SVBallotBox.new(democId, [0, 0], [true, false]);
+    const lbb = await SVBallotBox.new(democId, 0, 0, USE_ETH | USE_ENC, false);
     // log("created LBB to work with... adding a ballot");
 
     // make sure we can still pay for a ballot though
@@ -150,7 +167,7 @@ async function testOwner(accounts) {
     );
 
     // log("confirm a[1] is admin of", democId);
-    assert.equal(d1PxAddr, (await svIx.getDemocInfo(democId))[1], "admin should be d1PxAddr");
+    assert.equal(d1PxAddr, (await svIx.getAdmin(democId)), "admin should be d1PxAddr");
     await asyncErrStatus(ERR_BAD_PAYMENT,
         () => svIx.initDemoc("free lunch democ (bad)", {from: accounts[2]}),
         "no free lunch democ - acct2"
@@ -165,7 +182,7 @@ async function testOwner(accounts) {
     await asyncAssertThrow(() => svIx.getNthBallot(democId, nBallotsPre), "nonexistant democ will throw");
 
     // log("confirmed there is not ballot there yet - deploying now")
-    const bTxr = await d1Px.deployBallot(democId, democId, bytes32zero, [0, 20000000000], [false, false], {from: d1Admin});
+    const bTxr = await d1Px.deployBallot(democId, democId, bytes32zero, 0, 20000000000, USE_ETH | USE_NO_ENC, {from: d1Admin});
     assertNoErr(bTxr);
     // log("deployed...")
     const newBallot = await svIx.getNthBallot(democId, nBallotsPre);
@@ -180,14 +197,13 @@ async function testOwner(accounts) {
 }
 
 
-const testPayments = async (acc) => {
+const testPayments = async (svIx, acc) => {
     const admin = acc[0];
     const userPaid = acc[1];
     const userFree = acc[2];
 
     const [democPrice, ballotPrice] = S.map(a => web3.toWei(a, 'ether'), [0.05, 0.01]);
 
-    const svIx = await SVIndex.new({gas: 6500000});
     assertNoErr(await svIx.setEth([democPrice, ballotPrice], {from: admin}))
     assertNoErr(await svIx.setWhitelistDemoc(userFree, true, {from: admin}))
 
@@ -210,13 +226,13 @@ const testPayments = async (acc) => {
     const pxRaw = SVAdminPx.at(proxySC);
 
     // test a payment for democId
-    await asyncErrStatus(ERR_BAD_PAYMENT, () => ixPxForPaid.deployBallot(democId, democId, democId, [0, 0], [true, true], {from: userPaid}), "userPaid can't publish issues for free");
-    const _ballotTxR = await ixPxForPaid.deployBallot(democId, democId, democId, [0, 0], [true, true], {
+    await asyncErrStatus(ERR_BAD_PAYMENT, () => ixPxForPaid.deployBallot(democId, democId, democId, 0, 0, USE_ETH | USE_ENC, {from: userPaid}), "userPaid can't publish issues for free");
+    const _ballotTxR = await ixPxForPaid.deployBallot(democId, democId, democId, 0, 0, USE_ETH | USE_ENC, {
         from: userPaid,
         value: ballotPrice
     });
     assertNoErr(_ballotTxR)
-    const _ballotDeployE = getEventFromTxR("BallotInit", _ballotTxR);
+    const _ballotDeployE = getEventFromTxR("BallotAdded", _ballotTxR);
 
     // test userFree can do this for free
     const _democFreeTxR = await svIx.initDemoc("free democ", {from: userFree});
@@ -228,14 +244,53 @@ const testPayments = async (acc) => {
     // set whitelist for issues to the proxySC - not user themselves
     assertNoErr(await svIx.setWhitelistBallot(_democFreeE.args.admin, true, {from: admin}));
 
-    assertNoErr(await ixPxForFree.deployBallot(_freeDemocId, _freeDemocId, _freeDemocId, [0, 0], [true, true], {from: userFree}))
+    assertNoErr(await ixPxForFree.deployBallot(_freeDemocId, _freeDemocId, _freeDemocId, 0, 0, USE_ETH | USE_ENC, {from: userFree}))
+}
+
+
+const testUpgrade = async (svIx1, acc) => {
+    const bbF = await svIx1.bbFactory();
+    const pxF = await svIx1.adminPxFactory();
+    const be = await svIx1.backend();
+
+    await svIx1.setPaymentEnabled(false);
+
+    const _tx1o1 = await svIx1.initDemoc("democ1");
+    const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocInit", _tx1o1);
+    assertNoErr(_tx1o1);
+
+    // let's make sure we can make a ballot still
+    const svPx = SVIndex.at(pxAddr);
+    const _tx1o2 = await svPx.deployBallot(democHash, bytes32zero, bytes32zero, 0, 0, USE_ETH | USE_ENC);
+    assertNoErr(_tx1o2);
+
+    const svIx2 = await SVIndex.new(be, pxF, bbF);
+    assert.equal((await svIx2.nDemocs()).toNumber(), 1, "should have 1 democ");  // note - okay to use Ix2 here bc we aren't doing any writing yet
+
+    _txUpgrade = await svIx1.doUpgrade(svIx2.address);
+    assertNoErr(_txUpgrade);
+
+    await asyncAssertThrow(() => svIx1.initDemoc("democ2"), "Should throw on trying to init democ");
+    // const _tx2o1 = await svIx1.deployBallot(democHash, bytes32zero, bytes32zero, 0, 0, USE_ENC | USE_ETH);
+    // assertErrStatus(ERR_NO_EDIT_PERMISSIONS, _tx2o1, "svIx1 should not have edit perms anymore")
+
+    await svIx2.setPaymentEnabled(false);
+
+    const _tx2o3 = await svPx.deployBallot(democHash, bytes32zero, bytes32zero, 0, 0, USE_ETH | USE_ENC);
+    assertNoErr(_tx2o3);
+
+    const _tx2o2 = await svIx2.initDemoc("democ2");
+    assertNoErr(_tx2o2);
+
+    assert.equal((await svIx2.nDemocs()).toNumber(), 2, "should have 2 democs");  // note - okay to use Ix2 here bc we aren't doing any writing yet
 }
 
 
 contract("SVLightIndex", function (_accounts) {
     tests = [
-        ["end-to-end-ish", testOwner],
+        ["end-to-end-ish", testEndToEndIsh],
         ["payment amounts", testPayments],
+        ["upgrade works", testUpgrade],
     ];
-    S.map(([desc, f]) => it(desc, wrapTest(_accounts, f)), tests);
+    S.map(([desc, f]) => it(desc, wrapTestIx(_accounts, f)), tests);
 });

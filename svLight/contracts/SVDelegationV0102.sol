@@ -13,7 +13,7 @@ import "./SVDelegationV0101.sol";
 
 
 // Main delegation contract v1.2
-contract SVDelegationV0102 is owned, upgradable, copyMemAddrArray {
+contract SVDelegationV0102 is owned, copyMemAddrArray {
 
     // in the last version we didn't include enough data - this makes it trivial to traverse off-chain
     struct Delegation {

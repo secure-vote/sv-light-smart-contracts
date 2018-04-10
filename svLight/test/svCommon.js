@@ -1,4 +1,4 @@
-const SVCommon = artifacts.require("./SVCommon.sol");
+// const SVCommon = artifacts.require("./SVCommon.sol");
 
 require("./testUtils")();
 
