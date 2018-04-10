@@ -1,4 +1,4 @@
-pragma solidity ^0.4.19;
+pragma solidity ^0.4.21;
 
 
 //
@@ -107,8 +107,8 @@ contract SVIndexBackend is permissioned {
     function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits, SVBBoxFactory bbF, address admin) only_editors() external returns (SVLightBallotBox) {
         // the start time is max(startTime, block.timestamp) to avoid a DoS whereby a malicious electioneer could disenfranchise
         // token holders who have recently acquired tokens.
-        uint64 startTs = max(_startTs, uint64(block.timestamp));
-        SVLightBallotBox votingContract = bbF.spawn(specHash, startTs, endTs, _submissionBits, false, admin);
+        SVLightBallotBox votingContract = bbF.spawn(specHash, _startTs, endTs, _submissionBits, false, admin);
+        uint64 startTs = votingContract.startTime();
         _commitBallot(democHash, specHash, extraData, address(votingContract), startTs, endTs);
         return votingContract;
     }
