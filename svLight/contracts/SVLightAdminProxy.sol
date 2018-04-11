@@ -20,6 +20,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
     address caller = address(0);
 
     event AddedAdminToPx(address newAdmin);
+    event RemovedAdmin(address oldAdmin);
     event FailedToFwdCall(uint value, bytes data);
 
     modifier isAdmin() {
@@ -96,6 +97,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
 
     function removeAdmin(address oldAdmin) isAdmin() req(msg.sender != oldAdmin, ERR_CANNOT_REMOVE_SELF) public {
         admins[oldAdmin] = false;
+        emit RemovedAdmin(oldAdmin);
     }
 
     // simple function to list all admins

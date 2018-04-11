@@ -50,7 +50,7 @@ contract SVIndexBackend is permissioned {
     }
 
     mapping (bytes32 => Democ) public democs;
-    mapping (bytes16 => bytes32) public democPrefixToHash;
+    mapping (bytes13 => bytes32) public democPrefixToHash;
     bytes32[] public democList;
 
     //* GLOBAL INFO */
@@ -319,6 +319,10 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
     function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTime, uint64 endTime) {
         return backend.getNthBallot(democHash, n);
+    }
+
+    function democPrefixToHash(bytes13 democHashPrefix) external constant returns (bytes32) {
+        return backend.democPrefixToHash(democHashPrefix);
     }
 
     //* ADD BALLOT TO RECORD */

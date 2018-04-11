@@ -25,8 +25,9 @@ const wrapTestIx = (accounts, f) => {
         const pxF = await PxFactory.new();
         const bbF = await BBFactory.new();
 
-        const testLH = web3.sha3("test");
-        const testNH = nh.hash("test");
+        const tld = "test";
+        const testLH = web3.sha3(tld);
+        const testNH = nh.hash(tld);
         const ensRry = await EnsRegistry.new();
         const ensRrr = await EnsRegistrar.new(ensRry.address, testNH);
         await ensRry.setSubnodeOwner("0x0", testLH, ensRrr.address);
@@ -42,12 +43,12 @@ const wrapTestIx = (accounts, f) => {
 
         await ensPx.addAdmin(svIx.address);
 
-        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF}, accounts);
+        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld}, accounts);
     };
 };
 
 
-async function testEndToEndIsh({svIx}, accounts) {
+async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
     assert.equal(await svIx.owner(), accounts[0], "owner set");
     assert.equal(await svIx.payTo(), accounts[0], "payTo set");
 
@@ -110,6 +111,13 @@ async function testEndToEndIsh({svIx}, accounts) {
     // log("init done!");
     const {args: {democHash: democId, admin: d1PxAddr}} = getEventFromTxR("DemocAdded", initSomeDemocTxR);
     const d1Px = SVIndex.at(d1PxAddr);
+
+    const democPrefixHex = democId.slice(0,13*2+2);
+    const democPrefixInt = web3.toBigNumber(democPrefixHex).toString(10);
+    const expectedDomain = democPrefixInt + '.' + tld;
+    assert.equal(await ensPR.addr(nh.hash(expectedDomain)), "0x00000000000000" + democPrefixHex.slice(2), "domain that's created should match expectation")
+    console.log("Created domain:", expectedDomain);
+    assert.equal(await svIx.democPrefixToHash(democPrefixHex), democId, "democ hash from prefix should match");
 
     assertNoErr(await svIx.setPaymentEnabled(false, {from: accounts[0]}))
     assert.equal(await svIx.paymentEnabled(), false, "payment null now");
