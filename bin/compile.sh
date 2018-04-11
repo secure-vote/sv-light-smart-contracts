@@ -65,8 +65,10 @@ fi
 
 mkdir -p "./$OUTPUT_DIR"
 
+LIB_STR=$(cat ./bin/libs.txt | tr '\n' ' ')
+
 function solcCommon {
-    solc "$@" -o "./$OUTPUT_DIR/" --overwrite --optimize "$CONTRACT_PATH"
+    solc "$@" -o "./$OUTPUT_DIR/" --overwrite --optimize "$CONTRACT_PATH" --libraries "$LIB_STR" --allow-paths './ensSCs/contracts,./svLight/contracts,./svlight/libs,'
 }
 
 

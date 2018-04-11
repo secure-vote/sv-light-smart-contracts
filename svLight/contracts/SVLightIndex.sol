@@ -12,7 +12,8 @@ pragma solidity ^0.4.21;
 import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
 import { canCheckOtherContracts, permissioned, hasAdmins, owned, upgradePtr } from "./SVCommon.sol";
-
+import { StringLib } from "../libs/StringLib.sol";
+import { SvEnsEverythingPx } from "../../ensSCs/contracts/SvEnsEverythingPx.sol";
 
 
 contract SVAdminPxFactory {
@@ -49,6 +50,7 @@ contract SVIndexBackend is permissioned {
     }
 
     mapping (bytes32 => Democ) public democs;
+    mapping (bytes16 => bytes32) public democPrefixToHash;
     bytes32[] public democList;
 
     //* GLOBAL INFO */
@@ -60,11 +62,13 @@ contract SVIndexBackend is permissioned {
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
     function initDemoc(string democName, address admin) only_editors() external returns (bytes32 democHash) {
-        // generating the democHash in this way guarentees it'll be unique (particularly because `this` is part of the hash)
-        democHash = keccak256(democName, admin, democList.length, this);
+        // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
+        // (particularly because `this` and prevBlockHash are part of the hash)
+        democHash = keccak256(democName, admin, democList.length, block.blockhash(block.number-1), this);
         democList.push(democHash);
         democs[democHash].name = democName;
         democs[democHash].admin = admin;
+        democPrefixToHash[bytes13(democHash)] = democHash;
         emit LowLevelNewDemoc(democHash);
     }
 
@@ -133,6 +137,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
     SVIndexBackend public backend;
     SVAdminPxFactory public adminPxFactory;
     SVBBoxFactory public bbFactory;
+    SvEnsEverythingPx public ensPx;
 
     // addresses that do not have to pay for democs
     mapping (address => bool) public democWhitelist;
@@ -198,13 +203,13 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
             if (doRequire(msg.value >= v, ERR_BAD_PAYMENT)) {
                 // handle payments
                 uint remainder = msg.value - v;
-                payTo.transfer(v); // .transfer so it throws on failure
-                if (!msg.sender.send(remainder)){
-                    payTo.transfer(remainder);
-                }
+                doRequire(msg.sender.call.value(remainder)(), ERR_FAILED_TO_PROVIDE_CHANGE);
+                doRequire(payTo.call.value(v)(), ERR_FAILED_TO_FWD_PAYMENT);
                 emit PaymentMade([v, remainder]);
             } else {
                 emit PaymentTooLow(msg.value, v);
+                // if payment is too low we should probably refund the coins since we're not reverting
+                doRequire(msg.sender.call.value(msg.value)(), ERR_FAILED_TO_REFUND);
                 return;
             }
         }
@@ -218,18 +223,23 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
 
     // constructor
-    function SVLightIndex(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory) public {
+    function SVLightIndex(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
         payTo = msg.sender;
         backend = _backend;
         adminPxFactory = _pxFactory;
         bbFactory = _bbFactory;
+        ensPx = _ensPx;
+    }
+
+    function payoutAnyBalance() public {
+        require(payTo.call.value(address(this).balance)());
     }
 
     //* UPGRADE STUFF */
 
     function doUpgrade(address nextSC) only_owner() not_upgraded() public {
-        backend.upgradeMe(nextSC);
         doUpgradeInternal(nextSC);
+        require(backend.upgradeMe(nextSC));
     }
 
     //* GLOBAL INFO */
@@ -283,6 +293,15 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
         bytes32 democHash = backend.initDemoc(democName, admin);
         emit DemocAdded(democHash, admin);
+
+        // create domain for admin!
+        // truncate the democHash to 13 bytes (which is the most that's safely convertable to a decimal string
+        // without going over 32 chars), then convert to uint, then uint to string (as bytes32)
+        bytes13 democPrefix = bytes13(democHash);
+        bytes32 democPrefixIntStr = StringLib.uintToBytes(uint(democPrefix));
+        // although the address doesn't exist, it gives us something to lookup I suppose.
+        ensPx.regNameWOwner(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
+
         return democHash;
     }
 
@@ -306,6 +325,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
     function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb)
                       onlyBy(backend.getDAdmin(democHash))
+                      not_upgraded()
                       payReq(PAY_BALLOT)
                       public
                       payable
@@ -317,6 +337,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
     function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits)
                           onlyBy(backend.getDAdmin(democHash))
+                          not_upgraded()
                           payReq(PAY_BALLOT)
                           public payable
                           returns (uint id) {
@@ -330,5 +351,24 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
             return a;
         }
         return b;
+    }
+
+    function b32ToStr(bytes32 b32) pure internal returns(string) {
+        uint i;
+        // lets check the length first
+        for (i = 0; i < 32; i++) {
+            // the output from StringLib is a bytes32 and anything unfilled will be \x00
+            if (b32[i] == byte(0)) {
+                // if we hit a 0 byte we're done, so let's break
+                break;
+            }
+        }
+
+        bytes memory bs = new bytes(i);
+        for(uint j = 0; j < i; j++) {
+            bs[j] = b32[j];
+        }
+
+        return string(bs);
     }
 }

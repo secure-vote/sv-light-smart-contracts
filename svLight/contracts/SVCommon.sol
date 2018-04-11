@@ -28,6 +28,9 @@ contract descriptiveErrors {
 
     // democ index
     uint constant ERR_BAD_PAYMENT = 421010;
+    uint constant ERR_FAILED_TO_PROVIDE_CHANGE = 421011;
+    uint constant ERR_FAILED_TO_REFUND = 421012;
+    uint constant ERR_FAILED_TO_FWD_PAYMENT = 421099;
     // uint constant ERR_INDEX_FORBIDDEN = 421403;
 
     // admin proxy
@@ -175,10 +178,10 @@ interface ReverseRegistrar {
 // contract to allow claiming a reverse ENS lookup
 contract claimReverseENS is canCheckOtherContracts {
     function initReverseENS(address _owner) internal {
+        // 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069 is ENS ReverseRegistrar on Mainnet
         address ensRevAddr = 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069;
         if (isContract(ensRevAddr)) {
-            // 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069 is ENS ReverseRegistrar on Mainnet
-            ReverseRegistrar ens = ReverseRegistrar(0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069);
+            ReverseRegistrar ens = ReverseRegistrar(ensRevAddr);
             ens.claim(_owner);
         }
     }
@@ -202,8 +205,6 @@ contract permissioned is descriptiveErrors, owned, hasAdmins {
     modifier only_editors() {
         if(doRequire(editAllowed[msg.sender], ERR_NO_EDIT_PERMISSIONS)) {
             _;
-        } else {
-            emit PermissionError(msg.sender);
         }
     }
 
@@ -230,10 +231,11 @@ contract permissioned is descriptiveErrors, owned, hasAdmins {
         emit PermissionsUpgraded(oldSC, newSC);
     }
 
-    function upgradeMe(address newSC) only_editors() external {
+    function upgradeMe(address newSC) only_editors() external returns (bool) {
         editAllowed[msg.sender] = false;
         editAllowed[newSC] = true;
         emit SelfUpgrade(msg.sender, newSC);
+        return true;
     }
 
     function hasPermissions(address a) public view returns (bool) {

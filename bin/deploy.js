@@ -21,7 +21,6 @@ const log = (msg, offset = 0) => {
 loadDetails = require('./loadContractDetails');
 
 
-
 const ethHashCheck = (h, lenBytes = 32) => {
     try {
         return h.slice(0, 2) === "0x" && h.length === (lenBytes * 2 + 2);
@@ -45,6 +44,11 @@ const main = async () => {
             type: 'string',
             describe: 'contract build dir to use (expects ./CONTRACT_DIR/CONTRACT_NAME.bin to exist)',
             demand: false,
+        },
+        "web3Provider": {
+            describe: "URI for web3 provider - HTTP only",
+            default: "https://kovan.eth.secure.vote:8545",
+            type: 'string'
         },
         "argsJson": {
             type: 'string',
@@ -89,7 +93,7 @@ const main = async () => {
         },
         "web3Provider": {
             describe: "URI for web3 provider - HTTP only",
-            default: "http://localhost:8545",
+            default: "https://kovan.eth.secure.vote:8545",
             type: 'string'
         },
         "contractName": {

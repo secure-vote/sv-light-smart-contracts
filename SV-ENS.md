@@ -28,7 +28,7 @@ You can see a test of this at [max-test.0.secvote.eth](https://etherscan.io/ensl
 
 If you have permissions with the auto-deployer send a tx to:
 
-* Kovan: `autodeploy.kov.sv` -- `0x8e53e35224da62d6d59feb28f6a5ccfce8577965`
+* Kovan: `autodeploy.kov.sv` -- `0x55a529C654b67e17844230B625B8A2478d190F67`
 * Mainnet: `autodeploy.eth.sv` -- `0x644226C0513D860395ac6ed3Aec4D8Ba761aBEF9`
 * `0.secvote.eth`: `autodeploy.0.secvote.eth` -- `0x5a8894775e14d238209080f66f4b3d886a298ea5`
 
@@ -37,10 +37,10 @@ ABI: `./_distEns/SvEnsEverythingPx.abi`
 ABI Fragment:
 
 ```
-[{"constant":false,"inputs":[{"name":"name","type":"string"},{"name":"resolveTo","type":"address"}],"name":"regName","outputs":[{"name":"node","type":"bytes32"}],"payable":false,"stateMutability":"nonpayable","type":"function"}]
+[{"constant":false,"inputs":[{"name":"name","type":"string"},{"name":"resolveTo","type":"address"}],"name":"regName","outputs":[{"name":"node","type":"bytes32"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant": false,"inputs": [{"name": "name","type": "string"},{"name": "resolveTo","type": "address"},{"name": "domainOwner","type": "address"}],"name": "regNameWOwner","outputs": [{"name": "node","type": "bytes32"}],"payable": false,"stateMutability": "nonpayable","type": "function"}]
 ```
 
-Tx: `regName(string name, address toResolveTo)` - name should _just_ be the subdomain - e.g. `autodeploy` in `autodeploy.eth.sv`
+Tx: `regName(string name, address toResolveTo)` (or use `regNameWOwner`) - name should _just_ be the subdomain - e.g. `autodeploy` in `autodeploy.eth.sv`
 
 ### Manually
 
@@ -60,3 +60,4 @@ See [the ENS docs](https://docs.ens.domains/en/latest/introduction.html) for an 
 * `kov.sv` (Mainnet) - Points to registrar for `kov.sv` domains on Kovan
 * `autodeployer.kov.sv` - allows autodeploying names super quick in 1 tx
 * `autodeployer.eth.sv` - as above
+* `index-2018-04-10.kov.sv`

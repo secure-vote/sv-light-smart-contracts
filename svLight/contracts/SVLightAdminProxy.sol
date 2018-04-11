@@ -46,7 +46,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
     // fallback function - forwards all value and data to the `forwardTo` address.
     function() adminOrInCall() public payable {
         if (callActive) {
-            doRequire(caller.send(msg.value), ERR_PX_ETH_TFER_FAILED);
+            caller.transfer(msg.value);
         } else {
             callActive = true;
             caller = msg.sender;
@@ -59,9 +59,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
 
             // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
             // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
-            if(!doRequire(address(forwardTo).call.value(msg.value)(msg.data), ERR_CALL_FWD_FAILED)){
-                emit FailedToFwdCall(msg.value, msg.data);
-            }
+            require(address(forwardTo).call.value(msg.value)(msg.data));
             callActive = false;
         }
     }

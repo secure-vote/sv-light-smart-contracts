@@ -4,6 +4,12 @@ const SVBallotBox = artifacts.require("./SVLightBallotBox.sol");
 const BBFactory = artifacts.require("./SVBBoxFactory.sol");
 const PxFactory = artifacts.require("./SVAdminPxFactory.sol");
 const IxBackend = artifacts.require("./SVIndexBackend.sol");
+const EnsPx = artifacts.require("./SvEnsEverythingPx.sol");
+const EnsPR = artifacts.require("./PublicResolver.sol");
+const EnsRegistrar = artifacts.require("./SvEnsRegistrar.sol");
+const EnsRegistry = artifacts.require("./SvEnsRegistry.sol");
+
+const nh = require('eth-ens-namehash');
 
 require("./testUtils")();
 
@@ -12,26 +18,36 @@ const AsyncPar = require("async-parallel");
 const {create, env} = require("sanctuary");
 const S = create({checkTypes: true, env});
 
-const bytes32zero =
-    "0x0000000000000000000000000000000000000000000000000000000000000000";
-
-
 
 const wrapTestIx = (accounts, f) => {
     return async () => {
         const be = await IxBackend.new();
         const pxF = await PxFactory.new();
         const bbF = await BBFactory.new();
-        const ix = await SVIndex.new(be.address, pxF.address, bbF.address);
-        await be.setPermissions(ix.address, true);
+
+        const testLH = web3.sha3("test");
+        const testNH = nh.hash("test");
+        const ensRry = await EnsRegistry.new();
+        const ensRrr = await EnsRegistrar.new(ensRry.address, testNH);
+        await ensRry.setSubnodeOwner("0x0", testLH, ensRrr.address);
+        const ensPR = await EnsPR.new(ensRry.address);
+
+        const ensPx = await EnsPx.new(ensRrr.address, ensRry.address, ensPR.address, testNH)
+        await ensRrr.addAdmin(ensPx.address);
+
+        const svIx = await SVIndex.new(be.address, pxF.address, bbF.address, ensPx.address);
+        await be.setPermissions(svIx.address, true);
         await be.doLockdown();
-        assertErrStatus(ERR_ADMINS_LOCKED_DOWN, await be.setPermissions(ix.address, true), "should throw error after lockdown")
-        return await f(ix, accounts);
+        assertErrStatus(ERR_ADMINS_LOCKED_DOWN, await be.setPermissions(svIx.address, true), "should throw error after lockdown")
+
+        await ensPx.addAdmin(svIx.address);
+
+        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF}, accounts);
     };
 };
 
 
-async function testEndToEndIsh(svIx, accounts) {
+async function testEndToEndIsh({svIx}, accounts) {
     assert.equal(await svIx.owner(), accounts[0], "owner set");
     assert.equal(await svIx.payTo(), accounts[0], "payTo set");
 
@@ -111,9 +127,10 @@ async function testEndToEndIsh(svIx, accounts) {
     );
     // log("bad ballots over, confirming we can still make them...")
 
-    const lbb = await SVBallotBox.new(democId, 0, 0, USE_ETH | USE_ENC);
+    const lbb = await SVBallotBox.new(bytes32zero, 0, 0, USE_ETH | USE_ENC);
     // log("created LBB to work with... adding a ballot");
 
+    assertErrStatus(ERR_BAD_PAYMENT, await d1Px.addBallot(democId, bytes32zero, lbb.address, {from: d1Admin, value: iPrice1 - 1}), "payment should be too low")
     // make sure we can still pay for a ballot though
     assertNoErr(await d1Px.addBallot(democId, democId, lbb.address, {from: d1Admin, value: iPrice1 + 5}))
     // log("addballot okay paid");
@@ -122,6 +139,7 @@ async function testEndToEndIsh(svIx, accounts) {
         value: iPrice1 + 6,
         gasPrice: 0
     }))
+
     // log("ballot added!");
     assertNoErr(await svIx.setPaymentEnabled(false, {from: accounts[0]}))
     // log("add ballot okay free");
@@ -197,7 +215,7 @@ async function testEndToEndIsh(svIx, accounts) {
 }
 
 
-const testPayments = async (svIx, acc) => {
+const testPayments = async ({svIx}, acc) => {
     const admin = acc[0];
     const userPaid = acc[1];
     const userFree = acc[2];
@@ -248,7 +266,8 @@ const testPayments = async (svIx, acc) => {
 }
 
 
-const testUpgrade = async (svIx1, acc) => {
+const testUpgrade = async ({svIx, ensPx}, acc) => {
+    const svIx1 = svIx;
     const bbF = await svIx1.bbFactory();
     const pxF = await svIx1.adminPxFactory();
     const be = await svIx1.backend();
@@ -264,8 +283,10 @@ const testUpgrade = async (svIx1, acc) => {
     const _tx1o2 = await svPx.deployBallot(democHash, bytes32zero, bytes32zero, 0, 0, USE_ETH | USE_ENC);
     assertNoErr(_tx1o2);
 
-    const svIx2 = await SVIndex.new(be, pxF, bbF);
+    const svIx2 = await SVIndex.new(be, pxF, bbF, ensPx.address);
     assert.equal((await svIx2.nDemocs()).toNumber(), 1, "should have 1 democ");  // note - okay to use Ix2 here bc we aren't doing any writing yet
+
+    await ensPx.addAdmin(svIx2.address);
 
     _txUpgrade = await svIx1.doUpgrade(svIx2.address);
     assertNoErr(_txUpgrade);
