@@ -51,12 +51,12 @@ library StringUtils {
     /// @dev Converts an unsigned integert to its string representation.
     /// @param v The number to be converted.
     function uintToBytes(uint v) external pure returns (bytes32 ret) {
-            return StringLib.uintToBytes(v);
+        return StringLib.uintToBytes(v);
     }
 
     /// @dev Converts a numeric string to it's unsigned integer representation.
     /// @param v The string to be converted.
     function bytesToUInt(bytes32 v) external pure returns (uint ret) {
-            return StringLib.bytesToUInt(v);
+        return StringLib.bytesToUInt(v);
     }
 }

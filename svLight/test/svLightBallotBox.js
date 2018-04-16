@@ -1,4 +1,5 @@
 var SVBallotBox = artifacts.require("./SVLightBallotBox.sol");
+var EmitterTesting = artifacts.require("./EmitterTesting.sol");
 
 require("./testUtils")();
 
@@ -20,7 +21,14 @@ const mkStartTime = () => Math.round(Date.now() / 1000)
 const mkFlags = ({useEnc, testing}) => [useEnc === true, testing === true];
 
 
-async function testEarlyBallot(accounts) {
+const genStartEndTimes = () => {
+    var startTime = Math.floor(Date.now() / 1000) - 1;
+    var endTime = startTime + 600;
+    return [startTime, endTime];
+}
+
+
+async function testEarlyBallot({accounts}) {
     var startTime = mkStartTime() + 2;
     var endTime = startTime + 600;
 
@@ -29,7 +37,8 @@ async function testEarlyBallot(accounts) {
 }
 
 
-async function testSetOwner(acc) {
+async function testSetOwner({accounts}) {
+    const acc = accounts;
     const start = mkStartTime() - 1;
     const vc = await SVBallotBox.new(specHash, start, start + 60, USE_ETH | USE_NO_ENC);
     const owner1 = await vc.owner();
@@ -46,7 +55,7 @@ async function testSetOwner(acc) {
 }
 
 
-async function testEncryptionBranching(accounts) {
+async function testEncryptionBranching({accounts}) {
     var startTime = Math.floor(Date.now() / 1000) - 1;
     var endTime = startTime + 600;
     var shortEndTime = 0;
@@ -119,7 +128,7 @@ async function testEncryptionBranching(accounts) {
     assertNoErr(_txSignedNoEnc);
 }
 
-async function testInstantiation(accounts) {
+async function testInstantiation({accounts}) {
     var startTime = Math.floor(Date.now() / 1000) - 1;
     var endTime = startTime + 600;
     var shortEndTime = 0;
@@ -187,7 +196,7 @@ async function testInstantiation(accounts) {
     assertErrStatus(ERR_BALLOT_CLOSED, await vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
 }
 
-async function testTestMode(accounts) {
+async function testTestMode({accounts}) {
     var vc = await SVBallotBox.new(specHash, 0, 1, USE_ETH | USE_NO_ENC);
     assertErrStatus(ERR_TESTING_REQ, await vc.setEndTime(0), "throws on set end time when not in testing");
 }
@@ -224,6 +233,83 @@ const testABallot = accounts => async (_vc = S.Nothing, account = S.Nothing, msg
     return true;
 };
 
+
+const _genSigned = () => {
+    return {
+        ballot: genRandomBytes32(),
+        edPk: genRandomBytes32(),
+        sig: [genRandomBytes32(), genRandomBytes32()],
+        curvePk: genRandomBytes32()
+    }
+}
+
+
+async function testSignedBallotNoEnc({accounts, log}){
+    const [startTime, endTime] = genStartEndTimes();
+    const bb = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_NO_ENC | USE_TESTING);
+
+    assert.equal((await bb.startTime()).toNumber(), startTime, "start times match");
+
+    b1 = _genSigned();
+
+    const tx1o1 = await bb.submitBallotSignedNoEnc(b1.ballot, b1.edPk, b1.sig);
+    assertNoErr(tx1o1);
+    const {args: _v1o1} = getEventFromTxR("SuccessfulVote", tx1o1);
+    assert.equal(_v1o1.voter, b1.edPk, "voter pk should match");
+
+    await log("voter matches 1")
+
+    const _r1o1 = {};
+    _r1o1.ballot = await bb.ballotMap(_v1o1.ballotId).then(([b]) => b);
+    assert.deepEqual(_r1o1.ballot, b1.ballot, "ballots should match");
+    await log("ballot matches 1")
+
+    _r1o1.sig0 = await bb.ed25519Signatures(_v1o1.ballotId, 0);
+    _r1o1.sig1 = await bb.ed25519Signatures(_v1o1.ballotId, 1);
+    assert.deepEqual([_r1o1.sig0, _r1o1.sig1], b1.sig, "sigs should match");
+    await log("edSig matches 1")
+
+
+    assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, await bb.submitBallotNoPk(b1.ballot));
+    assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, await bb.submitBallotWithPk(b1.ballot, b1.edPk));
+    assertErrStatus(ERR_NOT_BALLOT_SIGNED_WITH_ENC, await bb.submitBallotSignedWithEnc(b1.ballot, b1.curvePk, b1.edPk, b1.sig));
+}
+
+
+async function testSignedBallotWithEnc({accounts, log}){
+    const [startTime, endTime] = genStartEndTimes();
+    const bb = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING);
+
+    assert.equal((await bb.startTime()).toNumber(), startTime, "start times match");
+
+    b1 = _genSigned();
+
+    const tx1o1 = await bb.submitBallotSignedWithEnc(b1.ballot, b1.curvePk, b1.edPk, b1.sig);
+    assertNoErr(tx1o1);
+    const {args: _v1o1} = getEventFromTxR("SuccessfulVote", tx1o1);
+    assert.equal(_v1o1.voter, b1.edPk, "voter pk should match");
+
+    await log("voter matches 1")
+
+    const _r1o1 = {};
+    _r1o1.sig0 = await bb.ed25519Signatures(_v1o1.ballotId, 0);
+    _r1o1.sig1 = await bb.ed25519Signatures(_v1o1.ballotId, 1);
+    assert.deepEqual([_r1o1.sig0, _r1o1.sig1], b1.sig, "sigs should match");
+    await log('edsig match 1')
+
+    _r1o1.ballot = await bb.ballotMap(_v1o1.ballotId).then(([b]) => b);
+    assert.deepEqual(_r1o1.ballot, b1.ballot, "ballots should match");
+    await log('ballot match 1')
+
+    _r1o1.curvePk = await bb.curve25519Pubkeys(_v1o1.ballotId);
+    assert.equal(_r1o1.curvePk, b1.curvePk, "curvePks should match");
+
+    assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, await bb.submitBallotNoPk(b1.ballot));
+    assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, await bb.submitBallotWithPk(b1.ballot, b1.edPk));
+    assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC, await bb.submitBallotSignedNoEnc(b1.ballot, b1.edPk, b1.sig));
+}
+
+
 function sAssertEq(a, b, msg) {
     return assert.true(S.equals(a, b), msg);
 }
@@ -259,10 +345,25 @@ async function testrpcRevert(snapshot) {
     });
 }
 
+
+const _wrapTest = (accounts, f) => {
+    return async () => {
+        const Emitter = await EmitterTesting.new();
+        const log = m => Emitter.log(m);
+        return await f({accounts, log});
+    };
+}
+
+
 contract("LittleBallotBox", function(_accounts) {
-    it("should instantiate correctly", wrapTest(_accounts, testInstantiation));
-    it("should allow setting owner", wrapTest(_accounts, testSetOwner));
-    it("should enforce encryption based on PK submitted", wrapTest(_accounts, testEncryptionBranching));
-    it("should not allow testing functions if testing mode is false", wrapTest(_accounts, testTestMode));
-    it("should throw on early ballot", wrapTest(_accounts, testEarlyBallot));
+    const tests = [
+        ["should instantiate correctly", testInstantiation],
+        ["should allow setting owner", testSetOwner],
+        ["should enforce encryption based on PK submitted", testEncryptionBranching],
+        ["should not allow testing functions if testing mode is false", testTestMode],
+        ["should throw on early ballot", testEarlyBallot],
+        ["should handle signed ballots", testSignedBallotNoEnc],
+        ["should handle signed ballots with enc", testSignedBallotWithEnc]
+    ]
+    S.map(([desc, f]) => it(desc, _wrapTest(_accounts, f)), tests);
 });

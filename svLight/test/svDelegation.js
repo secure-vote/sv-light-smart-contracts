@@ -13,7 +13,7 @@ const bytes32zero =
 const zeroAddr =
     "0x0000000000000000000000000000000000000000";
 
-async function testGlobalDelegation(acc) {
+async function testGlobalDelegation({accounts: acc}) {
     const dc = await DCOrig.new();
 
     const v1 = acc[0];
@@ -29,7 +29,7 @@ async function testGlobalDelegation(acc) {
 }
 
 
-const testTokenDelegation = async (acc) => {
+const testTokenDelegation = async ({accounts: acc}) => {
     const dc = await DCOrig.new();
 
     const v1 = acc[0];
@@ -47,7 +47,7 @@ const testTokenDelegation = async (acc) => {
     assert.equal(zeroAddr, (await dc.resolveDelegation(d1, t1))[1], "delegate is not a voter - has no delegation");
 };
 
-const testDelegationMixed = async (acc) => {
+const testDelegationMixed = async ({accounts: acc}) => {
     const dc = await DCOrig.new();
 
     const v1 = acc[0];
@@ -67,7 +67,7 @@ const testDelegationMixed = async (acc) => {
     assert.equal(zeroAddr, (await dc.resolveDelegation(d1, t1))[1], "delegate is not a voter - has no delegation");
 };
 
-const testMultiDelegations = async (acc) => {
+const testMultiDelegations = async ({accounts: acc}) => {
     const dc = await DCOrig.new();
 
     const v1 = acc[0];

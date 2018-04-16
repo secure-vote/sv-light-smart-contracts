@@ -14,6 +14,7 @@ import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
 import { canCheckOtherContracts, permissioned, hasAdmins, owned, upgradePtr } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
 import { SvEnsEverythingPx } from "../../ensSCs/contracts/SvEnsEverythingPx.sol";
+import { Triggerable } from "./Triggerable.sol";
 
 
 contract SVAdminPxFactory {
@@ -131,6 +132,36 @@ contract SVIndexBackend is permissioned {
         return b;
     }
 }
+
+
+
+// contract SvlIxOnDemocHandler is Triggerable, permissioned {
+//     SvEnsEverythingPx public ensPx;
+
+
+//     function SvlIxOnDemocHandler(SvEnsEverythingPx _ensPx) public {
+//         ensPx = _ensPx;
+//     }
+
+
+//     function handle(bytes32[] args) only_editors() external {
+//         require(args.length == 2);
+//         bytes32 democHash = args[0];
+//         address admin = address(args[1]);
+//         mkDomain(democHash, admin);
+//     }
+// }
+
+
+// contract SvlIxOnBallotHandler is Triggerable, permissioned {
+//     function SvlIxOnBallotHandler() public {
+//         // do nothing
+//     }
+
+//     function handle(bytes32[] args) only_editors() external {
+//         // do nothing
+//     }
+// }
 
 
 contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
@@ -294,13 +325,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
         bytes32 democHash = backend.initDemoc(democName, admin);
         emit DemocAdded(democHash, admin);
 
-        // create domain for admin!
-        // truncate the democHash to 13 bytes (which is the most that's safely convertable to a decimal string
-        // without going over 32 chars), then convert to uint, then uint to string (as bytes32)
-        bytes13 democPrefix = bytes13(democHash);
-        bytes32 democPrefixIntStr = StringLib.uintToBytes(uint(democPrefix));
-        // although the address doesn't exist, it gives us something to lookup I suppose.
-        ensPx.regNameWOwner(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
+        mkDomain(democHash, admin);
 
         return democHash;
     }
@@ -349,6 +374,19 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
         emit BallotAdded(democHash, id);
     }
 
+
+    // sv ens domains
+    function mkDomain(bytes32 democHash, address admin) internal {
+        // create domain for admin!
+        // truncate the democHash to 13 bytes (which is the most that's safely convertable to a decimal string
+        // without going over 32 chars), then convert to uint, then uint to string (as bytes32)
+        bytes13 democPrefix = bytes13(democHash);
+        bytes32 democPrefixIntStr = StringLib.uintToBytes(uint(democPrefix));
+        // although the address doesn't exist, it gives us something to lookup I suppose.
+        ensPx.regNameWOwner(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
+    }
+
+
     // utils
     function max(uint64 a, uint64 b) pure internal returns(uint64) {
         if (a > b) {
@@ -356,6 +394,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
         }
         return b;
     }
+
 
     function b32ToStr(bytes32 b32) pure internal returns(string) {
         uint i;
@@ -376,3 +415,23 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
         return string(bs);
     }
 }
+
+
+// contract DeploySvIx {
+//     event Deployed(address ix, address onDemoc, address onBallot);
+
+//     function DeploySvIx(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
+//         SvlIxOnBallotHandler onBallot = new SvlIxOnBallotHandler();
+//         SvlIxOnDemocHandler onDemoc = new SvlIxOnDemocHandler(_ensPx);
+
+//         SVLightIndex ix = new SVLightIndex(_backend, _pxFactory, _bbFactory, onDemoc, onBallot);
+
+//         onBallot.setPermissions(address(ix), true);
+//         onBallot.doLockdown();
+//         onDemoc.setPermissions(address(ix), true);
+//         onDemoc.doLockdown();
+
+//         emit Deployed(address(ix), address(onDemoc), address(onBallot));
+//         selfdestruct(msg.sender);
+//     }
+// }

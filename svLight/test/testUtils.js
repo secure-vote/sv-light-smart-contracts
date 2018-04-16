@@ -12,7 +12,7 @@ module.exports = function () {
 
     this.wrapTest = (accounts, f) => {
         return async () => {
-            return await f(accounts);
+            return await f({accounts});
         };
     };
 

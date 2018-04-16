@@ -16,7 +16,7 @@ const zeroAddr =
     "0x0000000000000000000000000000000000000000";
 
 
-async function testGlobalDelegation(acc) {
+async function testGlobalDelegation({accounts: acc}) {
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
 
@@ -50,7 +50,7 @@ async function testGlobalDelegation(acc) {
 }
 
 
-const testTokenDelegation = async (acc) => {
+const testTokenDelegation = async ({accounts: acc}) => {
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
 
@@ -70,7 +70,7 @@ const testTokenDelegation = async (acc) => {
 };
 
 
-const testDelegationMixed = async (acc) => {
+const testDelegationMixed = async ({accounts: acc}) => {
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
 
@@ -91,7 +91,7 @@ const testDelegationMixed = async (acc) => {
     assert.equal(zeroAddr, (await dc.resolveDelegation(d1, t1))[3], "delegate is not a voter - has no delegation");
 };
 
-const testMultiDelegations = async (acc) => {
+const testMultiDelegations = async ({accounts: acc}) => {
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
 
@@ -115,7 +115,7 @@ const testMultiDelegations = async (acc) => {
 }
 
 
-const testBackwardsCompatibility = async (acc) => {
+const testBackwardsCompatibility = async ({accounts: acc}) => {
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
 
@@ -153,7 +153,7 @@ const testBackwardsCompatibility = async (acc) => {
 }
 
 
-const testRevocation = async (acc) => {
+const testRevocation = async ({accounts: acc}) => {
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
 
@@ -170,7 +170,7 @@ const testRevocation = async (acc) => {
 }
 
 
-const testRealV1OnMainnet = async (acc) => {
+const testRealV1OnMainnet = async ({accounts: acc}) => {
     if (process.env.DO_MAINNET_DELEGATION_TEST !== "true") {
         console.warn("WARNING: Skipping mainnet delegation test, use 'DO_MAINNET_DELEGATION_TEST=true' to perform this test");
         return;
@@ -263,7 +263,7 @@ const testRealV1OnMainnet = async (acc) => {
 }
 
 
-const testKovanBackwardsCompat = async (acc) => {
+const testKovanBackwardsCompat = async ({accounts: acc}) => {
     const tc = "0xAA62468E0668Dc9f2d5A145093cdbfa7D84E1668";
     const v1 = "0xc45797d1A7acCc9FB2DcB054Aa907f303A0a08f8";
     const v2 = "0xB4bE49829B7f70711B399c6cBfC05FcF33ff7AbE";

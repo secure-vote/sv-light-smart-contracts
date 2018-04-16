@@ -8,11 +8,11 @@ const {create, env} = require("sanctuary");
 const S = create({checkTypes: true, env});
 
 
-async function testOwner(accounts) {
+async function testOwner({accounts}) {
 }
 
 
-const testPayments = async (acc) => {
+const testPayments = async ({accounts}) => {
 }
 
 

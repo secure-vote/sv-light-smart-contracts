@@ -159,10 +159,10 @@ contract SVLightBallotBox is descriptiveErrors, owned {
         emit SuccessfulVote(bytes32(msg.sender), id);
     }
 
-    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 pubkey, bytes32[2] signature) ballotIsSignedNoEnc() ballotOpen() public returns (uint id) {
-        id = addBallot(ballot, pubkey);
+    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedNoEnc() ballotOpen() public returns (uint id) {
+        id = addBallot(ballot, ed25519PK);
         ed25519Signatures[id] = signature;
-        emit SuccessfulVote(pubkey, id);
+        emit SuccessfulVote(ed25519PK, id);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
