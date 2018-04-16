@@ -159,6 +159,36 @@ contract copyMemAddrArray {
 }
 
 
+// contract to enable constructing a list of bytes32 - due to lack of type polymorphism
+// a new method is needed for arrays of different types
+contract copyMemBytes32Array {
+    function _appendB32MemArray(bytes32[] memory arr, bytes32 toAppend) internal pure returns(bytes32[] memory arr2) {
+        arr2 = new bytes32[](arr.length + 1);
+
+        for (uint k = 0; k < arr.length; k++) {
+            arr2[k] = arr[k];
+        }
+
+        arr2[arr.length] = toAppend;
+    }
+}
+
+
+// contract to enable constructing a list of uint256 - due to lack of type polymorphism
+// a new method is needed for arrays of different types
+contract copyMemUint256Array {
+    function _appendUint256MemArray(uint256[] memory arr, uint256 toAppend) internal pure returns(uint256[] memory arr2) {
+        arr2 = new uint256[](arr.length + 1);
+
+        for (uint k = 0; k < arr.length; k++) {
+            arr2[k] = arr[k];
+        }
+
+        arr2[arr.length] = toAppend;
+    }
+}
+
+
 // https://stackoverflow.com/a/40939341
 contract canCheckOtherContracts {
     function isContract(address addr) constant internal returns (bool) {
@@ -231,6 +261,7 @@ contract permissioned is descriptiveErrors, owned, hasAdmins {
         emit PermissionsUpgraded(oldSC, newSC);
     }
 
+    // always allow SCs to upgrade themselves, even after lockdown
     function upgradeMe(address newSC) only_editors() external returns (bool) {
         editAllowed[msg.sender] = false;
         editAllowed[newSC] = true;
