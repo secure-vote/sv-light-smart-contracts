@@ -1,15 +1,15 @@
-const SVIndex = artifacts.require("./SVLightIndex.sol");
-const SVAdminPx = artifacts.require("./SVLightAdminProxy.sol");
-const SVBallotBox = artifacts.require("./SVLightBallotBox.sol");
-const BBFactory = artifacts.require("./SVBBoxFactory.sol");
-const PxFactory = artifacts.require("./SVAdminPxFactory.sol");
-const IxBackend = artifacts.require("./SVIndexBackend.sol");
-const IxPaySettings = artifacts.require("./SVIndexPaymentSettings.sol");
-const EnsPx = artifacts.require("./SvEnsEverythingPx.sol");
-const EnsPR = artifacts.require("./PublicResolver.sol");
-const EnsRegistrar = artifacts.require("./SvEnsRegistrar.sol");
-const EnsRegistry = artifacts.require("./SvEnsRegistry.sol");
-const EmitterTesting = artifacts.require("./EmitterTesting.sol");
+const SVIndex = artifacts.require("./SVLightIndex");
+const SVAdminPx = artifacts.require("./SVLightAdminProxy");
+const SVBallotBox = artifacts.require("./SVLightBallotBox");
+const BBFactory = artifacts.require("./SVBBoxFactory");
+const PxFactory = artifacts.require("./SVAdminPxFactory");
+const IxBackend = artifacts.require("./SVIndexBackend");
+const IxPaySettings = artifacts.require("./SVIndexPaymentSettings");
+const EnsPx = artifacts.require("./SvEnsEverythingPx");
+const EnsPR = artifacts.require("./PublicResolver");
+const EnsRegistrar = artifacts.require("./SvEnsRegistrar");
+const EnsRegistry = artifacts.require("./SvEnsRegistry");
+const EmitterTesting = artifacts.require("./EmitterTesting");
 
 const nh = require('eth-ens-namehash');
 
