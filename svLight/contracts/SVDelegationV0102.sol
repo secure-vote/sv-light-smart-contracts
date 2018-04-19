@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.22;
 
 // DELEGATION SC v1.2
 // (c) SecureVote 2018
@@ -59,7 +59,7 @@ contract SVDelegationBackend is permissioned, copyMemAddrArray, copyMemBytes32Ar
     uint64 public totalDelegations = 1;  // the 0th delegation is all 0s - just a default.
 
 
-    function SVDelegationBackend(SVDelegationV0101 _prevSC) public {
+    constructor(SVDelegationV0101 _prevSC) public {
         v1DlgtSC = _prevSC;
     }
 
@@ -212,7 +212,7 @@ contract SVDelegationV0102 is owned, upgradePtr {
     event SetDelegation(bytes32 voter, bytes32 delegate, uint256 namespace);
 
     // main constructor - requires the prevDelegationSC address
-    function SVDelegationV0102(SVDelegationBackend _backend) public {
+    constructor(SVDelegationBackend _backend) public {
         backend = _backend;
     }
 

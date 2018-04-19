@@ -24,7 +24,7 @@ contract SvEnsCompatibleRegistrar {
      * @param ensAddr The address of the ENS registry.
      * @param node The node that this registrar administers.
      */
-    function SvEnsCompatibleRegistrar(ENS ensAddr, bytes32 node) public {
+    constructor(ENS ensAddr, bytes32 node) public {
         ens = ensAddr;
         rootNode = node;
         admins[msg.sender] = true;

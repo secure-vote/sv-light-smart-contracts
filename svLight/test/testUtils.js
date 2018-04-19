@@ -73,26 +73,33 @@ module.exports = function () {
         })
     };
 
+    this.assertRevert = async (doTx, msg) => {
+        try {
+            const r = await doTx
+            console.log("Expected error but did not get one!\n", msg);
+        } catch (e) {
+            if (e.message.indexOf("VM Exception while processing transaction: revert") == -1) {
+                throw e;
+            }
+        }
+    }
+
     this.assertOnlyEvent = function (eventName, txResponse) {
         const _eventName = txResponse.logs[0]["event"];
         assert.equal(eventName, _eventName, "Event " + eventName + " should be emitted");
     }
 
-    this.assertErrStatus = (statusCode, tx, msg) => {
-        if (tx.logs === undefined) {
-            throw Error(`No logs object! ${tx}`);
-        }
-        const logs = tx.logs.filter(({event, args}) => event == "Error" && args.code && args.code == statusCode);
-        if (logs.length == 0) {
-            throw Error(`Expectation: ${msg}\nExpected code ${statusCode} from ${tx.tx}. Instead got events; ${toJson(tx.logs)}`);
-        } else {
-            console.info(`INFO: successfully detected code ${statusCode}`)
-        }
-    }
-
-    this.asyncErrStatus = async (statusCode, f, msg) => {
-        res = await f();
-        return this.assertErrStatus(statusCode, res, msg);
+    this.assertErrStatus = async (statusCode, doTx, msg) => {
+        await assertRevert(doTx, msg);
+        // if (tx.logs === undefined) {
+        //     throw Error(`No logs object! ${tx}`);
+        // }
+        // const logs = tx.logs.filter(({event, args}) => event == "Error" && args.code && args.code == statusCode);
+        // if (logs.length == 0) {
+        //     throw Error(`Expectation: ${msg}\nExpected code ${statusCode} from ${tx.tx}. Instead got events; ${toJson(tx.logs)}`);
+        // } else {
+        //     console.info(`INFO: successfully detected code ${statusCode}`)
+        // }
     }
 
     assert.eventDoesNotOccur = (eventName, tx) => {
@@ -103,8 +110,10 @@ module.exports = function () {
             throw Error(`Expected not to find event ${eventName} but did!\n  TxReceipt: ${toJson(tx.logs)}`);
     }
 
-    this.assert403 = (f, msg) => asyncErrStatus(403, f, msg);
-    this.assertNoErr = (tx) => assert.eventDoesNotOccur("Error", tx);
+    this.assert403 = (doTx, msg) => assertRevert(doTx) //asyncErrStatus(ERR_FORBIDDEN, f, msg);
+    // with 0.4.22 we can deprecate this assert
+    // this.assertNoErr = async (doTx) => assert.eventDoesNotOccur("Error", tx);
+    this.assertNoErr = doTx => doTx;
 
     this.getEventFromTxR = function(eventName, txR) {
         for (let i = 0; i < txR.logs.length; i++) {

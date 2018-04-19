@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.22;
 
 
 //
@@ -65,7 +65,7 @@ contract SVIndexBackend is permissioned {
     function initDemoc(string democName, address admin) only_editors() external returns (bytes32 democHash) {
         // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
         // (particularly because `this` and prevBlockHash are part of the hash)
-        democHash = keccak256(democName, admin, democList.length, block.blockhash(block.number-1), this);
+        democHash = keccak256(democName, admin, democList.length, blockhash(block.number-1), this);
         democList.push(democHash);
         democs[democHash].name = democName;
         democs[democHash].admin = admin;
@@ -254,7 +254,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
 
     // constructor
-    function SVLightIndex(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
+    constructor(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
         payTo = msg.sender;
         backend = _backend;
         adminPxFactory = _pxFactory;

@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.22;
 
 // Admin Proxy SC for SVDemocIndex v1.0
 // (c) SecureVote 2018
@@ -37,7 +37,7 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
     }
 
 
-    function SVLightAdminProxy(address initAdmin, address _fwdTo) public {
+    constructor(address initAdmin, address _fwdTo) public {
         // this will mostly be called by SVLightIndex so we shouldn't use msg.sender.
         _addNewAdmin(initAdmin);
         initReverseENS(initAdmin);

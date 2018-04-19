@@ -1,4 +1,4 @@
-pragma solidity ^0.4.19;
+pragma solidity ^0.4.22;
 
 //
 // SVLightBallotBox
@@ -121,7 +121,7 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     // Constructor function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
     // flags are [_useEncryption, enableTesting]
-    function SVLightBallotBox(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits) public {
+    constructor(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits) public {
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
         submissionBits = _submissionBits;
         bool okaySubmissionBits = isEthNoEnc() || isEthWithEnc() || isSignedNoEnc() || isSignedWithEnc();

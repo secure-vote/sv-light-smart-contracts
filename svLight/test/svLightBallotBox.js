@@ -33,7 +33,7 @@ async function testEarlyBallot({accounts}) {
     var endTime = startTime + 600;
 
     const vc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC | USE_TESTING);
-    await assertErrStatus(ERR_BALLOT_CLOSED, await vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
+    await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
 }
 
 
@@ -45,7 +45,7 @@ async function testSetOwner({accounts}) {
     assert.equal(acc[0], owner1, "owner should be acc[0]");
 
     // fraud set owner
-    await assert403(() => vc.setOwner(acc[2], {from: acc[1]}), "should throw if setOwner called by non-owner");
+    await assert403(vc.setOwner(acc[2], {from: acc[1]}), "should throw if setOwner called by non-owner");
 
     // good set owner
     const soTxr = await vc.setOwner(acc[1]);
@@ -70,7 +70,7 @@ async function testEncryptionBranching({accounts}) {
 
     // check submissions with enc
     const bData = hexPk;
-    assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, await vcEnc.submitBallotNoPk(bData), "throw when not using encryption");
+    await assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, vcEnc.submitBallotNoPk(bData), "throw when not using encryption");
     assert.equal(await vcEnc.nVotesCast(), 0, "no votes yet");
 
     const tempPk = specHash;
@@ -103,7 +103,7 @@ async function testEncryptionBranching({accounts}) {
     assert.equal(await vcNoEnc.curve25519Pubkeys(0), bytes32zero, "pubkey is zero");
 
     assert.equal(await vcEnc.nVotesCast(), 1, "1 vote");
-    assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, await vcNoEnc.submitBallotWithPk(hexSk, hexSk), "should throw with enc disabled");
+    await assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, vcNoEnc.submitBallotWithPk(hexSk, hexSk), "should throw with enc disabled");
     assert.equal(await vcEnc.nVotesCast(), 1, "still only 1 vote");
 
     /* NO ENC SIGNED */
@@ -113,16 +113,20 @@ async function testEncryptionBranching({accounts}) {
     const _txSignedNoEnc = await vcSignedNoEnc.submitBallotSignedNoEnc(_bData, tempPk, [tempPk, tempPk]);
     assertNoErr(_txSignedNoEnc);
 
-    const _txSignedNoEncBad = await vcSignedNoEnc.submitBallotSignedWithEnc(_bData, tempPk, tempPk, [tempPk, tempPk]);
-    assertErrStatus(ERR_NOT_BALLOT_SIGNED_WITH_ENC, _txSignedNoEncBad, "should throw when submitting signed w/ enc when no_enc");
-    assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, await vcSignedNoEnc.submitBallotWithPk(_bData, tempPk), "should throw when submitting eth w/ enc when enc no_enc");
+    await assertErrStatus(ERR_NOT_BALLOT_SIGNED_WITH_ENC,
+        vcSignedNoEnc.submitBallotSignedWithEnc(_bData, tempPk, tempPk, [tempPk, tempPk]),
+        "should throw when submitting signed w/ enc when no_enc");
+    await assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC,
+        vcSignedNoEnc.submitBallotWithPk(_bData, tempPk),
+        "should throw when submitting eth w/ enc when enc no_enc");
 
     /* ENC SIGNED */
 
     vcSigned = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING);
 
-    const _tx5o1 = await vcSigned.submitBallotSignedNoEnc(_bData, tempPk, [tempPk, tempPk]);
-    assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC, _tx5o1, "should throw when submitting signed no enc when enc enabled");
+    await assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC,
+        vcSigned.submitBallotSignedNoEnc(_bData, tempPk, [tempPk, tempPk]),
+        "should throw when submitting signed no enc when enc enabled");
 
     const _tx5o2 = await vcSigned.submitBallotSignedWithEnc(_bData, tempPk, tempPk, [tempPk, tempPk]);
     assertNoErr(_txSignedNoEnc);
@@ -180,25 +184,25 @@ async function testInstantiation({accounts}) {
 
     assert.equal((await vc.nVotesCast()).toNumber(), nVotes + 1, "should have cast " + (nVotes + 1).toString() + " votes thus far");
 
-    assertErrStatus(ERR_EARLY_SECKEY, await vc.revealSeckey(hexSk), "should throw on early reveal");
+    await assertErrStatus(ERR_EARLY_SECKEY, vc.revealSeckey(hexSk), "should throw on early reveal");
 
     // jump to after ballot is closed
     // note: originally used testrpc's evm_increaseTime RPC call, but you can't go backwards or undo, so it screws up other test 👿
     _setTxR = await vc.setEndTime(0);
     assertNoErr(_setTxR)
 
-    await assert403(() => vc.revealSeckey(hexSk, { from: accounts[4] }), "cannot reveal seckey from non-admin");
+    await assert403(vc.revealSeckey(hexSk, { from: accounts[4] }), "cannot reveal seckey from non-admin");
 
     const _revealSK = await vc.revealSeckey(hexSk);
     assertOnlyEvent("SeckeyRevealed", _revealSK);
     assertNoErr(_revealSK);
 
-    assertErrStatus(ERR_BALLOT_CLOSED, await vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
+    await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
 }
 
 async function testTestMode({accounts}) {
     var vc = await SVBallotBox.new(specHash, 0, 1, USE_ETH | USE_NO_ENC);
-    assertErrStatus(ERR_TESTING_REQ, await vc.setEndTime(0), "throws on set end time when not in testing");
+    await assertErrStatus(ERR_TESTING_REQ, vc.setEndTime(0), "throws on set end time when not in testing");
 }
 
 const testABallot = accounts => async (_vc = S.Nothing, account = S.Nothing, msg = "no message provided") => {
@@ -270,9 +274,9 @@ async function testSignedBallotNoEnc({accounts, log}){
     await log("edSig matches 1")
 
 
-    assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, await bb.submitBallotNoPk(b1.ballot));
-    assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, await bb.submitBallotWithPk(b1.ballot, b1.edPk));
-    assertErrStatus(ERR_NOT_BALLOT_SIGNED_WITH_ENC, await bb.submitBallotSignedWithEnc(b1.ballot, b1.curvePk, b1.edPk, b1.sig));
+    await assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, bb.submitBallotNoPk(b1.ballot));
+    await assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, bb.submitBallotWithPk(b1.ballot, b1.edPk));
+    await assertErrStatus(ERR_NOT_BALLOT_SIGNED_WITH_ENC, bb.submitBallotSignedWithEnc(b1.ballot, b1.curvePk, b1.edPk, b1.sig));
 }
 
 
@@ -304,9 +308,9 @@ async function testSignedBallotWithEnc({accounts, log}){
     _r1o1.curvePk = await bb.curve25519Pubkeys(_v1o1.ballotId);
     assert.equal(_r1o1.curvePk, b1.curvePk, "curvePks should match");
 
-    assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, await bb.submitBallotNoPk(b1.ballot));
-    assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, await bb.submitBallotWithPk(b1.ballot, b1.edPk));
-    assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC, await bb.submitBallotSignedNoEnc(b1.ballot, b1.edPk, b1.sig));
+    await assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, bb.submitBallotNoPk(b1.ballot));
+    await assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, bb.submitBallotWithPk(b1.ballot, b1.edPk));
+    await assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC, bb.submitBallotSignedNoEnc(b1.ballot, b1.edPk, b1.sig));
 }
 
 

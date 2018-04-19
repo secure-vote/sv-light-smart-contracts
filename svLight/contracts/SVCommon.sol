@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.22;
 
 
 // Some common functions among SCs
@@ -12,62 +12,56 @@ pragma solidity ^0.4.21;
 contract descriptiveErrors {
 
     // general errors
-    uint constant ERR_FORBIDDEN = 403;
-    uint constant ERR_500 = 500;
-    uint constant ERR_TESTING_REQ = 599;
+    string constant ERR_FORBIDDEN                   = "403";
+    string constant ERR_500                         = "500";
+    string constant ERR_TESTING_REQ                 = "599";
 
     // ballot box
-    uint constant ERR_BALLOT_CLOSED = 420001;
-    uint constant ERR_EARLY_SECKEY = 420100;
-    uint constant ERR_BAD_SUBMISSION_BITS = 420200;
-
-    uint constant ERR_NOT_BALLOT_ETH_NO_ENC = 420400;
-    uint constant ERR_NOT_BALLOT_ETH_WITH_ENC = 420401;
-    uint constant ERR_NOT_BALLOT_SIGNED_NO_ENC = 420402;
-    uint constant ERR_NOT_BALLOT_SIGNED_WITH_ENC = 420403;
+    string constant ERR_BALLOT_CLOSED               = "420001";
+    string constant ERR_EARLY_SECKEY                = "420100";
+    string constant ERR_BAD_SUBMISSION_BITS         = "420200";
+    string constant ERR_NOT_BALLOT_ETH_NO_ENC       = "420400";
+    string constant ERR_NOT_BALLOT_ETH_WITH_ENC     = "420401";
+    string constant ERR_NOT_BALLOT_SIGNED_NO_ENC    = "420402";
+    string constant ERR_NOT_BALLOT_SIGNED_WITH_ENC  = "420403";
 
     // democ index
-    uint constant ERR_BAD_PAYMENT = 421010;
-    uint constant ERR_FAILED_TO_PROVIDE_CHANGE = 421011;
-    uint constant ERR_FAILED_TO_REFUND = 421012;
-    uint constant ERR_FAILED_TO_FWD_PAYMENT = 421099;
-    // uint constant ERR_INDEX_FORBIDDEN = 421403;
+    string constant ERR_BAD_PAYMENT                 = "421010";
+    string constant ERR_FAILED_TO_PROVIDE_CHANGE    = "421011";
+    string constant ERR_FAILED_TO_REFUND            = "421012";
+    string constant ERR_FAILED_TO_FWD_PAYMENT       = "421099";
+    // string constant ERR_INDEX_FORBIDDEN          = "421403";
 
     // admin proxy
-    uint constant ERR_CANNOT_REMOVE_SELF = 428001;
-    uint constant ERR_CALL_FWD_FAILED = 428500;
-    uint constant ERR_PX_ETH_TFER_FAILED = 428501;
-    uint constant ERR_PX_FORBIDDEN = 428403;
+    string constant ERR_CANNOT_REMOVE_SELF          = "428001";
+    string constant ERR_CALL_FWD_FAILED             = "428500";
+    string constant ERR_PX_ETH_TFER_FAILED          = "428501";
+    string constant ERR_PX_FORBIDDEN                = "428403";
 
     // upgradable
-    uint constant ERR_ALREADY_UPGRADED = 429001;
-    uint constant ERR_NOT_UPGRADED = 429002;
-    uint constant ERR_NO_UNDO_FOREVER = 429010;
-    uint constant ERR_CALL_UPGRADED_FAILED = 429500;
+    string constant ERR_ALREADY_UPGRADED            = "429001";
+    string constant ERR_NOT_UPGRADED                = "429002";
+    string constant ERR_NO_UNDO_FOREVER             = "429010";
+    string constant ERR_CALL_UPGRADED_FAILED        = "429500";
 
-    // hasAdmins
-    uint constant ERR_NO_ADMIN_PERMISSIONS = 100001;
+    // hasAdmin
+    string constant ERR_NO_ADMIN_PERMISSIONS        = "100001";
 
     // permissioned
-    uint constant ERR_NO_EDIT_PERMISSIONS = 200001;
-    uint constant ERR_ADMINS_LOCKED_DOWN = 201001;
+    string constant ERR_NO_EDIT_PERMISSIONS         = "200001";
+    string constant ERR_ADMINS_LOCKED_DOWN          = "201001";
 
 
     event Error(uint code);
     // event Passed(uint code);
 
-    modifier req(bool condition, uint statusCode) {
-        if (condition == false) {
-            emit Error(statusCode);
-        } else {
-            _;
-        }
+    modifier req(bool condition, string statusCode) {
+        require(condition, statusCode);
+        _;
     }
 
-    function doRequire(bool condition, uint statusCode) internal returns (bool) {
-        if (condition == false) {
-            emit Error(statusCode);
-        }
+    function doRequire(bool condition, string statusCode) internal returns (bool) {
+        require(condition, statusCode);
         return condition;
     }
 }
@@ -85,7 +79,7 @@ contract owned is descriptiveErrors {
         }
     }
 
-    function owned() public {
+    constructor() public {
         owner = msg.sender;
     }
 
@@ -112,7 +106,7 @@ contract hasAdmins is descriptiveErrors, owned {
         }
     }
 
-    function hasAdmins() public {
+    constructor() public {
         admins[currAdminEpoch][msg.sender] = true;
     }
 
@@ -244,7 +238,7 @@ contract permissioned is descriptiveErrors, owned, hasAdmins {
         }
     }
 
-    function permissioned() public {
+    constructor() public {
     }
 
     function setPermissions(address e, bool _editPerms) no_lockdown() only_admin() external {

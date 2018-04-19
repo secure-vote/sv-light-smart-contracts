@@ -23,7 +23,7 @@ contract SvEnsRegistry is SvEns {
     /**
      * @dev Constructs a new ENS registrar.
      */
-    function SvEnsRegistry() public {
+    constructor() public {
         records[0x0].owner = msg.sender;
     }
 

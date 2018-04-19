@@ -20,7 +20,7 @@ contract SvEnsEverythingPx {
     }
 
 
-    function SvEnsEverythingPx(SvEnsRegistrar _registrar, SvEnsRegistry _registry, PublicResolver _resolver, bytes32 _rootNode) public {
+    constructor(SvEnsRegistrar _registrar, SvEnsRegistry _registry, PublicResolver _resolver, bytes32 _rootNode) public {
         registrar = _registrar;
         registry = _registry;
         resolver = _resolver;

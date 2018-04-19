@@ -19,7 +19,7 @@
     "ramda": "^0.25.0",
     "sanctuary": "^0.14.1",
     "solium": "^1.1.6",
-    "truffle": "^4.1.5",
+    "truffle": "trufflesuite/truffle",
     "truffle-fast-compile": "^0.0.3",
     "web3": "^1.0.0-beta.33",
     "yargs": "^11.0.0"

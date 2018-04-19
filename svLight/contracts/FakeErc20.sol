@@ -1,5 +1,5 @@
 // sourced: https://theethereum.wiki/w/index.php?title=ERC20_Token_Standard&action=edit
-pragma solidity ^0.4.8;
+pragma solidity ^0.4.22;
 
 // ----------------------------------------------------------------------------------------------
 // Sample fixed supply token contract
@@ -25,7 +25,7 @@ contract FakeErc20 is ERC20InterfaceOnlyBalance {
     address public owner;
 
     // Constructor
-    function FakeErc20() public {
+    constructor() public {
         owner = msg.sender;
     }
 
