@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const Web3 = require('web3');
+var BN = require('bn.js');
 
 module.exports = function () {
     this.toJson = (obj) => {
@@ -9,6 +10,18 @@ module.exports = function () {
     this.genRandomBytes32 = () => {
         return "0x" + crypto.randomBytes(32).toString("hex");
     };
+
+    this.genStartEndTimes = () => {
+        var startTime = Math.floor(Date.now() / 1000) - 1;
+        var endTime = startTime + 600;
+        return [startTime, endTime];
+    }
+
+    this.mkPackedTime = (start, end) => {
+        const s = new BN(start)
+        const e = new BN(end)
+        return s.shln(64).add(e)
+    }
 
     this.wrapTest = (accounts, f) => {
         return async () => {
@@ -76,7 +89,7 @@ module.exports = function () {
     this.assertRevert = async (doTx, msg) => {
         try {
             const r = await doTx
-            console.log("Expected error but did not get one!\n", msg);
+            throw Error(`Expected error but did not get one!\n${msg}`)
         } catch (e) {
             if (e.message.indexOf("VM Exception while processing transaction: revert") == -1) {
                 throw e;

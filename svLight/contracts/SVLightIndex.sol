@@ -117,12 +117,12 @@ contract SVIndexBackend is permissioned {
         ballotId = _commitBallot(democHash, specHash, extraData, bb, startTs, endTs);
     }
 
-    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits, SVBBoxFactory bbF, address admin) only_editors() external returns (uint id) {
-        // the start time is max(startTime, block.timestamp) to avoid a DoS whereby a malicious electioneer could disenfranchise
-        // token holders who have recently acquired tokens.
-        SVLightBallotBox bb = bbF.spawn(specHash, _startTs, endTs, _submissionBits, admin);
-        id = _commitBallot(democHash, specHash, extraData, bb, bb.startTime(), endTs);
-    }
+    // function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits, SVBBoxFactory bbF, address admin) only_editors() external returns (uint id) {
+    //     // the start time is max(startTime, block.timestamp) to avoid a DoS whereby a malicious electioneer could disenfranchise
+    //     // token holders who have recently acquired tokens.
+    //     SVLightBallotBox bb = bbF.spawn(specHash, _startTs, endTs, _submissionBits, admin);
+    //     id = _commitBallot(democHash, specHash, extraData, bb, bb.startTime(), endTs);
+    // }
 
     // utils
     function max(uint64 a, uint64 b) pure internal returns(uint64) {
@@ -134,41 +134,9 @@ contract SVIndexBackend is permissioned {
 }
 
 
-
-// contract SvlIxOnDemocHandler is Triggerable, permissioned {
-//     SvEnsEverythingPx public ensPx;
-
-
-//     function SvlIxOnDemocHandler(SvEnsEverythingPx _ensPx) public {
-//         ensPx = _ensPx;
-//     }
-
-
-//     function handle(bytes32[] args) only_editors() external {
-//         require(args.length == 2);
-//         bytes32 democHash = args[0];
-//         address admin = address(args[1]);
-//         mkDomain(democHash, admin);
-//     }
-// }
-
-
-// contract SvlIxOnBallotHandler is Triggerable, permissioned {
-//     function SvlIxOnBallotHandler() public {
-//         // do nothing
-//     }
-
-//     function handle(bytes32[] args) only_editors() external {
-//         // do nothing
-//     }
-// }
-
-
-contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
-    SVIndexBackend public backend;
-    SVAdminPxFactory public adminPxFactory;
-    SVBBoxFactory public bbFactory;
-    SvEnsEverythingPx public ensPx;
+contract SVIndexPaymentSettings is permissioned {
+    event SetFees(uint[2] _newFees);
+    event PaymentEnabled(bool _feeEnabled);
 
     // addresses that do not have to pay for democs
     mapping (address => bool) public democWhitelist;
@@ -178,105 +146,23 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
     // payment details
     address public payTo;
     // uint128's used because they account for amounts up to 3.4e38 wei or 3.4e20 ether
-    uint public democFee = 0.125 ether; // 0.125 ether; about $50 at 10 Apr 2018
-    mapping (address => uint) democFeeFor;
-    uint public ballotFee = 0.025 ether; // 0.025 ether; about $10 at 10 Apr 2018
-    mapping (address => uint) ballotFeeFor;
+    uint public democFee = 1.0 ether; // 1.0 ether; about $500 at 18 Apr 2018
+    mapping (address => uint) public democFeeFor;
+    uint public ballotFee = 0.1 ether; // 0.1 ether; about $50 at 18 Apr 2018
+    mapping (address => uint) public ballotFeeFor;
     bool public paymentEnabled = true;
 
     uint8 constant PAY_DEMOC = 0;
     uint8 constant PAY_BALLOT = 1;
 
-    function getPaymentParams(uint8 paymentType) internal constant returns (bool, uint, uint) {
-        if (paymentType == PAY_DEMOC) {
-            return (democWhitelist[msg.sender], democFee, democFeeFor[msg.sender]);
-        } else if (paymentType == PAY_BALLOT) {
-            return (ballotWhitelist[msg.sender], ballotFee, ballotFeeFor[msg.sender]);
-        } else {
-            assert(false);
-        }
-    }
 
-    //* EVENTS /
-
-    event PaymentMade(uint[2] valAndRemainder);
-    event SetFees(uint[2] _newFees);
-    event PaymentEnabled(bool _feeEnabled);
-    event DemocAdded(bytes32 democHash, address admin);
-    event BallotAdded(bytes32 democHash, uint id);
-
-    event PaymentTooLow(uint msgValue, uint feeReq);
-
-    //* MODIFIERS /
-
-    modifier onlyBy(address _account) {
-        if(doRequire(msg.sender == _account, ERR_FORBIDDEN)) {
-            _;
-        }
-    }
-
-    modifier payReq(uint8 paymentType) {
-        // get our whitelist, generalFee, and fee's for particular addresses
-        bool wl;
-        uint genFee;
-        uint feeFor;
-        (wl, genFee, feeFor) = getPaymentParams(paymentType);
-        // init v to something large in case of exploit or something
-        uint v = 1000 ether;
-        // check whitelists - do not require payment in some cases
-        if (paymentEnabled && !wl) {
-            v = feeFor;
-            if (v == 0){
-                // if there's no fee for the individual user then set it to the general fee
-                v = genFee;
-            }
-
-            if (doRequire(msg.value >= v, ERR_BAD_PAYMENT)) {
-                // handle payments
-                uint remainder = msg.value - v;
-                doRequire(msg.sender.call.value(remainder)(), ERR_FAILED_TO_PROVIDE_CHANGE);
-                doRequire(payTo.call.value(v)(), ERR_FAILED_TO_FWD_PAYMENT);
-                emit PaymentMade([v, remainder]);
-            } else {
-                emit PaymentTooLow(msg.value, v);
-                // if payment is too low we should probably refund the coins since we're not reverting
-                doRequire(msg.sender.call.value(msg.value)(), ERR_FAILED_TO_REFUND);
-                return;
-            }
-        }
-
-        // do main
-        _;
-    }
-
-
-    //* FUNCTIONS /
-
-
-    // constructor
-    constructor(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
+    constructor() permissioned() public {
         payTo = msg.sender;
-        backend = _backend;
-        adminPxFactory = _pxFactory;
-        bbFactory = _bbFactory;
-        ensPx = _ensPx;
     }
 
-    function payoutAnyBalance() public {
+
+    function payoutAll() public {
         require(payTo.call.value(address(this).balance)());
-    }
-
-    //* UPGRADE STUFF */
-
-    function doUpgrade(address nextSC) only_owner() not_upgraded() public {
-        doUpgradeInternal(nextSC);
-        require(backend.upgradeMe(nextSC));
-    }
-
-    //* GLOBAL INFO */
-
-    function nDemocs() public constant returns (uint256) {
-        return backend.nDemocs();
     }
 
     //* PAYMENT AND OWNER FUNCTIONS */
@@ -307,6 +193,132 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
     function setFeeFor(address addr, uint128[2] fees) only_owner() public {
         democFeeFor[addr] = fees[PAY_DEMOC];
         ballotFeeFor[addr] = fees[PAY_BALLOT];
+    }
+}
+
+
+contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
+    SVIndexBackend public backend;
+    SVIndexPaymentSettings public paymentSettings;
+    SVAdminPxFactory public adminPxFactory;
+    SVBBoxFactory public bbFactory;
+    SvEnsEverythingPx public ensPx;
+
+    uint8 constant PAY_DEMOC = 0;
+    uint8 constant PAY_BALLOT = 1;
+
+
+    uint128 constant LOW_64_BITS_OF_128 = 0xFFFFFFFFFFFFFFFF;
+    uint128 constant HIGH_64_BITS_OF_128 = 0xFFFFFFFFFFFFFFFF0000000000000000;
+
+
+    function getPaymentParams(uint8 paymentType) internal constant returns (bool, uint, uint) {
+        if (paymentType == PAY_DEMOC) {
+            return (
+                paymentSettings.democWhitelist(msg.sender),
+                paymentSettings.democFee(),
+                paymentSettings.democFeeFor(msg.sender));
+        } else if (paymentType == PAY_BALLOT) {
+            return (
+                paymentSettings.ballotWhitelist(msg.sender),
+                paymentSettings.ballotFee(),
+                paymentSettings.ballotFeeFor(msg.sender));
+        } else {
+            revert("paymentType parameter invalid");
+        }
+    }
+
+    //* EVENTS /
+
+    event PaymentMade(uint[2] valAndRemainder);
+    event DemocAdded(bytes32 democHash, address admin);
+    event BallotAdded(bytes32 democHash, uint id);
+
+    event PaymentTooLow(uint msgValue, uint feeReq);
+
+    //* MODIFIERS /
+
+    modifier onlyBy(address _account) {
+        if(doRequire(msg.sender == _account, ERR_FORBIDDEN)) {
+            _;
+        }
+    }
+
+    modifier payReq(uint8 paymentType) {
+        // get our whitelist, generalFee, and fee's for particular addresses
+        if (paymentSettings.paymentEnabled()){
+            bool wl;
+            uint genFee;
+            uint feeFor;
+            address payTo = paymentSettings.payTo();
+            (wl, genFee, feeFor) = getPaymentParams(paymentType);
+            // init v to something large in case of exploit or something
+            // check whitelists - do not require payment in some cases
+            if (!wl) {
+                uint v = 1000 ether;
+                v = feeFor;
+                if (v == 0){
+                    // if there's no fee for the individual user then set it to the general fee
+                    v = genFee;
+                }
+
+                require(msg.value >= v, "payment too low");
+                // handle payments
+                uint remainder = msg.value - v;
+                require(msg.sender.call.value(remainder)(), ERR_FAILED_TO_PROVIDE_CHANGE);
+                require(payTo.call.value(v)(), ERR_FAILED_TO_FWD_PAYMENT);
+                emit PaymentMade([v, remainder]);
+            }
+        }
+        // do main
+        _;
+    }
+
+
+    //* FUNCTIONS /
+
+
+    // constructor
+    constructor(SVIndexBackend _backend, SVIndexPaymentSettings _payBackend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
+        backend = _backend;
+        paymentSettings = _payBackend;
+        adminPxFactory = _pxFactory;
+        bbFactory = _bbFactory;
+        ensPx = _ensPx;
+    }
+
+    //* UPGRADE STUFF */
+
+    function doUpgrade(address nextSC) only_owner() not_upgraded() public {
+        doUpgradeInternal(nextSC);
+        require(backend.upgradeMe(nextSC));
+        require(paymentSettings.upgradeMe(nextSC));
+    }
+
+    function setPaymentBackend(SVIndexPaymentSettings newSC) only_owner() public {
+        paymentSettings = newSC;
+    }
+
+    function setBackend(SVIndexBackend newSC) only_owner() public {
+        backend = newSC;
+    }
+
+    //* GLOBAL INFO */
+
+    function paymentEnabled() public constant returns (bool) {
+        return paymentSettings.paymentEnabled();
+    }
+
+    function democFee() public constant returns (uint) {
+        return paymentSettings.democFee();
+    }
+
+    function ballotFee() public constant returns (uint) {
+        return paymentSettings.ballotFee();
+    }
+
+    function nDemocs() public constant returns (uint256) {
+        return backend.nDemocs();
     }
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
@@ -342,6 +354,10 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
         return backend.nBallots(democHash);
     }
 
+    function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 _nBallots) {
+        return backend.getDemocInfo(democHash);
+    }
+
     function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTime, uint64 endTime) {
         return backend.getNthBallot(democHash, n);
     }
@@ -352,26 +368,32 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
     //* ADD BALLOT TO RECORD */
 
-    function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb)
-                      onlyBy(backend.getDAdmin(democHash))
-                      not_upgraded()
-                      payReq(PAY_BALLOT)
-                      public
-                      payable
-                      returns (uint id)
-                      {
+    function _addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb) internal returns (uint id) {
         id = backend.addBallot(democHash, extraData, bb);
         emit BallotAdded(democHash, id);
     }
 
-    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits)
+    function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb)
+                      onlyBy(backend.getDAdmin(democHash))
+                      payReq(PAY_BALLOT)
+                      external payable
+                      returns (uint) {
+        return _addBallot(democHash, extraData, bb);
+    }
+
+    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes, uint16 _submissionBits)
                           onlyBy(backend.getDAdmin(democHash))
-                          not_upgraded()
                           payReq(PAY_BALLOT)
-                          public payable
-                          returns (uint id) {
-        id = backend.deployBallot(democHash, specHash, extraData, _startTs, endTs, _submissionBits, bbFactory, msg.sender);
-        emit BallotAdded(democHash, id);
+                          external payable
+                          returns (uint) {
+        SVLightBallotBox bb = bbFactory.spawn(
+            specHash,
+            // to unpack times - the first 64 bits are start time, second 64 bits are end time
+            uint64(packedTimes >> 64),
+            uint64(packedTimes),
+            _submissionBits,
+            msg.sender);
+        return _addBallot(democHash, extraData, bb);
     }
 
 

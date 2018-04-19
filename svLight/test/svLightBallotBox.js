@@ -21,13 +21,6 @@ const mkStartTime = () => Math.round(Date.now() / 1000)
 const mkFlags = ({useEnc, testing}) => [useEnc === true, testing === true];
 
 
-const genStartEndTimes = () => {
-    var startTime = Math.floor(Date.now() / 1000) - 1;
-    var endTime = startTime + 600;
-    return [startTime, endTime];
-}
-
-
 async function testEarlyBallot({accounts}) {
     var startTime = mkStartTime() + 2;
     var endTime = startTime + 600;

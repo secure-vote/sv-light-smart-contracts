@@ -74,13 +74,13 @@ contract owned is descriptiveErrors {
     event OwnerChanged(address newOwner);
 
     modifier only_owner() {
-        if(doRequire(msg.sender == owner, ERR_FORBIDDEN)) {
-            _;
-        }
+        require(msg.sender == owner, ERR_FORBIDDEN);
+        _;
     }
 
-    constructor() public {
+    constructor() descriptiveErrors() public {
         owner = msg.sender;
+        emit OwnerChanged(msg.sender);
     }
 
     function setOwner(address newOwner) only_owner() public {
@@ -91,9 +91,10 @@ contract owned is descriptiveErrors {
 
 
 // hasAdmins contract - allows for easy admin stuff
-contract hasAdmins is descriptiveErrors, owned {
+contract hasAdmins is owned {
     mapping (uint => mapping (address => bool)) admins;
     uint public currAdminEpoch = 0;
+    bool public adminsDisabledForever = false;
 
     event AdminAdded(address indexed newAdmin);
     event AdminRemoved(address indexed oldAdmin);
@@ -101,9 +102,13 @@ contract hasAdmins is descriptiveErrors, owned {
     event AdminDisabledForever();
 
     modifier only_admin() {
-        if(doRequire(isAdmin(msg.sender), ERR_FORBIDDEN)) {
-            _;
-        }
+        require(isAdmin(msg.sender), ERR_FORBIDDEN);
+        _;
+    }
+
+    modifier admin_not_disabled() {
+        require(adminsDisabledForever == false, "admins must not be disabled");
+        _;
     }
 
     constructor() public {
@@ -114,7 +119,7 @@ contract hasAdmins is descriptiveErrors, owned {
         return admins[currAdminEpoch][a];
     }
 
-    function setAdmin(address a, bool _givePerms) only_admin() external {
+    function setAdmin(address a, bool _givePerms) only_admin() admin_not_disabled() external {
         require(a != msg.sender && a != owner);
         admins[currAdminEpoch][a] = _givePerms;
         if (_givePerms) {
@@ -125,7 +130,7 @@ contract hasAdmins is descriptiveErrors, owned {
     }
 
     // safety feature if admins go bad or something
-    function incAdminEpoch() only_owner() external {
+    function incAdminEpoch() only_owner() admin_not_disabled() external {
         currAdminEpoch++;
         admins[currAdminEpoch][msg.sender] = true;
         emit AdminEpochInc();
@@ -133,6 +138,7 @@ contract hasAdmins is descriptiveErrors, owned {
 
     function disableAdminForever() internal {
         currAdminEpoch++;
+        adminsDisabledForever = true;
         emit AdminDisabledForever();
     }
 }
@@ -215,7 +221,7 @@ contract claimReverseENS is canCheckOtherContracts {
 // is permissioned is designed around upgrading and synergistic SC networks
 // the idea is that DBs and datastructs should live in their own contract
 // then other contracts should use these - either to edit or read from
-contract permissioned is descriptiveErrors, owned, hasAdmins {
+contract permissioned is owned, hasAdmins {
     mapping (address => bool) editAllowed;
     bool public adminLockdown = false;
 
@@ -227,19 +233,19 @@ contract permissioned is descriptiveErrors, owned, hasAdmins {
     event AdminLockdown();
 
     modifier only_editors() {
-        if(doRequire(editAllowed[msg.sender], ERR_NO_EDIT_PERMISSIONS)) {
-            _;
-        }
+        require(editAllowed[msg.sender], ERR_NO_EDIT_PERMISSIONS);
+        _;
     }
 
     modifier no_lockdown() {
-        if(doRequire(adminLockdown == false, ERR_ADMINS_LOCKED_DOWN)) {
-            _;
-        }
+        require(adminLockdown == false, ERR_ADMINS_LOCKED_DOWN);
+        _;
     }
 
-    constructor() public {
+
+    constructor() owned() hasAdmins() public {
     }
+
 
     function setPermissions(address e, bool _editPerms) no_lockdown() only_admin() external {
         editAllowed[e] = _editPerms;
@@ -267,11 +273,10 @@ contract permissioned is descriptiveErrors, owned, hasAdmins {
         return editAllowed[a];
     }
 
-    function doLockdown() external only_owner() {
+    function doLockdown() external only_owner() no_lockdown() {
         disableAdminForever();
         adminLockdown = true;
         emit AdminLockdown();
-        owner = 0;
     }
 }
 
@@ -280,7 +285,7 @@ contract upgradePtr {
     address ptr = address(0);
 
     modifier not_upgraded() {
-        require(ptr == address(0));
+        require(ptr == address(0), "upgrade pointer is non-zero");
         _;
     }
 

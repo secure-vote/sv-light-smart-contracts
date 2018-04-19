@@ -4,10 +4,12 @@ const SVBallotBox = artifacts.require("./SVLightBallotBox.sol");
 const BBFactory = artifacts.require("./SVBBoxFactory.sol");
 const PxFactory = artifacts.require("./SVAdminPxFactory.sol");
 const IxBackend = artifacts.require("./SVIndexBackend.sol");
+const IxPaySettings = artifacts.require("./SVIndexPaymentSettings.sol");
 const EnsPx = artifacts.require("./SvEnsEverythingPx.sol");
 const EnsPR = artifacts.require("./PublicResolver.sol");
 const EnsRegistrar = artifacts.require("./SvEnsRegistrar.sol");
 const EnsRegistry = artifacts.require("./SvEnsRegistry.sol");
+const EmitterTesting = artifacts.require("./EmitterTesting.sol");
 
 const nh = require('eth-ens-namehash');
 
@@ -21,9 +23,14 @@ const S = create({checkTypes: true, env});
 
 const wrapTestIx = (accounts, f) => {
     return async () => {
+        const scLog = await EmitterTesting.new();
+
         const be = await IxBackend.new();
+        const paySC = await IxPaySettings.new();
         const pxF = await PxFactory.new();
         const bbF = await BBFactory.new();
+
+        await scLog.log(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
 
         const tld = "test";
         const testLH = web3.sha3(tld);
@@ -36,48 +43,75 @@ const wrapTestIx = (accounts, f) => {
         const ensPx = await EnsPx.new(ensRrr.address, ensRry.address, ensPR.address, testNH)
         await ensRrr.addAdmin(ensPx.address);
 
-        const svIx = await SVIndex.new(be.address, pxF.address, bbF.address, ensPx.address);
+        await scLog.log(`Created ensPx for tld: ${tld}`)
+
+        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, {gasPrice: 0, gas: 6000000});
+
+        await scLog.log("Created svIx")
+
         await be.setPermissions(svIx.address, true);
         await be.doLockdown();
-        await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, be.setPermissions(svIx.address, true), "should throw error after lockdown")
+
+        await paySC.setPermissions(svIx.address, true);
+        await paySC.doLockdown();
+
+        await scLog.log("set permissions for backend and paymentSettings - allow svIx")
+
+        await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, be.setPermissions(svIx.address, true), "should throw error after lockdown (be)")
+        await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, paySC.setPermissions(svIx.address, true), "should throw error after lockdown (paySC)")
+
+        await scLog.log("asserted that setPermissions fails after lockdown")
 
         await ensPx.addAdmin(svIx.address);
 
-        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld}, accounts);
+        await scLog.log("added svIx as admin to ensPx")
+
+        await scLog.log(`accounts[0]: ${accounts[0]}`)
+        await scLog.log(`paySC owner: ${await paySC.owner()}`)
+        await scLog.log(`be owner:    ${await be.owner()}`)
+        await scLog.log(`svId owner:  ${await svIx.owner()}`)
+
+        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog}, accounts);
     };
 };
 
 
-async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
+async function testEndToEndIsh({svIx, ensPR, tld, paySC, scLog}, accounts) {
     assert.equal(await svIx.owner(), accounts[0], "owner set");
-    assert.equal(await svIx.payTo(), accounts[0], "payTo set");
+    assert.equal(await paySC.payTo(), accounts[0], "payTo set");
+    await scLog.log("Checked owner of svIx and payTo of paySC")
 
-    await assert403(svIx.setPayTo(accounts[1], {from: accounts[1]}), "only admin can set PayTo");
+    await assert403(paySC.setPayTo(accounts[1], {from: accounts[1]}), "only admin can set PayTo");
     assert.equal(
-        await svIx.payTo(),
+        await paySC.payTo(),
         accounts[0],
         "payTo can't be changed arbitrarily"
     );
+    await scLog.log("Checked setPayTo permissions")
 
     assert.equal(await svIx.paymentEnabled(), true, "payment starts false");
-    await svIx.setPaymentEnabled(false, {from: accounts[0]});
+    assert.equal(await paySC.paymentEnabled(), true, "payment starts false (paySC)");
+    await scLog.log("About to set payment enabled to false")
+    await paySC.setPaymentEnabled(false, {from: accounts[0]});
+    await scLog.log("Disabled payment - 10")
     assert.equal(await svIx.paymentEnabled(), false, "payment made false");
+    assert.equal(await paySC.paymentEnabled(), false, "payment made false (paySC)");
 
-    await svIx.setPayTo(accounts[10], {from: accounts[0]});
-    assert.equal(await svIx.payTo(), accounts[10], "payTo changable");
+    await paySC.setPayTo(accounts[10], {from: accounts[0]});
+    assert.equal(await paySC.payTo(), accounts[10], "payTo changable");
 
     const dPrice1 = 9876;
     const iPrice1 = 3849;
-    await svIx.setEth([dPrice1, iPrice1], {from: accounts[0]})
+    await paySC.setEth([dPrice1, iPrice1], {from: accounts[0]})
     assert.equal(await svIx.democFee(), dPrice1, "eth/democ matches");
     assert.equal(await svIx.ballotFee(), iPrice1, "eth/issue matches");
 
-    await svIx.setPaymentEnabled(true, {from: accounts[0]})
+    await paySC.setPaymentEnabled(true, {from: accounts[0]})
 
     console.log("Fees set and payment enabled.");
 
     // ensure noone can set the price
-    await assert403(svIx.setEth([5, 5], {from: accounts[1]}), "setEth only by owner");
+    await assert403(paySC.setEth([5, 5], {from: accounts[1]}), "setEth only by owner");
     await assertErrStatus(
         ERR_BAD_PAYMENT,
         svIx.initDemoc("some democ", {from: accounts[1]}),
@@ -109,6 +143,8 @@ async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
     const {args: {democHash: democId, admin: d1PxAddr}} = getEventFromTxR("DemocAdded", initSomeDemocTxR);
     const d1Px = SVIndex.at(d1PxAddr);
 
+    await scLog.log("created SVIndex proxy d1Px");
+
     const democPrefixHex = democId.slice(0,13*2+2);
     const democPrefixInt = web3.toBigNumber(democPrefixHex).toString(10);
     const expectedDomain = democPrefixInt + '.' + tld;
@@ -116,12 +152,16 @@ async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
     console.log("Created domain:", expectedDomain);
     assert.equal(await svIx.democPrefixToHash(democPrefixHex), democId, "democ hash from prefix should match");
 
-    await svIx.setPaymentEnabled(false, {from: accounts[0]})
+    await scLog.log("confirmed domain creation")
+
+    await paySC.setPaymentEnabled(false, {from: accounts[0]})
     assert.equal(await svIx.paymentEnabled(), false, "payment null now");
+
+    await scLog.log("set payment disabled - 10")
 
     // check pay okay but still free fails
     // log("mk democ not okay");
-    await svIx.setPaymentEnabled(true, {from: accounts[0]})
+    await paySC.setPaymentEnabled(true, {from: accounts[0]})
     await assertErrStatus(ERR_BAD_PAYMENT,
         svIx.initDemoc("free lunch democ (bad)", {from: d1Admin}),
         "no free lunch (democ)"
@@ -135,6 +175,8 @@ async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
     const lbb = await SVBallotBox.new(bytes32zero, 0, 0, USE_ETH | USE_ENC);
     // log("created LBB to work with... adding a ballot");
 
+    await scLog.log("created lbb to test addBallot")
+
     await assertErrStatus(ERR_BAD_PAYMENT, d1Px.addBallot(democId, bytes32zero, lbb.address, {from: d1Admin, value: iPrice1 - 1}), "payment should be too low")
     // make sure we can still pay for a ballot though
     await d1Px.addBallot(democId, democId, lbb.address, {from: d1Admin, value: iPrice1 + 5})
@@ -146,7 +188,7 @@ async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
     })
 
     // log("ballot added!");
-    await svIx.setPaymentEnabled(false, {from: accounts[0]})
+    await paySC.setPaymentEnabled(false, {from: accounts[0]})
     // log("add ballot okay free");
     await d1Px.addBallot(democId, democId, lbb.address, {
         from: d1Admin
@@ -154,14 +196,16 @@ async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
 
     // log("enable payments")
     // whitelist for issues
-    await svIx.setPaymentEnabled(true, {from: accounts[0]})
+    await paySC.setPaymentEnabled(true, {from: accounts[0]})
     await assertErrStatus(ERR_BAD_PAYMENT, d1Px.addBallot(democId, democId, lbb.address, {from: d1Admin}), "no free lunch (issue)");
     // log("give someDemocAdmin whitelist access")
-    await svIx.setWhitelistBallot(d1PxAddr, true)
+    await paySC.setWhitelistBallot(d1PxAddr, true)
     // log("accounts 1 makes ballot with no payment")
     const bTxR1 = await d1Px.addBallot(democId, democId, lbb.address, {
         from: d1Admin
     });
+
+    await scLog.log("created bTxR1 ballot")
 
     // check whitelist for democs
     await assertErrStatus(ERR_BAD_PAYMENT,
@@ -169,7 +213,7 @@ async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
         "no free lunch democ"
     );
     // log("give accounts[1] democ whitelist")
-    await svIx.setWhitelistDemoc(d1Admin, true)
+    await paySC.setWhitelistDemoc(d1Admin, true)
     // log("confirm whitelist works")
     const d2Txr = await svIx.initDemoc("actually free lunch (good)", {from: d1Admin})
     const {args: {democHash: d2Hash, admin: d2PxAddr}} = getEventFromTxR("DemocAdded", d2Txr);
@@ -190,36 +234,44 @@ async function testEndToEndIsh({svIx, ensPR, tld}, accounts) {
 
     // log("try and deploy a ballot through the index")
     // check we can deploy a new ballot
-    await svIx.setPaymentEnabled(false, {from: accounts[0]})
+    await paySC.setPaymentEnabled(false, {from: accounts[0]})
+    await scLog.log("tested some free lunch failures")
+
     // get some info before hand and validate it
     const nBallotsPre = await svIx.nBallots(democId);
-    // log("got pre-deploy nBallots", nBallotsPre.toNumber());
+    await scLog.log(`got nBallots: ${nBallotsPre}`)
     await assertRevert(svIx.getNthBallot(democId, nBallotsPre), "nonexistant democ will throw");
 
     // log("confirmed there is not ballot there yet - deploying now")
-    const bTxr = await d1Px.deployBallot(democId, democId, bytes32zero, 0, 20000000000, USE_ETH | USE_NO_ENC, {from: d1Admin});
+    const [startTime, endTime] = genStartEndTimes();
+    const packedTime = mkPackedTime(startTime, endTime)
+    await scLog.log(`About to deploy ballot with packedTime: ${packedTime.toString()} (should equal ${startTime}, ${endTime})`)
+    const bTxr = await d1Px.deployBallot(democId, democId, bytes32zero, packedTime, USE_ETH | USE_NO_ENC, 0, {from: d1Admin});
+    await scLog.log(`Deployed ballot with packed time`)
     // log("deployed...")
     const newBallot = await svIx.getNthBallot(democId, nBallotsPre);
     // log("got new ballot!", newBallot);
-    assert.notEqual(bytes32zero, newBallot[0], "n+1th ballot should now not be zeros");
+    assert.notEqual(bytes32zero, newBallot[0], "n+1th ballot specHash should now not be zeros");
 
     // check that we can read it and all that
     const newBallotVC = SVBallotBox.at(newBallot[2]);
     assert.equal(newBallot[0], await newBallotVC.specHash(), "spec hashes should match as reported by LGI and LBB");
     assert.equal(democId, await newBallotVC.specHash(), "spec hashe should match what we gave it");
     assert.isTrue(newBallot[3].eq(await newBallotVC.startTime()), "start time should match on both ballots");
+    assert.isTrue((await newBallotVC.startTime()).toNumber() - startTime < 3, "start time matches expected (within 3s)");
+    assert.equal(endTime, (await newBallotVC.endTime()).toNumber(), "end time matches expected");
 }
 
 
-const testPayments = async ({svIx}, acc) => {
+const testPayments = async ({svIx, paySC}, acc) => {
     const admin = acc[0];
     const userPaid = acc[1];
     const userFree = acc[2];
 
     const [democPrice, ballotPrice] = S.map(a => web3.toWei(a, 'ether'), [0.05, 0.01]);
 
-    await svIx.setEth([democPrice, ballotPrice], {from: admin})
-    await svIx.setWhitelistDemoc(userFree, true, {from: admin})
+    await paySC.setEth([democPrice, ballotPrice], {from: admin})
+    await paySC.setWhitelistDemoc(userFree, true, {from: admin})
 
     await assertErrStatus(ERR_BAD_PAYMENT, svIx.initDemoc("userPaidFail", {from: userPaid}), "userPaid must pay");
 
@@ -239,8 +291,8 @@ const testPayments = async ({svIx}, acc) => {
     const pxRaw = SVAdminPx.at(proxySC);
 
     // test a payment for democId
-    await assertErrStatus(ERR_BAD_PAYMENT, ixPxForPaid.deployBallot(democId, democId, democId, 0, 0, USE_ETH | USE_ENC, {from: userPaid}), "userPaid can't publish issues for free");
-    const _ballotTxR = await ixPxForPaid.deployBallot(democId, democId, democId, 0, 0, USE_ETH | USE_ENC, {
+    await assertErrStatus(ERR_BAD_PAYMENT, ixPxForPaid.deployBallot(democId, democId, democId, mkPackedTime(0, 0), USE_ETH | USE_ENC, 0, {from: userPaid}), "userPaid can't publish issues for free");
+    const _ballotTxR = await ixPxForPaid.deployBallot(democId, democId, democId, mkPackedTime(0, 0), USE_ETH | USE_ENC, 0, {
         from: userPaid,
         value: ballotPrice
     });
@@ -253,41 +305,48 @@ const testPayments = async ({svIx}, acc) => {
     const ixPxForFree = SVIndex.at(_democFreeE.args.admin);
 
     // set whitelist for issues to the proxySC - not user themselves
-    await svIx.setWhitelistBallot(_democFreeE.args.admin, true, {from: admin});
+    await paySC.setWhitelistBallot(_democFreeE.args.admin, true, {from: admin});
 
-    await ixPxForFree.deployBallot(_freeDemocId, _freeDemocId, _freeDemocId, 0, 0, USE_ETH | USE_ENC, {from: userFree})
+    await ixPxForFree.deployBallot(_freeDemocId, _freeDemocId, _freeDemocId, mkPackedTime(0, 0), USE_ETH | USE_ENC, 0, {from: userFree})
 }
 
 
-const testUpgrade = async ({svIx, ensPx}, acc) => {
+const testUpgrade = async ({svIx, ensPx, paySC, scLog}, acc) => {
     const svIx1 = svIx;
     const bbF = await svIx1.bbFactory();
     const pxF = await svIx1.adminPxFactory();
     const be = await svIx1.backend();
 
-    await svIx1.setPaymentEnabled(false);
+    await paySC.setPaymentEnabled(false);
 
     const _tx1o1 = await svIx1.initDemoc("democ1");
     const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocAdded", _tx1o1);
 
     // let's make sure we can make a ballot still
     const svPx = SVIndex.at(pxAddr);
-    const _tx1o2 = await svPx.deployBallot(democHash, bytes32zero, bytes32zero, 0, 0, USE_ETH | USE_ENC);
+    const _tx1o2 = await svPx.deployBallot(democHash, bytes32zero, bytes32zero, mkPackedTime(0, 0), USE_ETH | USE_ENC, 0);
 
-    const svIx2 = await SVIndex.new(be, pxF, bbF, ensPx.address);
+    await scLog.log("deployed _tx1o2 ballot")
+
+    const svIx2 = await SVIndex.new(be, paySC.address, pxF, bbF, ensPx.address, {gas: 6000000});
     assert.equal((await svIx2.nDemocs()).toNumber(), 1, "should have 1 democ");  // note - okay to use Ix2 here bc we aren't doing any writing yet
 
+    await scLog.log("Created democ 2");
+
     await ensPx.addAdmin(svIx2.address);
+    await scLog.log("added svIx2 to ensPx admin");
 
     _txUpgrade = await svIx1.doUpgrade(svIx2.address);
+    await scLog.log("did upgrade for svIx1 -> svIx2");
 
+    await paySC.setPaymentEnabled(true);
     await asyncAssertThrow(() => svIx1.initDemoc("democ2"), "Should throw on trying to init democ");
-    // const _tx2o1 = await svIx1.deployBallot(democHash, bytes32zero, bytes32zero, 0, 0, USE_ENC | USE_ETH);
+    // const _tx2o1 = await svIx1.deployBallot(democHash, bytes32zero, bytes32zero, mkPackedTime(0, 0), USE_ENC | USE_ETH);
     // await assertErrStatus(ERR_NO_EDIT_PERMISSIONS, _tx2o1, "svIx1 should not have edit perms anymore")
 
-    await svIx2.setPaymentEnabled(false);
+    await paySC.setPaymentEnabled(false);
 
-    const _tx2o3 = await svPx.deployBallot(democHash, bytes32zero, bytes32zero, 0, 0, USE_ETH | USE_ENC);
+    const _tx2o3 = await svPx.deployBallot(democHash, bytes32zero, bytes32zero, mkPackedTime(0, 0), USE_ETH | USE_ENC, 0);
 
     const _tx2o2 = await svIx2.initDemoc("democ2");
 
