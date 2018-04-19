@@ -293,6 +293,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
         doUpgradeInternal(nextSC);
         require(backend.upgradeMe(nextSC));
         require(paymentSettings.upgradeMe(nextSC));
+        ensPx.addAdmin(nextSC);
     }
 
     function setPaymentBackend(SVIndexPaymentSettings newSC) only_owner() public {

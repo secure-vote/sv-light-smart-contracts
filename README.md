@@ -30,9 +30,29 @@ See `package.json`, but you probably want to be using `yarn test` or `yarn test-
 
 ## Deploying SvIndex
 
-1. deploy SVIndexBackend and note the address (0x7F0cCC57AfaB17bD549D763E9C117EBAE0154F14)
+### Fresh
+
+1. deploy SVIndexBackend and note the address
 2. deploy SVIndexPaymentSettings and note address
-3. (Note: you should have already deployed )
+3. (Note: you should have already deployed the admin proxy factory, the ballot box factory, and the ens everything px)
+4. deploy SVLightIndex with parameters (and note the new Ix's address)
+  1. IxBackend address
+  2. PaymentSettings address
+  3. AdminPxFactory address
+  4. BallotBoxFactory address
+  5. ENSEverythingPx address
+5. Set new Ix as editor on Backend and PaymentSettings (by calling `setPermissions()` then call `doLockdown()`)
+6. Set new Ix as admin on EnsEverythingPx
+7. Update an ENS domains you need to.
+7. Done!
+
+### Upgrading
+
+Unless you're also upgrading any component:
+
+1. Deploy SvLightIndex with relevant parameters (probs the same as the last Ix)
+2. Run `doUpgrade()` on the previous Ix from the owner address (it'll do everything else)
+3. Confirm by checking `upgradePtr()` on the old Ix
 
 ### Changing Payment Settings
 
