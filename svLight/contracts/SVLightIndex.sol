@@ -1,4 +1,4 @@
-pragma solidity ^0.4.22;
+pragma solidity ^0.4.23;
 
 
 //
@@ -11,15 +11,15 @@ pragma solidity ^0.4.22;
 
 import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
-import { canCheckOtherContracts, permissioned, hasAdmins, owned, upgradePtr } from "./SVCommon.sol";
+import { canCheckOtherContracts, permissioned, hasAdmins, owned, upgradePtr, base58EnsUtils } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
 import { SvEnsEverythingPx } from "../../ensSCs/contracts/SvEnsEverythingPx.sol";
-import { Triggerable } from "./Triggerable.sol";
+import "./IndexInterface.sol";
 
 
 contract SVAdminPxFactory {
-    function spawn(address initAdmin, address fwdTo) external returns (SVLightAdminProxy px) {
-        px = new SVLightAdminProxy(initAdmin, fwdTo);
+    function spawn(bytes32 democHash, address initAdmin, address fwdTo) external returns (SVLightAdminProxy px) {
+        px = new SVLightAdminProxy(democHash, initAdmin, fwdTo);
     }
 }
 
@@ -32,7 +32,7 @@ contract SVBBoxFactory {
 }
 
 
-contract SVIndexBackend is permissioned {
+contract SVIndexBackend is permissioned, IxBackendIface {
     event LowLevelNewBallot(bytes32 democHash, uint id);
     event LowLevelNewDemoc(bytes32 democHash);
 
@@ -50,25 +50,36 @@ contract SVIndexBackend is permissioned {
         Ballot[] ballots;
     }
 
+    struct BallotRef {
+        bytes32 democHash;
+        uint ballotId;
+    }
+
     mapping (bytes32 => Democ) public democs;
+    BallotRef[] public ballotList;
+
     mapping (bytes13 => bytes32) public democPrefixToHash;
     bytes32[] public democList;
 
     //* GLOBAL INFO */
 
-    function nDemocs() external constant returns (uint256) {
+    function nDemocs() external constant returns (uint) {
         return democList.length;
+    }
+
+    function nBallotsGlobal() external constant returns (uint) {
+        return ballotList.length;
     }
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
-    function initDemoc(string democName, address admin) only_editors() external returns (bytes32 democHash) {
+    function initDemoc(string democName) only_editors() external returns (bytes32 democHash) {
         // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
         // (particularly because `this` and prevBlockHash are part of the hash)
-        democHash = keccak256(democName, admin, democList.length, blockhash(block.number-1), this);
+        democHash = keccak256(democName, democList.length, blockhash(block.number-1), this);
         democList.push(democHash);
         democs[democHash].name = democName;
-        democs[democHash].admin = admin;
+        require(democPrefixToHash[bytes13(democHash)] == bytes32(0), "democ prefix exists");
         democPrefixToHash[bytes13(democHash)] = democHash;
         emit LowLevelNewDemoc(democHash);
     }
@@ -107,6 +118,7 @@ contract SVIndexBackend is permissioned {
     function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, SVLightBallotBox bb, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
         ballotId = democs[democHash].ballots.length;
         democs[democHash].ballots.push(Ballot(specHash, extraData, bb, startTs, endTs));
+        ballotList.push(BallotRef(democHash, ballotId));
         emit LowLevelNewBallot(democHash, ballotId);
     }
 
@@ -134,7 +146,7 @@ contract SVIndexBackend is permissioned {
 }
 
 
-contract SVIndexPaymentSettings is permissioned {
+contract SVIndexPaymentSettings is permissioned, IxPaymentsSettingsIface {
     event SetFees(uint[2] _newFees);
     event PaymentEnabled(bool _feeEnabled);
 
@@ -161,43 +173,43 @@ contract SVIndexPaymentSettings is permissioned {
     }
 
 
-    function payoutAll() public {
+    function payoutAll() external {
         require(payTo.call.value(address(this).balance)());
     }
 
     //* PAYMENT AND OWNER FUNCTIONS */
 
-    function setPayTo(address newPayTo) only_owner() public {
+    function setPayTo(address newPayTo) only_owner() external {
         payTo = newPayTo;
     }
 
-    function setEth(uint128[2] newFees) only_owner() public {
+    function setEth(uint128[2] newFees) only_owner() external {
         democFee = newFees[PAY_DEMOC];
         ballotFee = newFees[PAY_BALLOT];
         emit SetFees([democFee, ballotFee]);
     }
 
-    function setPaymentEnabled(bool _enabled) only_owner() public {
+    function setPaymentEnabled(bool _enabled) only_owner() external {
         paymentEnabled = _enabled;
         emit PaymentEnabled(_enabled);
     }
 
-    function setWhitelistDemoc(address addr, bool _free) only_owner() public {
+    function setWhitelistDemoc(address addr, bool _free) only_owner() external {
         democWhitelist[addr] = _free;
     }
 
-    function setWhitelistBallot(address addr, bool _free) only_owner() public {
+    function setWhitelistBallot(address addr, bool _free) only_owner() external {
         ballotWhitelist[addr] = _free;
     }
 
-    function setFeeFor(address addr, uint128[2] fees) only_owner() public {
+    function setFeeFor(address addr, uint128[2] fees) only_owner() external {
         democFeeFor[addr] = fees[PAY_DEMOC];
         ballotFeeFor[addr] = fees[PAY_BALLOT];
     }
 }
 
 
-contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
+contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, base58EnsUtils {
     SVIndexBackend public backend;
     SVIndexPaymentSettings public paymentSettings;
     SVAdminPxFactory public adminPxFactory;
@@ -325,17 +337,23 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
     function initDemoc(string democName) payReq(PAY_DEMOC) not_upgraded() public payable returns (bytes32) {
-        address admin;
-        if(isContract(msg.sender)) {
-            // if the caller is a contract we presume they can handle multisig themselves...
-            admin = msg.sender;
-        } else {
-            // otherwise let's create a proxy sc for them
-            SVLightAdminProxy adminPx = adminPxFactory.spawn(msg.sender, address(this));
-            admin = address(adminPx);
-        }
+        // address admin;
+        // if(isContract(msg.sender)) {
+        //     // if the caller is a contract we presume they can handle multisig themselves...
+        //     admin = msg.sender;
+        // } else {
+        //     // otherwise let's create a proxy sc for them
+        //     SVLightAdminProxy adminPx = adminPxFactory.spawn(msg.sender, address(this));
+        //     admin = address(adminPx);
+        // }
 
-        bytes32 democHash = backend.initDemoc(democName, admin);
+
+        bytes32 democHash = backend.initDemoc(democName);
+
+        SVLightAdminProxy adminPx = adminPxFactory.spawn(democHash, msg.sender, address(this));
+        address admin = address(adminPx);
+        backend.setAdmin(democHash, admin);
+
         emit DemocAdded(democHash, admin);
 
         mkDomain(democHash, admin);
@@ -399,14 +417,16 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr {
 
 
     // sv ens domains
-    function mkDomain(bytes32 democHash, address admin) internal {
+    function mkDomain(bytes32 democHash, address adminSc) internal {
         // create domain for admin!
         // truncate the democHash to 13 bytes (which is the most that's safely convertable to a decimal string
         // without going over 32 chars), then convert to uint, then uint to string (as bytes32)
         bytes13 democPrefix = bytes13(democHash);
-        bytes32 democPrefixIntStr = StringLib.uintToBytes(uint(democPrefix));
-        // although the address doesn't exist, it gives us something to lookup I suppose.
-        ensPx.regNameWOwner(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
+        // bytes32 democPrefixIntStr = StringLib.uintToBytes(uint(democPrefix));
+        // // although the address doesn't exist, it gives us something to lookup I suppose.
+        // ensPx.regName(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
+        bytes memory prefixB58 = toBase58(b13ToBytes(democPrefix));
+        ensPx.regName(string(prefixB58), adminSc);
     }
 
 

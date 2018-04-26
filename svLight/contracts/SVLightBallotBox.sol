@@ -63,6 +63,9 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     // bits used to decide which options are enabled or disabled for submission of ballots
     uint16 public submissionBits;
 
+    // allow tracking of sponsorship for this ballot
+    uint totalSponsorship = 0;
+
     // deprecation flag - doesn't actually do anything besides signal that this contract is deprecated;
     bool public deprecated = false;
 
@@ -211,47 +214,45 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     // submission bits stuff
     // submission bits are structured as follows:
 
-    uint16 constant USE_ETH = 1;
-    uint16 constant USE_SIGNED = 2;
-    uint16 constant USE_NO_ENC = 4;
-    uint16 constant USE_ENC = 8;
+    uint16 constant USE_ETH = 1;    // 2^0
+    uint16 constant USE_SIGNED = 2; // 2^1
+    uint16 constant USE_NO_ENC = 4; // 2^2
+    uint16 constant USE_ENC = 8;    // 2^3
 
-    uint16 constant USE_TESTING = 32768;
-    uint16 constant TESTING_MASK = 0xFFFF ^ USE_TESTING;  // do (bits & TESTING_MASK) to set testing bit to 0
+
+    uint16 constant IS_OFFICIAL = 16384;  // 2^14
+    uint16 constant USE_TESTING = 32768;  // 2^15
+    uint16 constant SETTINGS_MASK = 0xFFFF ^ USE_TESTING ^ IS_OFFICIAL;  // do (bits & SETTINGS_MASK) to get just operational bits (as opposed to testing or official flag)
 
     function isEthNoEnc() constant internal returns (bool) {
-        uint16 expected = (USE_ETH | USE_NO_ENC) & TESTING_MASK;
-        return checkFlags(expected);
+        return checkFlags(USE_ETH | USE_NO_ENC);
     }
 
     function isEthWithEnc() constant internal returns (bool) {
-        uint16 expected = (USE_ETH | USE_ENC) & TESTING_MASK;
-        return checkFlags(expected);
+        return checkFlags(USE_ETH | USE_ENC);
     }
 
     function isSignedNoEnc() constant internal returns (bool) {
-        uint16 expected = (USE_SIGNED | USE_NO_ENC) & TESTING_MASK;
-        return checkFlags(expected);
+        return checkFlags(USE_SIGNED | USE_NO_ENC);
     }
 
     function isSignedWithEnc() constant internal returns (bool) {
-        uint16 expected = (USE_SIGNED | USE_ENC) & TESTING_MASK;
-        return checkFlags(expected);
+        return checkFlags(USE_SIGNED | USE_ENC);
     }
 
     function isTesting() constant public returns (bool) {
-        return submissionBits & USE_TESTING == USE_TESTING;
+        return (submissionBits & USE_TESTING) == USE_TESTING;
     }
 
     function checkFlags(uint16 expected) constant internal returns (bool) {
-        // this should ignore ONLY the testing bit - all other bits are significant
-        uint16 sBitsNoTesting = submissionBits & TESTING_MASK;
+        // this should ignore ONLY the testing/flag bits - all other bits are significant
+        uint16 sBitsNoSettings = submissionBits & SETTINGS_MASK;
         // then we want ONLY expected
-        return sBitsNoTesting == expected;
+        return sBitsNoSettings == expected;
     }
 
     function checkBit(uint16 bitToTest) constant internal returns (bool) {
         // first remove the testing bit, then check the bitToTest
-        return (submissionBits & TESTING_MASK) & bitToTest > 0;
+        return (submissionBits & SETTINGS_MASK) & bitToTest > 0;
     }
 }
