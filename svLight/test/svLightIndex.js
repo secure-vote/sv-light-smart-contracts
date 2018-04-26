@@ -12,6 +12,7 @@ const EnsRegistry = artifacts.require("./SvEnsRegistry");
 const EmitterTesting = artifacts.require("./EmitterTesting");
 
 const nh = require('eth-ens-namehash');
+const b58 = require('bs58');
 
 require("./testUtils")();
 
@@ -25,10 +26,16 @@ const wrapTestIx = (accounts, f) => {
     return async () => {
         const scLog = await EmitterTesting.new();
 
-        const be = await IxBackend.new();
+        await scLog.log(`Created logger...`);
+
+        const be = await IxBackend.new({gas: 6000000});
+        await scLog.log(`Created backend...`);
         const paySC = await IxPaySettings.new();
+        await scLog.log(`Created paySettings...`);
         const pxF = await PxFactory.new();
+        await scLog.log(`Created PxFactor...`);
         const bbF = await BBFactory.new();
+        await scLog.log(`Created BBFactory...`);
 
         await scLog.log(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
 
@@ -97,8 +104,8 @@ async function testEndToEndIsh({svIx, ensPR, tld, paySC, scLog}, accounts) {
     assert.equal(await svIx.paymentEnabled(), false, "payment made false");
     assert.equal(await paySC.paymentEnabled(), false, "payment made false (paySC)");
 
-    await paySC.setPayTo(accounts[10], {from: accounts[0]});
-    assert.equal(await paySC.payTo(), accounts[10], "payTo changable");
+    await paySC.setPayTo(accounts[9], {from: accounts[0]});
+    assert.equal(await paySC.payTo(), accounts[9], "payTo changable");
 
     const dPrice1 = 9876;
     const iPrice1 = 3849;
@@ -145,10 +152,11 @@ async function testEndToEndIsh({svIx, ensPR, tld, paySC, scLog}, accounts) {
 
     await scLog.log("created SVIndex proxy d1Px");
 
-    const democPrefixHex = democId.slice(0,13*2+2);
-    const democPrefixInt = web3.toBigNumber(democPrefixHex).toString(10);
-    const expectedDomain = democPrefixInt + '.' + tld;
-    assert.equal(await ensPR.addr(nh.hash(expectedDomain)), "0x00000000000000" + democPrefixHex.slice(2), "domain that's created should match expectation")
+    const democPrefixHex = democId.slice(0, 13*2+2);
+    const prefixB32 = hexToB32(democPrefixHex.slice(2));
+    const expectedDomain = prefixB32 + '.' + tld;
+    await scLog.log(`Checking ${expectedDomain} w/ namehash ${nh.hash(expectedDomain)}`)
+    assert.equal(await ensPR.addr(nh.hash(expectedDomain)), d1PxAddr, "domain that's created should match expectation")
     console.log("Created domain:", expectedDomain);
     assert.equal(await svIx.democPrefixToHash(democPrefixHex), democId, "democ hash from prefix should match");
 
@@ -162,6 +170,7 @@ async function testEndToEndIsh({svIx, ensPR, tld, paySC, scLog}, accounts) {
     // check pay okay but still free fails
     // log("mk democ not okay");
     await paySC.setPaymentEnabled(true, {from: accounts[0]})
+    await scLog.log("set payment enabled - 11")
     await assertErrStatus(ERR_BAD_PAYMENT,
         svIx.initDemoc("free lunch democ (bad)", {from: d1Admin}),
         "no free lunch (democ)"

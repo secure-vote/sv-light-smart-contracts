@@ -13,6 +13,7 @@ import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
 import { canCheckOtherContracts, permissioned, hasAdmins, owned, upgradePtr, base58EnsUtils } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
+import { Base32Lib } from "../libs/Base32Lib.sol";
 import { SvEnsEverythingPx } from "../../ensSCs/contracts/SvEnsEverythingPx.sol";
 import "./IndexInterface.sol";
 
@@ -206,10 +207,17 @@ contract SVIndexPaymentSettings is permissioned, IxPaymentsSettingsIface {
         democFeeFor[addr] = fees[PAY_DEMOC];
         ballotFeeFor[addr] = fees[PAY_BALLOT];
     }
+
+    /* Getters */
+
+    // @dev - [democWhitelist, ballotWhitelist]
+    function getWhitelistStatus(address addr) external constant returns (bool[2]) {
+        return [democWhitelist[addr], ballotWhitelist[addr]];
+    }
 }
 
 
-contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, base58EnsUtils {
+contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     SVIndexBackend public backend;
     SVIndexPaymentSettings public paymentSettings;
     SVAdminPxFactory public adminPxFactory;
@@ -218,7 +226,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, bas
 
     uint8 constant PAY_DEMOC = 0;
     uint8 constant PAY_BALLOT = 1;
-
+    uint8 constant PAY_ANY = 2;
 
     uint128 constant LOW_64_BITS_OF_128 = 0xFFFFFFFFFFFFFFFF;
     uint128 constant HIGH_64_BITS_OF_128 = 0xFFFFFFFFFFFFFFFF0000000000000000;
@@ -235,6 +243,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, bas
                 paymentSettings.ballotWhitelist(msg.sender),
                 paymentSettings.ballotFee(),
                 paymentSettings.ballotFeeFor(msg.sender));
+        } else if (paymentType == PAY_ANY) {
+            return (false, msg.value, msg.value);
         } else {
             revert("paymentType parameter invalid");
         }
@@ -245,6 +255,9 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, bas
     event PaymentMade(uint[2] valAndRemainder);
     event DemocAdded(bytes32 democHash, address admin);
     event BallotAdded(bytes32 democHash, uint id);
+    // for debug
+    event Log(string message);
+    event LogB32(bytes32 b32);
 
     event PaymentTooLow(uint msgValue, uint feeReq);
 
@@ -385,6 +398,15 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, bas
         return backend.democPrefixToHash(democHashPrefix);
     }
 
+    function communityEnabled(bytes32 democHash) external constant returns (bool) {
+        // todo
+        return false;
+    }
+
+    function payForDemocracy(bytes32 democHash) payReq(PAY_ANY) external payable {
+        // todo
+    }
+
     //* ADD BALLOT TO RECORD */
 
     function _addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb) internal returns (uint id) {
@@ -425,8 +447,10 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, bas
         // bytes32 democPrefixIntStr = StringLib.uintToBytes(uint(democPrefix));
         // // although the address doesn't exist, it gives us something to lookup I suppose.
         // ensPx.regName(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
-        bytes memory prefixB58 = toBase58(b13ToBytes(democPrefix));
-        ensPx.regName(string(prefixB58), adminSc);
+        bytes memory prefixB32 = Base32Lib.toBase32(b13ToBytes(democPrefix));
+        emit Log(string(prefixB32));
+        bytes32 node = ensPx.regName(string(prefixB32), adminSc);
+        emit LogB32(node);
     }
 
 
@@ -456,6 +480,15 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface, bas
         }
 
         return string(bs);
+    }
+
+
+    function b13ToBytes(bytes13 b13) pure internal returns(bytes) {
+        bytes memory bs = new bytes(13);
+        for (uint i = 0; i < 13; i++) {
+            bs[i] = b13[i];
+        }
+        return bs;
     }
 }
 

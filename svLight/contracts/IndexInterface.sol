@@ -6,20 +6,21 @@ import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 
 interface IxIface {
     function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes, uint16 _submissionBits) external payable returns (uint);
-    function communityEnabled(bytes32 democHash) external returns (bool);
+    function communityEnabled(bytes32 democHash) external constant returns (bool);
     function payForDemocracy(bytes32 democHash) external payable;
 }
 
 
 interface IxPaymentsSettingsIface {
-    function democWhitelist(address) external returns (bool);
-    function ballotWhitelist(address) external returns (bool);
-    function payTo() external returns (address);
-    function democFee() external returns (uint);
-    function democFeeFor(address) external returns (uint);
-    function ballotFee() external returns (uint);
-    function ballotFeeFor(address) external returns (uint);
-    function paymentEnabled() external returns (bool);
+    // function democWhitelist(address) external constant returns (bool);
+    // function ballotWhitelist(address) external returns (bool);
+    function getWhitelistStatus(address) external constant returns (bool[2]);
+    // function payTo() external returns (address);
+    // function democFee() external returns (uint);
+    // function democFeeFor(address) external returns (uint);
+    // function ballotFee() external returns (uint);
+    // function ballotFeeFor(address) external returns (uint);
+    // function paymentEnabled() external returns (bool);
     function payoutAll() external;
     function setPayTo(address) external;
     function setEth(uint128[2]) external;
@@ -31,10 +32,10 @@ interface IxPaymentsSettingsIface {
 
 
 interface IxBackendIface {
-    function democs(bytes32 democHash) external returns (string, address);
-    function ballotList(uint globalBallotN) external returns (bytes32, uint);
-    function democPrefixToHash(bytes13) external returns (bytes32);
-    function democList(uint) external returns (bytes32);
+    // function democs(bytes32 democHash) external returns (string, address);
+    // function ballotList(uint globalBallotN) external returns (bytes32, uint);
+    // function democPrefixToHash(bytes13) external returns (bytes32);
+    // function democList(uint) external returns (bytes32);
     function nDemocs() external constant returns (uint);
     function nBallotsGlobal() external constant returns (uint);
     function initDemoc(string) external returns (bytes32);

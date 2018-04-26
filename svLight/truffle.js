@@ -14,7 +14,7 @@ module.exports = {
       provider: provider,
       // host: "localhost",
       // port: 8545,
-      gas: 6000000,
+      gas: 6500000,
       network_id: "*" // Match any network id
     }
   }

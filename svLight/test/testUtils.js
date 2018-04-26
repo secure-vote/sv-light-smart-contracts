@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const Web3 = require('web3');
 var BN = require('bn.js');
+const R = require('ramda');
 
 module.exports = function () {
     this.toJson = (obj) => {
@@ -150,6 +151,45 @@ module.exports = function () {
 
     this.bytes32AddrToAddr = (bytes32Addr) => {
         return Web3.utils.bytesToHex(Web3.utils.hexToBytes(bytes32Addr).slice(12));
+    }
+
+    const B32_ALPHA = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    const toAlphabet = arr => {
+        ret = "";
+        for (let i = 0; i < arr.length; i++) {
+            ret += B32_ALPHA.charAt(arr[i]);
+        }
+        return ret;
+    }
+
+    this.hexToB32 = hex => {
+        if (hex.length == 0) return "";
+
+        const buf = Buffer.from(hex, 'hex');
+        const digits = [0];
+        let digitlength = 1;
+
+        let carry;
+        for (let i = 0; i < buf.length; ++i) {
+            carry = buf[i];
+            for (let j = 0; j < digitlength; ++j) {
+                carry += digits[j] * 256;
+                digits[j] = carry % 32;
+                carry = (carry / 32) | 0;
+            }
+
+            while (carry > 0) {
+                digits[digitlength] = carry % 32;
+                digitlength++;
+                carry = (carry / 32) | 0;
+            }
+        }
+
+        return toAlphabet(R.reverse(digits.slice(0,digitlength)));
+    }
+
+    this.b32ToHex = str => {
+
     }
 
     this.bytes32zero = "0x0000000000000000000000000000000000000000000000000000000000000000";
