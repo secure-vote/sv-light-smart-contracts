@@ -26,14 +26,14 @@ contract SVAdminPxFactory {
 
 
 contract SVBBoxFactory {
-    function spawn(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits, address admin) external returns (SVLightBallotBox bb) {
-        bb = new SVLightBallotBox(_specHash, _startTs, endTs, _submissionBits);
+    function spawn(bytes32 _specHash, uint128 packedTimes, uint16 _submissionBits, IxIface ix, address admin) external returns (SVLightBallotBox bb) {
+        bb = new SVLightBallotBox(_specHash, packedTimes, _submissionBits, ix);
         bb.setOwner(admin);
     }
 }
 
 
-contract SVIndexBackend is permissioned, IxBackendIface {
+contract SVIndexBackend is IxBackendIface, permissioned {
     event LowLevelNewBallot(bytes32 democHash, uint id);
     event LowLevelNewDemoc(bytes32 democHash);
 
@@ -110,8 +110,16 @@ contract SVIndexBackend is permissioned, IxBackendIface {
         return (b.specHash, b.extraData, b.bb, b.startTs, b.endTs);
     }
 
+    function getBallotAddr(bytes32 democHash, uint n) external constant returns (address) {
+        return address(democs[democHash].ballots[n].bb);
+    }
+
     function getBallotBox(bytes32 democHash, uint id) external constant returns (SVLightBallotBox bb) {
         bb = democs[democHash].ballots[id].bb;
+    }
+
+    function getDemocHash(bytes13 prefix) external constant returns (bytes32) {
+        return democPrefixToHash[prefix];
     }
 
     //* ADD BALLOT TO RECORD */
@@ -147,32 +155,114 @@ contract SVIndexBackend is permissioned, IxBackendIface {
 }
 
 
-contract SVIndexPaymentSettings is permissioned, IxPaymentsSettingsIface {
-    event SetFees(uint[2] _newFees);
+contract SVIndexPaymentSettings is IxPaymentsSettingsIface, permissioned {
     event PaymentEnabled(bool _feeEnabled);
+    event UpgradedToPremium(bytes32 indexed democHash);
+    event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
+    event AccountPayment(bytes32 indexed democHash, uint additionalSeconds);
+    event SetCommunityBallotFee(uint amount);
+    event SetBasicPricePerSecond(uint amount);
+    event SetPremiumMultiplier(uint8 multiplier);
+    event DowngradeToBasic(bytes32 indexed democHash);
+    event UpgradeToPremium(bytes32 indexed democHash);
 
-    // addresses that do not have to pay for democs
-    mapping (address => bool) public democWhitelist;
-    // democs that do not have to pay for issues
-    mapping (address => bool) public ballotWhitelist;
+
+    struct Account {
+        bool isPremium;
+        uint lastPaymentTs;
+        uint paidUpTill;
+    }
+
+    struct PaymentLog {
+        bool _external;
+        uint _seconds;
+        uint _ethValue;
+    }
+
 
     // payment details
     address public payTo;
-    // uint128's used because they account for amounts up to 3.4e38 wei or 3.4e20 ether
-    uint public democFee = 1.0 ether; // 1.0 ether; about $500 at 18 Apr 2018
-    mapping (address => uint) public democFeeFor;
-    uint public ballotFee = 0.1 ether; // 0.1 ether; about $50 at 18 Apr 2018
-    mapping (address => uint) public ballotFeeFor;
-    bool public paymentEnabled = true;
+    bool paymentEnabled = true;
+    uint communityBallotFee = 0.016 ether; // about $10 usd on 26/4/2018
+    uint basicPricePerSecond = 1.6 ether / uint(30 days); // 1.6 ether per 30 days; ~$1000/mo
+    uint8 premiumMultiplier = 5;
 
-    uint8 constant PAY_DEMOC = 0;
-    uint8 constant PAY_BALLOT = 1;
+
+    mapping (bytes32 => Account) accounts;
+    PaymentLog[] payments;
 
 
     constructor() permissioned() public {
         payTo = msg.sender;
     }
 
+    function() payable {
+        if (gasleft() > 25000) {
+            // note: allow this to fail, we have `payoutAll()` if need be.
+            payTo.send(msg.value);
+        }
+    }
+
+    function _modAccountBalance(bytes32 democHash, uint additionalSeconds) internal {
+        uint prevPaidTill = accounts[democHash].paidUpTill;
+        if (prevPaidTill < now) {
+            prevPaidTill = now;
+        }
+
+        accounts[democHash].paidUpTill = prevPaidTill + additionalSeconds;
+        accounts[democHash].lastPaymentTs = now;
+    }
+
+    function payForDemocracy(bytes32 democHash) external payable {
+        require(msg.value > 0, "need to send some ether to make payment");
+
+        uint additionalSeconds = msg.value / basicPricePerSecond;
+        if (accounts[democHash].isPremium) {
+            additionalSeconds /= premiumMultiplier;
+        }
+
+        _modAccountBalance(democHash, additionalSeconds);
+        payments.push(PaymentLog(false, additionalSeconds, msg.value));
+        emit AccountPayment(democHash, additionalSeconds);
+
+        payTo.transfer(msg.value);
+    }
+
+    function accountInGoodStanding(bytes32 democHash) external constant returns (bool) {
+        return accounts[democHash].paidUpTill > now;
+    }
+
+    function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) only_owner() external {
+        _modAccountBalance(democHash, additionalSeconds);
+        payments.push(PaymentLog(true, additionalSeconds, 0));
+        emit GrantedAccountTime(democHash, additionalSeconds, ref);
+    }
+
+    function upgradeToPremium(bytes32 democHash) only_editors() external {
+        require(!accounts[democHash].isPremium, "cannot upgrade to premium twice");
+        accounts[democHash].isPremium = true;
+        // convert basic minutes to premium minutes
+        uint timeRemaining = accounts[democHash].paidUpTill - now;
+        // if we have time remaning then convert it - otherwise don't need to do anything
+        if (timeRemaining > 0) {
+            timeRemaining /= premiumMultiplier;
+            accounts[democHash].paidUpTill = now + timeRemaining;
+        }
+        emit UpgradedToPremium(democHash);
+    }
+
+    function downgradeToBasic(bytes32 democHash) only_editors() external {
+        require(accounts[democHash].isPremium, "must be premium to downgrade");
+        accounts[democHash].isPremium = false;
+        // convert premium minutes to basic
+        uint timeRemaining = accounts[democHash].paidUpTill - now;
+        // if we have time remaining: convert it
+        if (timeRemaining > 0) {
+            timeRemaining *= premiumMultiplier;
+            accounts[democHash].paidUpTill = now + timeRemaining;
+        }
+        emit DowngradeToBasic(democHash);
+    }
 
     function payoutAll() external {
         require(payTo.call.value(address(this).balance)());
@@ -184,71 +274,64 @@ contract SVIndexPaymentSettings is permissioned, IxPaymentsSettingsIface {
         payTo = newPayTo;
     }
 
-    function setEth(uint128[2] newFees) only_owner() external {
-        democFee = newFees[PAY_DEMOC];
-        ballotFee = newFees[PAY_BALLOT];
-        emit SetFees([democFee, ballotFee]);
-    }
-
     function setPaymentEnabled(bool _enabled) only_owner() external {
         paymentEnabled = _enabled;
         emit PaymentEnabled(_enabled);
     }
 
-    function setWhitelistDemoc(address addr, bool _free) only_owner() external {
-        democWhitelist[addr] = _free;
+    function setCommunityBallotFee(uint amount) only_owner() external {
+        communityBallotFee = amount;
+        emit SetCommunityBallotFee(amount);
     }
 
-    function setWhitelistBallot(address addr, bool _free) only_owner() external {
-        ballotWhitelist[addr] = _free;
+    function setBasicPricePerSecond(uint amount) only_owner() external {
+        basicPricePerSecond = amount;
+        emit SetBasicPricePerSecond(amount);
     }
 
-    function setFeeFor(address addr, uint128[2] fees) only_owner() external {
-        democFeeFor[addr] = fees[PAY_DEMOC];
-        ballotFeeFor[addr] = fees[PAY_BALLOT];
+    function getPremiumMultiplier(uint8 m) only_owner() external {
+        premiumMultiplier = m;
+        emit SetPremiumMultiplier(m);
     }
 
     /* Getters */
 
-    // @dev - [democWhitelist, ballotWhitelist]
-    function getWhitelistStatus(address addr) external constant returns (bool[2]) {
-        return [democWhitelist[addr], ballotWhitelist[addr]];
+    function getPayTo() external constant returns(address) {
+        return payTo;
+    }
+
+    function getPaymentEnabled() external constant returns (bool) {
+        return paymentEnabled;
+    }
+
+    function getCommunityBallotFee() external constant returns(uint) {
+        return communityBallotFee;
+    }
+
+    function getBasicPricePerSecond() external constant returns(uint) {
+        return basicPricePerSecond;
+    }
+
+    function getPremiumMultiplier() external constant returns (uint8) {
+        return premiumMultiplier;
+    }
+
+    function getPremiumPricePerSecond() external constant returns (uint) {
+        return _premiumPricePerSec();
+    }
+
+    function _premiumPricePerSec() internal constant returns (uint) {
+        return uint(premiumMultiplier) * basicPricePerSecond;
     }
 }
 
 
 contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
-    SVIndexBackend public backend;
-    SVIndexPaymentSettings public paymentSettings;
+    IxBackendIface public backend;
+    IxPaymentsSettingsIface public paymentSettings;
     SVAdminPxFactory public adminPxFactory;
     SVBBoxFactory public bbFactory;
     SvEnsEverythingPx public ensPx;
-
-    uint8 constant PAY_DEMOC = 0;
-    uint8 constant PAY_BALLOT = 1;
-    uint8 constant PAY_ANY = 2;
-
-    uint128 constant LOW_64_BITS_OF_128 = 0xFFFFFFFFFFFFFFFF;
-    uint128 constant HIGH_64_BITS_OF_128 = 0xFFFFFFFFFFFFFFFF0000000000000000;
-
-
-    function getPaymentParams(uint8 paymentType) internal constant returns (bool, uint, uint) {
-        if (paymentType == PAY_DEMOC) {
-            return (
-                paymentSettings.democWhitelist(msg.sender),
-                paymentSettings.democFee(),
-                paymentSettings.democFeeFor(msg.sender));
-        } else if (paymentType == PAY_BALLOT) {
-            return (
-                paymentSettings.ballotWhitelist(msg.sender),
-                paymentSettings.ballotFee(),
-                paymentSettings.ballotFeeFor(msg.sender));
-        } else if (paymentType == PAY_ANY) {
-            return (false, msg.value, msg.value);
-        } else {
-            revert("paymentType parameter invalid");
-        }
-    }
 
     //* EVENTS /
 
@@ -256,8 +339,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     event DemocAdded(bytes32 democHash, address admin);
     event BallotAdded(bytes32 democHash, uint id);
     // for debug
-    event Log(string message);
-    event LogB32(bytes32 b32);
+    // event Log(string message);
+    // event LogB32(bytes32 b32);
 
     event PaymentTooLow(uint msgValue, uint feeReq);
 
@@ -271,29 +354,12 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
     modifier payReq(uint8 paymentType) {
         // get our whitelist, generalFee, and fee's for particular addresses
-        if (paymentSettings.paymentEnabled()){
-            bool wl;
-            uint genFee;
-            uint feeFor;
-            address payTo = paymentSettings.payTo();
-            (wl, genFee, feeFor) = getPaymentParams(paymentType);
-            // init v to something large in case of exploit or something
-            // check whitelists - do not require payment in some cases
-            if (!wl) {
-                uint v = 1000 ether;
-                v = feeFor;
-                if (v == 0){
-                    // if there's no fee for the individual user then set it to the general fee
-                    v = genFee;
-                }
+        if (paymentSettings.getPaymentEnabled()){
+            revert("need to update payReq to check minutes avialable for democ");
 
-                require(msg.value >= v, "payment too low");
-                // handle payments
-                uint remainder = msg.value - v;
-                require(msg.sender.call.value(remainder)(), ERR_FAILED_TO_PROVIDE_CHANGE);
-                require(payTo.call.value(v)(), ERR_FAILED_TO_FWD_PAYMENT);
-                emit PaymentMade([v, remainder]);
-            }
+            // require(msg.sender.call.value(remainder)(), ERR_FAILED_TO_PROVIDE_CHANGE);
+            // require(paymentSettings.call.value(v)(), ERR_FAILED_TO_FWD_PAYMENT);
+            // emit PaymentMade([v, remainder]);
         }
         // do main
         _;
@@ -304,7 +370,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
 
     // constructor
-    constructor(SVIndexBackend _backend, SVIndexPaymentSettings _payBackend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
+    constructor(IxBackendIface _backend, IxPaymentsSettingsIface _payBackend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
         backend = _backend;
         paymentSettings = _payBackend;
         adminPxFactory = _pxFactory;
@@ -314,33 +380,27 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
     //* UPGRADE STUFF */
 
-    function doUpgrade(address nextSC) only_owner() not_upgraded() public {
+    function doUpgrade(address nextSC) only_owner() not_upgraded() external {
         doUpgradeInternal(nextSC);
         require(backend.upgradeMe(nextSC));
         require(paymentSettings.upgradeMe(nextSC));
         ensPx.addAdmin(nextSC);
     }
 
-    function setPaymentBackend(SVIndexPaymentSettings newSC) only_owner() public {
+    // for emergencies
+    function setPaymentBackend(IxPaymentsSettingsIface newSC) only_owner() external {
         paymentSettings = newSC;
     }
 
-    function setBackend(SVIndexBackend newSC) only_owner() public {
+    // for emergencies
+    function setBackend(IxBackendIface newSC) only_owner() external {
         backend = newSC;
     }
 
     //* GLOBAL INFO */
 
-    function paymentEnabled() public constant returns (bool) {
-        return paymentSettings.paymentEnabled();
-    }
-
-    function democFee() public constant returns (uint) {
-        return paymentSettings.democFee();
-    }
-
-    function ballotFee() public constant returns (uint) {
-        return paymentSettings.ballotFee();
+    function getPaymentEnabled() public constant returns (bool) {
+        return paymentSettings.getPaymentEnabled();
     }
 
     function nDemocs() public constant returns (uint256) {
@@ -349,7 +409,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
-    function initDemoc(string democName) payReq(PAY_DEMOC) not_upgraded() public payable returns (bytes32) {
+    // todo: handling payments for creating a democ
+    function initDemoc(string democName) not_upgraded() public payable returns (bytes32) {
         // address admin;
         // if(isContract(msg.sender)) {
         //     // if the caller is a contract we presume they can handle multisig themselves...
@@ -359,7 +420,6 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         //     SVLightAdminProxy adminPx = adminPxFactory.spawn(msg.sender, address(this));
         //     admin = address(adminPx);
         // }
-
 
         bytes32 democHash = backend.initDemoc(democName);
 
@@ -394,17 +454,28 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return backend.getNthBallot(democHash, n);
     }
 
-    function democPrefixToHash(bytes13 democHashPrefix) external constant returns (bytes32) {
-        return backend.democPrefixToHash(democHashPrefix);
+    function getBallotAddr(bytes32 democHash, uint n) external constant returns (address) {
+        return backend.getBallotAddr(democHash, n);
     }
 
-    function communityEnabled(bytes32 democHash) external constant returns (bool) {
-        // todo
-        return false;
+    function getDemocHash(bytes13 prefix) external constant returns (bytes32) {
+        return backend.getDemocHash(prefix);
     }
 
-    function payForDemocracy(bytes32 democHash) payReq(PAY_ANY) external payable {
-        // todo
+    function payForDemocracy(bytes32 democHash) external payable {
+        paymentSettings.payForDemocracy.value(msg.value)(democHash);
+    }
+
+    function getPayTo() external returns (address) {
+        return paymentSettings.getPayTo();
+    }
+
+    function getCommunityBallotFee() external returns (uint) {
+        return paymentSettings.getCommunityBallotFee();
+    }
+
+    function accountInGoodStanding(bytes32 democHash) external constant returns (bool) {
+        return paymentSettings.accountInGoodStanding(democHash);
     }
 
     //* ADD BALLOT TO RECORD */
@@ -415,24 +486,22 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     }
 
     function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb)
-                      onlyBy(backend.getDAdmin(democHash))
-                      payReq(PAY_BALLOT)
-                      external payable
+                      only_owner()
+                      external
                       returns (uint) {
         return _addBallot(democHash, extraData, bb);
     }
 
     function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes, uint16 _submissionBits)
                           onlyBy(backend.getDAdmin(democHash))
-                          payReq(PAY_BALLOT)
+                          // todo: handling payments here
                           external payable
                           returns (uint) {
         SVLightBallotBox bb = bbFactory.spawn(
             specHash,
-            // to unpack times - the first 64 bits are start time, second 64 bits are end time
-            uint64(packedTimes >> 64),
-            uint64(packedTimes),
+            packedTimes,
             _submissionBits,
+            this,
             msg.sender);
         return _addBallot(democHash, extraData, bb);
     }
@@ -448,10 +517,11 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         // // although the address doesn't exist, it gives us something to lookup I suppose.
         // ensPx.regName(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
         bytes memory prefixB32 = Base32Lib.toBase32(b13ToBytes(democPrefix));
-        emit Log(string(prefixB32));
         bytes32 node = ensPx.regName(string(prefixB32), adminSc);
-        emit LogB32(node);
     }
+
+
+    // TODO: move these utils to a library before go-live
 
 
     // utils
@@ -491,23 +561,3 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return bs;
     }
 }
-
-
-// contract DeploySvIx {
-//     event Deployed(address ix, address onDemoc, address onBallot);
-
-//     function DeploySvIx(SVIndexBackend _backend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
-//         SvlIxOnBallotHandler onBallot = new SvlIxOnBallotHandler();
-//         SvlIxOnDemocHandler onDemoc = new SvlIxOnDemocHandler(_ensPx);
-
-//         SVLightIndex ix = new SVLightIndex(_backend, _pxFactory, _bbFactory, onDemoc, onBallot);
-
-//         onBallot.setPermissions(address(ix), true);
-//         onBallot.doLockdown();
-//         onDemoc.setPermissions(address(ix), true);
-//         onDemoc.doLockdown();
-
-//         emit Deployed(address(ix), address(onDemoc), address(onBallot));
-//         selfdestruct(msg.sender);
-//     }
-// }

@@ -22,6 +22,7 @@ pragma solidity ^0.4.22;
 
 
 import "./SVCommon.sol";
+import { IxIface } from "./IndexInterface.sol";
 
 
 contract SVLightBallotBox is descriptiveErrors, owned {
@@ -63,8 +64,9 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     // bits used to decide which options are enabled or disabled for submission of ballots
     uint16 public submissionBits;
 
-    // allow tracking of sponsorship for this ballot
+    // allow tracking of sponsorship for this ballot & connection to index
     uint totalSponsorship = 0;
+    IxIface index;
 
     // deprecation flag - doesn't actually do anything besides signal that this contract is deprecated;
     bool public deprecated = false;
@@ -123,8 +125,9 @@ contract SVLightBallotBox is descriptiveErrors, owned {
 
     // Constructor function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    // flags are [_useEncryption, enableTesting]
-    constructor(bytes32 _specHash, uint64 _startTs, uint64 endTs, uint16 _submissionBits) public {
+    constructor(bytes32 _specHash, uint128 packedTimes, uint16 _submissionBits, IxIface ix) public {
+        index = ix;
+
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
         submissionBits = _submissionBits;
         bool okaySubmissionBits = isEthNoEnc() || isEthWithEnc() || isSignedNoEnc() || isSignedWithEnc();
@@ -138,15 +141,23 @@ contract SVLightBallotBox is descriptiveErrors, owned {
         }
         specHash = _specHash;
         creationBlock = uint64(block.number);
-        // add a rough prediction of what block is the starting block - approx 15s block times
-        startingBlockAround = uint64((startTime - block.timestamp) / 15 + block.number);
 
         // take the max of the start time provided and the blocks timestamp to avoid a DoS against recent token holders
         // (which someone might be able to do if they could set the timestamp in the past)
+        uint64 _startTs = uint64(packedTimes >> 64);
         startTime = _testing ? _startTs : max(_startTs, uint64(block.timestamp));
-        endTime = endTs;
+        endTime = uint64(packedTimes);
+
+        // add a rough prediction of what block is the starting block - approx 15s block times
+        startingBlockAround = uint64((startTime - block.timestamp) / 15 + block.number);
 
         emit CreatedBallot(specHash, startTime, endTime, _submissionBits);
+    }
+
+    // fallback function for sponsorship
+    function() external payable {
+        totalSponsorship += msg.value;
+        index.getPayTo().transfer(msg.value);
     }
 
     // Ballot submission
@@ -240,6 +251,10 @@ contract SVLightBallotBox is descriptiveErrors, owned {
         return checkFlags(USE_SIGNED | USE_ENC);
     }
 
+    function isOfficial() constant public returns (bool) {
+        return (submissionBits & IS_OFFICIAL) == IS_OFFICIAL;
+    }
+
     function isTesting() constant public returns (bool) {
         return (submissionBits & USE_TESTING) == USE_TESTING;
     }
@@ -251,8 +266,8 @@ contract SVLightBallotBox is descriptiveErrors, owned {
         return sBitsNoSettings == expected;
     }
 
-    function checkBit(uint16 bitToTest) constant internal returns (bool) {
-        // first remove the testing bit, then check the bitToTest
-        return (submissionBits & SETTINGS_MASK) & bitToTest > 0;
-    }
+    // function checkBit(uint16 bitToTest) constant internal returns (bool) {
+    //     // first remove the testing bit, then check the bitToTest
+    //     return (submissionBits & SETTINGS_MASK) & bitToTest > 0;
+    // }
 }

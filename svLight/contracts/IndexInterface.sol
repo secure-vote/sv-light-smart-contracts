@@ -6,32 +6,46 @@ import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 
 interface IxIface {
     function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes, uint16 _submissionBits) external payable returns (uint);
-    function communityEnabled(bytes32 democHash) external constant returns (bool);
     function payForDemocracy(bytes32 democHash) external payable;
+    function getPayTo() external returns(address);
+    function getCommunityBallotFee() external returns (uint);
+    function accountInGoodStanding(bytes32 democHash) external constant returns (bool);
+    function getBallotAddr(bytes32 democHash, uint n) external constant returns (address);
 }
 
 
 interface IxPaymentsSettingsIface {
-    // function democWhitelist(address) external constant returns (bool);
-    // function ballotWhitelist(address) external returns (bool);
-    function getWhitelistStatus(address) external constant returns (bool[2]);
-    // function payTo() external returns (address);
-    // function democFee() external returns (uint);
-    // function democFeeFor(address) external returns (uint);
-    // function ballotFee() external returns (uint);
-    // function ballotFeeFor(address) external returns (uint);
-    // function paymentEnabled() external returns (bool);
+    function upgradeMe(address) external returns (bool);
+
     function payoutAll() external;
+
     function setPayTo(address) external;
-    function setEth(uint128[2]) external;
+    function getPayTo() external constant returns (address);
+
     function setPaymentEnabled(bool) external;
-    function setWhitelistDemoc(address, bool) external;
-    function setWhitelistBallot(address, bool) external;
-    function setFeeFor(address, uint128[2]) external;
+    function getPaymentEnabled() external constant returns (bool);
+
+    function getCommunityBallotFee() external constant returns (uint);
+    function setCommunityBallotFee(uint) external;
+
+    function setBasicPricePerSecond(uint amount) external;
+    function getBasicPricePerSecond() external constant returns(uint);
+    function setPremiumMultiplier(uint8 amount) external;
+    function getPremiumMultiplier() external constant returns (uint8);
+    function getPremiumPricePerSecond() external constant returns (uint);
+
+    function downgradeToBasic(bytes32 democHash) external;
+    function upgradeToPremium(bytes32 democHash) external;
+
+    function payForDemocracy(bytes32 democHash) external payable;
+    function accountInGoodStanding(bytes32 democHash) external constant returns (bool);
+
+    function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) external;
 }
 
 
 interface IxBackendIface {
+    function upgradeMe(address) external returns (bool);
     // function democs(bytes32 democHash) external returns (string, address);
     // function ballotList(uint globalBallotN) external returns (bytes32, uint);
     // function democPrefixToHash(bytes13) external returns (bytes32);
@@ -47,4 +61,7 @@ interface IxBackendIface {
     function getNthBallot(bytes32 democHash, uint n) external constant returns (bytes32 specHash, bytes32 extraData, SVLightBallotBox bb, uint64 startTime, uint64 endTime);
     function getBallotBox(bytes32 democHash, uint id) external constant returns (SVLightBallotBox);
     function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb) external returns (uint ballotId);
+    function getBallotAddr(bytes32 democHash, uint n) external constant returns (address);
+
+    function getDemocHash(bytes13 prefix) external constant returns (bytes32);
 }

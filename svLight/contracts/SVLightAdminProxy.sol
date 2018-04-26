@@ -5,18 +5,20 @@ pragma solidity ^0.4.22;
 // Author: Max Kaye <max@secure.vote>
 // Released under MIT licence
 
-import { descriptiveErrors, claimReverseENS, copyMemAddrArray, upgradePtr } from "./SVCommon.sol";
-import "./IndexInterface.sol";
+import { owned, claimReverseENS, copyMemAddrArray, upgradePtr } from "./SVCommon.sol";
+import { IxIface } from "./IndexInterface.sol";
+import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 
 
-contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArray {
+contract SVLightAdminProxy is owned, claimReverseENS, copyMemAddrArray {
     bool public isProxyContract = true;
     uint public proxyVersion = 2;
 
     // storage variables
     bytes32 public democHash;
+    bool public communityBallotsEnabled = true;
     mapping (address => bool) public admins;
-    upgradePtr public forwardTo;
+    upgradePtr public _forwardTo;
     address[] adminLog;
 
     bool callActive = false;
@@ -38,7 +40,8 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
         democHash = _democHash;
         _addNewAdmin(initAdmin);
         initReverseENS(msg.sender);  // this is the SVLightIndex
-        forwardTo = upgradePtr(_fwdTo);
+        _forwardTo = upgradePtr(_fwdTo);
+        owner = initAdmin;
     }
 
 
@@ -51,24 +54,30 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
             callActive = true;
             caller = msg.sender;
 
-            // need to check if the SVIndex at forwardTo has been upgraded...
-            address _ptr = forwardTo.getUpgradePointer();
-            if (_ptr != address(0)) {
-                forwardTo = upgradePtr(_ptr);
-            }
+            address fwdTo = checkFwdAddressUpgrade();
 
             if (msg.data.length > 0) {
                 require(admins[msg.sender], "must be admin to fwd data");
                 // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
                 // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
-                require(address(forwardTo).call.value(msg.value)(msg.data));
-                callActive = false;
-            } else {
+                require(address(fwdTo).call.value(msg.value)(msg.data));
+            } else if (msg.value > 0) {
                 // allow fwding just money to the democracy
-                IxIface ix = IxIface(forwardTo);
+                IxIface ix = IxIface(fwdTo);
                 ix.payForDemocracy.value(msg.value)(democHash);
             }
+
+            callActive = false;
         }
+    }
+
+    function checkFwdAddressUpgrade() internal returns (address) {
+        // need to check if the SVIndex at forwardTo has been upgraded...
+        address _ptr = _forwardTo.getUpgradePointer();
+        if (_ptr != address(0)) {
+            _forwardTo = upgradePtr(_ptr);
+        }
+        return _forwardTo;
     }
 
     function fwdData(address toAddr, bytes data) isAdmin() public {
@@ -91,10 +100,27 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
 
     // community stuff
 
-    function deployCommunityBallot() external payable {
-        IxIface ix = IxIface(forwardTo);
-        require(ix.communityEnabled(democHash), "community ballots disabled");
+    function setCommunityBallotStatus(bool isEnabled) isAdmin() external {
+        communityBallotsEnabled = isEnabled;
+    }
 
+    // flag in submissionBits that indicates if it's official or not
+    uint16 constant IS_OFFICIAL = 16384;  // 2^14
+    function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint128 packedTimes, uint16 _submissionBits) external payable returns (uint) {
+        // ensure we mark this as a community ballot:
+        uint16 submissionBits = _submissionBits & (0xFFFF ^ IS_OFFICIAL);
+        IxIface ix = IxIface(fwdTo);
+
+        // if accounts are not in good standing then we always allow community ballots
+        bool canDoCommunityBallots = communityBallotsEnabled || !ix.accountInGoodStanding(democHash);
+        require(canDoCommunityBallots, "community ballots are not available");
+
+        address fwdTo = checkFwdAddressUpgrade();
+        uint id = ix.deployBallot(democHash, specHash, extraData, packedTimes, _submissionBits);
+        SVLightBallotBox bb = SVLightBallotBox(ix.getBallotAddr(democHash, id));
+        bb.setOwner(msg.sender);
+
+        require(bb.isOfficial() == false, "community ballots are never official");
     }
 
     // admin management
@@ -129,6 +155,10 @@ contract SVLightAdminProxy is descriptiveErrors, claimReverseENS, copyMemAddrArr
             }
         }
         return allAdmins;
+    }
+
+    function setOwnerAsAdmin() only_owner() external {
+        _addNewAdmin(owner);
     }
 
     // option for community stuff
