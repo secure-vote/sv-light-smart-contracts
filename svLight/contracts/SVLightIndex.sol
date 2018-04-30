@@ -98,7 +98,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         emit LowLevelNewDemoc(democHash);
     }
 
-    function setAdmin(bytes32 democHash, address newAdmin) only_editors() external {
+    function setDAdmin(bytes32 democHash, address newAdmin) only_editors() external {
         democs[democHash].admin = newAdmin;
     }
 
@@ -329,7 +329,7 @@ contract SVIndexPaymentSettings is IxPaymentsSettingsIface, permissioned {
         emit SetBasicPricePerSecond(amount);
     }
 
-    function getPremiumMultiplier(uint8 m) only_owner() external {
+    function setPremiumMultiplier(uint8 m) only_owner() external {
         premiumMultiplier = m;
         emit SetPremiumMultiplier(m);
     }
@@ -470,7 +470,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
         SVLightAdminProxy adminPx = adminPxFactory.spawn(democHash, msg.sender, address(this));
         address admin = address(adminPx);
-        backend.setAdmin(democHash, admin);
+        backend.setDAdmin(democHash, admin);
 
         emit DemocAdded(democHash, admin);
 
@@ -479,8 +479,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return democHash;
     }
 
-    function setAdmin(bytes32 democHash, address newAdmin) onlyDemocAdmin(democHash) external {
-        backend.setAdmin(democHash, newAdmin);
+    function setDAdmin(bytes32 democHash, address newAdmin) onlyDemocAdmin(democHash) external {
+        backend.setDAdmin(democHash, newAdmin);
     }
 
     function addCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) onlyDemocAdmin(democHash) external returns (uint) {
@@ -491,7 +491,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         backend.deprecateCategory(democHash, categoryId);
     }
 
-    function getAdmin(bytes32 democHash) external constant returns (address) {
+    function getDAdmin(bytes32 democHash) external constant returns (address) {
         return backend.getDAdmin(democHash);
     }
 

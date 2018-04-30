@@ -61,7 +61,7 @@ interface IxBackendIface {
     function getDemocCategory(bytes32 democHash, uint categoryId) external constant returns (bool, bytes32, bool, uint);
 
     function getDAdmin(bytes32 democHash) external constant returns (address);
-    function setAdmin(bytes32 democHash, address newAdmin) external;
+    function setDAdmin(bytes32 democHash, address newAdmin) external;
 
     function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 nBallots);
     function getDName(bytes32 democHash) external constant returns (string);
