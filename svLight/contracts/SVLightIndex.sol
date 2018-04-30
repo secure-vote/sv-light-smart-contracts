@@ -56,9 +56,22 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         uint ballotId;
     }
 
-    mapping (bytes32 => Democ) public democs;
+    struct Category {
+        bool deprecated;
+        bytes32 name;
+        bool hasParent;
+        uint parent;
+    }
+
+    struct CategoriesIx {
+        uint nCategories;
+        mapping(uint => Category) categories;
+    }
+
     BallotRef[] public ballotList;
 
+    mapping (bytes32 => Democ) public democs;
+    mapping (bytes32 => CategoriesIx) public democCategories;
     mapping (bytes13 => bytes32) public democPrefixToHash;
     bytes32[] public democList;
 
@@ -85,6 +98,25 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         emit LowLevelNewDemoc(democHash);
     }
 
+    function setAdmin(bytes32 democHash, address newAdmin) only_editors() external {
+        democs[democHash].admin = newAdmin;
+    }
+
+    function addCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) only_editors() external returns (uint) {
+        uint catId = democCategories[democHash].nCategories;
+        democCategories[democHash].categories[catId].name = categoryName;
+        if (hasParent) {
+            democCategories[democHash].categories[catId].hasParent = true;
+            democCategories[democHash].categories[catId].parent = parent;
+        }
+        democCategories[democHash].nCategories += 1;
+        return catId;
+    }
+
+    function deprecateCategory(bytes32 democHash, uint categoryId) only_editors() external {
+        democCategories[democHash].categories[categoryId].deprecated = true;
+    }
+
     function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 nBallots) {
         return (democs[democHash].name, democs[democHash].admin, democs[democHash].ballots.length);
     }
@@ -95,10 +127,6 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     function getDAdmin(bytes32 democHash) external constant returns (address) {
         return democs[democHash].admin;
-    }
-
-    function setAdmin(bytes32 democHash, address newAdmin) only_editors() external {
-        democs[democHash].admin = newAdmin;
     }
 
     function nBallots(bytes32 democHash) external constant returns (uint256) {
@@ -120,6 +148,18 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     function getDemocHash(bytes13 prefix) external constant returns (bytes32) {
         return democPrefixToHash[prefix];
+    }
+
+    function getDemocNCategories(bytes32 democHash) external constant returns (uint) {
+        return democCategories[democHash].nCategories;
+    }
+
+    function getDemocCategory(bytes32 democHash, uint categoryId) external constant returns (bool, bytes32, bool, uint) {
+        bool deprecated = democCategories[democHash].categories[categoryId].deprecated;
+        bytes32 catName = democCategories[democHash].categories[categoryId].name;
+        bool hasParent = democCategories[democHash].categories[categoryId].hasParent;
+        uint parent = democCategories[democHash].categories[categoryId].parent;
+        return (deprecated, catName, hasParent, parent);
     }
 
     //* ADD BALLOT TO RECORD */
@@ -196,7 +236,7 @@ contract SVIndexPaymentSettings is IxPaymentsSettingsIface, permissioned {
         payTo = msg.sender;
     }
 
-    function() payable {
+    function() payable public {
         if (gasleft() > 25000) {
             // note: allow this to fail, we have `payoutAll()` if need be.
             payTo.send(msg.value);
@@ -352,6 +392,11 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         }
     }
 
+    modifier onlyDemocAdmin(bytes32 democHash) {
+        require(msg.sender == backend.getDAdmin(democHash), "403: Forbidden. Not democ admin");
+        _;
+    }
+
     modifier payReq(uint8 paymentType) {
         // get our whitelist, generalFee, and fee's for particular addresses
         if (paymentSettings.getPaymentEnabled()){
@@ -434,12 +479,20 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return democHash;
     }
 
-    function getAdmin(bytes32 democHash) external constant returns (address) {
-        return backend.getDAdmin(democHash);
+    function setAdmin(bytes32 democHash, address newAdmin) onlyDemocAdmin(democHash) external {
+        backend.setAdmin(democHash, newAdmin);
     }
 
-    function setAdmin(bytes32 democHash, address newAdmin) onlyBy(backend.getDAdmin(democHash)) external {
-        backend.setAdmin(democHash, newAdmin);
+    function addCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) onlyDemocAdmin(democHash) external returns (uint) {
+        return backend.addCategory(democHash, categoryName, hasParent, parent);
+    }
+
+    function deprecateCategory(bytes32 democHash, uint categoryId) onlyDemocAdmin(democHash) external {
+        backend.deprecateCategory(democHash, categoryId);
+    }
+
+    function getAdmin(bytes32 democHash) external constant returns (address) {
+        return backend.getDAdmin(democHash);
     }
 
     function nBallots(bytes32 democHash) external constant returns (uint256) {
@@ -478,6 +531,14 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return paymentSettings.accountInGoodStanding(democHash);
     }
 
+    function getDemocNCategories(bytes32 democHash) external constant returns (uint) {
+        return backend.getDemocNCategories(democHash);
+    }
+
+    function getDemocCategory(bytes32 democHash, uint categoryId) external constant returns (bool, bytes32, bool, uint) {
+        return backend.getDemocCategory(democHash, categoryId);
+    }
+
     //* ADD BALLOT TO RECORD */
 
     function _addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb) internal returns (uint id) {
@@ -508,7 +569,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
 
     // sv ens domains
-    function mkDomain(bytes32 democHash, address adminSc) internal {
+    function mkDomain(bytes32 democHash, address adminSc) internal returns (bytes32 node) {
         // create domain for admin!
         // truncate the democHash to 13 bytes (which is the most that's safely convertable to a decimal string
         // without going over 32 chars), then convert to uint, then uint to string (as bytes32)
@@ -517,7 +578,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         // // although the address doesn't exist, it gives us something to lookup I suppose.
         // ensPx.regName(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
         bytes memory prefixB32 = Base32Lib.toBase32(b13ToBytes(democPrefix));
-        bytes32 node = ensPx.regName(string(prefixB32), adminSc);
+        node = ensPx.regName(string(prefixB32), adminSc);
     }
 
 

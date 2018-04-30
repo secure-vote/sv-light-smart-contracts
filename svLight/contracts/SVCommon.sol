@@ -60,7 +60,7 @@ contract descriptiveErrors {
         _;
     }
 
-    function doRequire(bool condition, string statusCode) internal returns (bool) {
+    function doRequire(bool condition, string statusCode) internal pure returns (bool) {
         require(condition, statusCode);
         return condition;
     }

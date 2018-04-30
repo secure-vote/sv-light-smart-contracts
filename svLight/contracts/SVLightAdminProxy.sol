@@ -116,7 +116,7 @@ contract SVLightAdminProxy is owned, claimReverseENS, copyMemAddrArray {
         require(canDoCommunityBallots, "community ballots are not available");
 
         address fwdTo = checkFwdAddressUpgrade();
-        uint id = ix.deployBallot(democHash, specHash, extraData, packedTimes, _submissionBits);
+        uint id = ix.deployBallot(democHash, specHash, extraData, packedTimes, submissionBits);
         SVLightBallotBox bb = SVLightBallotBox(ix.getBallotAddr(democHash, id));
         bb.setOwner(msg.sender);
 

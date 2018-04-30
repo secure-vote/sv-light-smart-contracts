@@ -52,11 +52,19 @@ interface IxBackendIface {
     // function democList(uint) external returns (bytes32);
     function nDemocs() external constant returns (uint);
     function nBallotsGlobal() external constant returns (uint);
+
     function initDemoc(string) external returns (bytes32);
-    function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 nBallots);
-    function getDName(bytes32 democHash) external constant returns (string);
+
+    function addCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
+    function deprecateCategory(bytes32 democHash, uint categoryId) external;
+    function getDemocNCategories(bytes32 democHash) external constant returns (uint);
+    function getDemocCategory(bytes32 democHash, uint categoryId) external constant returns (bool, bytes32, bool, uint);
+
     function getDAdmin(bytes32 democHash) external constant returns (address);
     function setAdmin(bytes32 democHash, address newAdmin) external;
+
+    function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 nBallots);
+    function getDName(bytes32 democHash) external constant returns (string);
     function nBallots(bytes32 democHash) external constant returns (uint256);
     function getNthBallot(bytes32 democHash, uint n) external constant returns (bytes32 specHash, bytes32 extraData, SVLightBallotBox bb, uint64 startTime, uint64 endTime);
     function getBallotBox(bytes32 democHash, uint id) external constant returns (SVLightBallotBox);
