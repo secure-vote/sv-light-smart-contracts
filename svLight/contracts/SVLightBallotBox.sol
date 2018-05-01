@@ -1,4 +1,4 @@
-pragma solidity ^0.4.22;
+pragma solidity ^0.4.23;
 
 //
 // SVLightBallotBox
@@ -23,29 +23,38 @@ pragma solidity ^0.4.22;
 
 import "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
+import { BallotBoxIface } from "./BallotBoxIface.sol";
 
 
-contract SVLightBallotBox is descriptiveErrors, owned {
+contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
+    uint256 constant BB_VERSION = 3;
+
     //// ** Storage Variables
 
     // struct for ballot
-    struct Ballot {
+    struct BallotSigned {
         bytes32 ballotData;
-        // this should be an address or ed25519 pubkey depending
         bytes32 sender;
-        // we use a uint32 here because addresses are 20 bytes and this might help
-        // solidity pack the block number well. gives us a little room to expand too if needed.
+        uint32 blockN;
+    }
+
+    struct BallotEth {
+        bytes32 ballotData;
+        address sender;
         uint32 blockN;
     }
 
     // Maps to store ballots, along with corresponding log of voters.
     // Should only be modified through `addBallotAndVoter` internal function
-    mapping (uint256 => Ballot) public ballotMap;
+    mapping (uint256 => BallotSigned) public ballotsSigned;
+    mapping (uint256 => BallotEth) public ballotsEth;
     mapping (uint256 => bytes32) public curve25519Pubkeys;
     mapping (uint256 => bytes32[2]) public ed25519Signatures;
     uint256 public nVotesCast = 0;
 
-    // NOTE - We don't actually want to include the PublicKey because _it's included in the ballotSpec_.
+    mapping (address => bool) hasVotedMap;
+
+    // NOTE - We don't actually want to include the encryption PublicKey because _it's included in the ballotSpec_.
     // It's better to ensure ppl actually have the ballot spec by not including it in the contract.
     // Plus we're already storing the hash of the ballotSpec anyway...
 
@@ -81,9 +90,16 @@ contract SVLightBallotBox is descriptiveErrors, owned {
 
     //// ** Modifiers
 
+    function _reqBallotOpen() internal {
+        require(uint64(block.timestamp) >= startTime && uint64(block.timestamp) < endTime, "Ballot closed.");
+        require(deprecated == false, "This ballot has been marked deprecated");
+    }
+
+    // NOTE: the ballotIs<A>With<B> modifiers call _reqBallotOpen() too,
+    // so ballotOpen() isn't needed when using those modifiers
     modifier ballotOpen() {
-        if(doRequire(uint64(block.timestamp) >= startTime && uint64(block.timestamp) < endTime, ERR_BALLOT_CLOSED))
-            _;
+        _reqBallotOpen();
+        _;
     }
 
     modifier onlyTesting() {
@@ -102,23 +118,27 @@ contract SVLightBallotBox is descriptiveErrors, owned {
     }
 
     modifier ballotIsEthNoEnc() {
-        if (doRequire(isEthNoEnc(), ERR_NOT_BALLOT_ETH_NO_ENC))
-            _;
+        require(isEthNoEnc(), ERR_NOT_BALLOT_ETH_NO_ENC);
+        _reqBallotOpen();
+        _;
     }
 
     modifier ballotIsEthWithEnc() {
-        if (doRequire(isEthWithEnc(), ERR_NOT_BALLOT_ETH_WITH_ENC))
-            _;
+        require(isEthWithEnc(), ERR_NOT_BALLOT_ETH_WITH_ENC);
+        _reqBallotOpen();
+        _;
     }
 
     modifier ballotIsSignedNoEnc() {
-        if (doRequire(isSignedNoEnc(), ERR_NOT_BALLOT_SIGNED_NO_ENC))
-            _;
+        require(isSignedNoEnc(), ERR_NOT_BALLOT_SIGNED_NO_ENC);
+        _reqBallotOpen();
+        _;
     }
 
     modifier ballotIsSignedWithEnc() {
-        if (doRequire(isSignedWithEnc(), ERR_NOT_BALLOT_SIGNED_WITH_ENC))
-            _;
+        require(isSignedWithEnc(), ERR_NOT_BALLOT_SIGNED_WITH_ENC);
+        _reqBallotOpen();
+        _;
     }
 
     //// ** Functions
@@ -160,38 +180,69 @@ contract SVLightBallotBox is descriptiveErrors, owned {
         index.getPayTo().transfer(msg.value);
     }
 
+    // getters and constants
+
+    function getVersion() external constant returns (uint256) {
+        return BB_VERSION;
+    }
+
+    function hasVotedEth(address v) external constant returns (bool) {
+        return hasVotedMap[v];
+    }
+
+    function getBallotSigned(uint id) external constant returns (bytes32 ballotData, bytes32 sender, uint32 blockN) {
+        return (ballotsSigned[id].ballotData, ballotsSigned[id].sender, ballotsSigned[id].blockN);
+    }
+
+    function getBallotEth(uint id) external constant returns (bytes32 ballotData, address sender, uint32 blockN) {
+        return (ballotsEth[id].ballotData, ballotsEth[id].sender, ballotsEth[id].blockN);
+    }
+
+    /* ETH BALLOTS */
+
     // Ballot submission
-    function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() ballotOpen() public returns (uint id) {
-        id = addBallot(ballot, bytes32(msg.sender));
+    function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() public returns (uint id) {
+        id = addBallotEth(ballot, msg.sender);
         emit SuccessfulVote(bytes32(msg.sender), id);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() ballotOpen() public returns (uint id) {
-        id = addBallot(ballot, bytes32(msg.sender));
+    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() public returns (uint id) {
+        id = addBallotEth(ballot, msg.sender);
         curve25519Pubkeys[id] = encPK;
         emit SuccessfulVote(bytes32(msg.sender), id);
     }
 
-    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedNoEnc() ballotOpen() public returns (uint id) {
-        id = addBallot(ballot, ed25519PK);
+    function addBallotEth(bytes32 ballot, address sender) internal returns (uint256 id) {
+        id = nVotesCast;
+        ballotsEth[id] = BallotEth(ballot, sender, uint32(block.number));
+        nVotesCast += 1;
+        hasVotedMap[sender] = true;
+    }
+
+    /* NON-ETH BALLOTS */
+
+    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedNoEnc() public returns (uint id) {
+        id = addBallotSigned(ballot, ed25519PK);
         ed25519Signatures[id] = signature;
         emit SuccessfulVote(ed25519PK, id);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedWithEnc() ballotOpen() public returns (uint id) {
-        id = addBallot(ballot, ed25519PK);
+    function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedWithEnc() public returns (uint id) {
+        id = addBallotSigned(ballot, ed25519PK);
         curve25519Pubkeys[id] = curve25519PK;
         ed25519Signatures[id] = signature;
         emit SuccessfulVote(ed25519PK, id);
     }
 
-    function addBallot(bytes32 ballot, bytes32 sender) internal returns (uint256 id) {
+    function addBallotSigned(bytes32 ballot, bytes32 sender) internal returns (uint256 id) {
         id = nVotesCast;
-        ballotMap[id] = Ballot(ballot, sender, uint32(block.number));
+        ballotsSigned[id] = BallotSigned(ballot, sender, uint32(block.number));
         nVotesCast += 1;
     }
+
+    /* ADMIN STUFF */
 
     // Allow the owner to reveal the secret key after ballot conclusion
     function revealSeckey(bytes32 _secKey) only_owner() req(block.timestamp > endTime, ERR_EARLY_SECKEY) public {
@@ -209,6 +260,7 @@ contract SVLightBallotBox is descriptiveErrors, owned {
         endTime = newEndTime;
     }
 
+    // red button for deprecation
     function setDeprecated() only_owner() public {
         deprecated = true;
         emit DeprecatedContract();
