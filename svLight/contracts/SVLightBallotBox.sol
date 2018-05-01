@@ -90,7 +90,7 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
 
     //// ** Modifiers
 
-    function _reqBallotOpen() internal {
+    function _reqBallotOpen() internal view {
         require(uint64(block.timestamp) >= startTime && uint64(block.timestamp) < endTime, "Ballot closed.");
         require(deprecated == false, "This ballot has been marked deprecated");
     }
@@ -198,16 +198,24 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
         return (ballotsEth[id].ballotData, ballotsEth[id].sender, ballotsEth[id].blockN);
     }
 
+    function getPubkey(uint256 id) external constant returns (bytes32) {
+        return curve25519Pubkeys[id];
+    }
+
+    function getSignature(uint256 id) external constant returns (bytes32[2]) {
+        return ed25519Signatures[id];
+    }
+
     /* ETH BALLOTS */
 
     // Ballot submission
-    function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() public returns (uint id) {
+    function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() external returns (uint id) {
         id = addBallotEth(ballot, msg.sender);
         emit SuccessfulVote(bytes32(msg.sender), id);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() public returns (uint id) {
+    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() external returns (uint id) {
         id = addBallotEth(ballot, msg.sender);
         curve25519Pubkeys[id] = encPK;
         emit SuccessfulVote(bytes32(msg.sender), id);
@@ -222,14 +230,14 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
 
     /* NON-ETH BALLOTS */
 
-    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedNoEnc() public returns (uint id) {
+    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedNoEnc() external returns (uint id) {
         id = addBallotSigned(ballot, ed25519PK);
         ed25519Signatures[id] = signature;
         emit SuccessfulVote(ed25519PK, id);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedWithEnc() public returns (uint id) {
+    function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedWithEnc() external returns (uint id) {
         id = addBallotSigned(ballot, ed25519PK);
         curve25519Pubkeys[id] = curve25519PK;
         ed25519Signatures[id] = signature;
@@ -251,7 +259,7 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
         emit SeckeyRevealed(_secKey);
     }
 
-    function getEncSeckey() public constant returns (bytes32) {
+    function getEncSeckey() external constant returns (bytes32) {
         return ballotEncryptionSeckey;
     }
 
@@ -264,6 +272,10 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
     function setDeprecated() only_owner() public {
         deprecated = true;
         emit DeprecatedContract();
+    }
+
+    function isDeprecated() external constant returns (bool) {
+        return deprecated;
     }
 
     // utils
