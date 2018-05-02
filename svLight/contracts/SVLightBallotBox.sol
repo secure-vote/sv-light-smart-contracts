@@ -24,9 +24,24 @@ pragma solidity ^0.4.23;
 import "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
+import { MemArrApp } from "../libs/MemArrApp.sol";
 
 
-contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
+contract BBSettings {
+    // voting settings
+    uint16 constant USE_ETH = 1;          // 2^0
+    uint16 constant USE_SIGNED = 2;       // 2^1
+    uint16 constant USE_NO_ENC = 4;       // 2^2
+    uint16 constant USE_ENC = 8;          // 2^3
+
+    // ballot settings
+    uint16 constant IS_BINDING = 8192;    // 2^13
+    uint16 constant IS_OFFICIAL = 16384;  // 2^14
+    uint16 constant USE_TESTING = 32768;  // 2^15
+}
+
+
+contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owned {
     uint256 constant BB_VERSION = 3;
 
     //// ** Storage Variables
@@ -63,22 +78,21 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
     bool seckeyRevealed = false;
 
     // Timestamps for start and end of ballot (UTC)
-    uint64 public startTime;
-    uint64 public endTime;
-    uint64 public creationBlock;
-    uint64 public startingBlockAround;
+    uint64 startTime;
+    uint64 endTime;
+    uint64 creationBlock;
 
     // specHash by which to validate the ballots integrity
-    bytes32 public specHash;
+    bytes32 specHash;
     // bits used to decide which options are enabled or disabled for submission of ballots
-    uint16 public submissionBits;
+    uint16 submissionBits;
 
     // allow tracking of sponsorship for this ballot & connection to index
     uint totalSponsorship = 0;
     IxIface index;
 
     // deprecation flag - doesn't actually do anything besides signal that this contract is deprecated;
-    bool public deprecated = false;
+    bool deprecated = false;
 
     //// ** Events
     event CreatedBallot(bytes32 _specHash, uint64 startTs, uint64 endTs, uint16 submissionBits);
@@ -91,7 +105,8 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
     //// ** Modifiers
 
     function _reqBallotOpen() internal view {
-        require(uint64(block.timestamp) >= startTime && uint64(block.timestamp) < endTime, "Ballot closed.");
+        uint64 _n = uint64(now);
+        require(_n >= startTime && _n < endTime, "Ballot closed.");
         require(deprecated == false, "This ballot has been marked deprecated");
     }
 
@@ -145,11 +160,11 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
 
     // Constructor function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    constructor(bytes32 _specHash, uint128 packedTimes, uint16 _submissionBits, IxIface ix) public {
+    constructor(bytes32 _specHash, uint256 packed, IxIface ix) public {
         index = ix;
 
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
-        submissionBits = _submissionBits;
+        submissionBits = uint16(packed >> 128);
         bool okaySubmissionBits = isEthNoEnc() || isEthWithEnc() || isSignedNoEnc() || isSignedWithEnc();
         if (!doRequire(okaySubmissionBits, ERR_BAD_SUBMISSION_BITS)) {
             revert();
@@ -164,14 +179,11 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
 
         // take the max of the start time provided and the blocks timestamp to avoid a DoS against recent token holders
         // (which someone might be able to do if they could set the timestamp in the past)
-        uint64 _startTs = uint64(packedTimes >> 64);
-        startTime = _testing ? _startTs : max(_startTs, uint64(block.timestamp));
-        endTime = uint64(packedTimes);
+        uint64 _startTs = uint64(packed >> 64);
+        startTime = _testing ? _startTs : maxU64(_startTs, uint64(now));
+        endTime = uint64(packed);
 
-        // add a rough prediction of what block is the starting block - approx 15s block times
-        startingBlockAround = uint64((startTime - block.timestamp) / 15 + block.number);
-
-        emit CreatedBallot(specHash, startTime, endTime, _submissionBits);
+        emit CreatedBallot(specHash, startTime, endTime, submissionBits);
     }
 
     // fallback function for sponsorship
@@ -182,46 +194,116 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
 
     // getters and constants
 
-    function getVersion() external constant returns (uint256) {
+    function getVersion() external view returns (uint256) {
         return BB_VERSION;
     }
 
-    function hasVotedEth(address v) external constant returns (bool) {
+    function hasVotedEth(address v) external view returns (bool) {
         return hasVotedMap[v];
     }
 
-    function getBallotSigned(uint id) external constant returns (bytes32 ballotData, bytes32 sender, uint32 blockN) {
+    function getBallotSigned(uint id) external view returns (bytes32 ballotData, bytes32 sender, uint32 blockN) {
         return (ballotsSigned[id].ballotData, ballotsSigned[id].sender, ballotsSigned[id].blockN);
     }
 
-    function getBallotEth(uint id) external constant returns (bytes32 ballotData, address sender, uint32 blockN) {
+    function getBallotEth(uint id) external view returns (bytes32 ballotData, address sender, uint32 blockN) {
         return (ballotsEth[id].ballotData, ballotsEth[id].sender, ballotsEth[id].blockN);
     }
 
-    function getPubkey(uint256 id) external constant returns (bytes32) {
+    function getPubkey(uint256 id) external view returns (bytes32) {
         return curve25519Pubkeys[id];
     }
 
-    function getSignature(uint256 id) external constant returns (bytes32[2]) {
+    function getSignature(uint256 id) external view returns (bytes32[2]) {
         return ed25519Signatures[id];
+    }
+
+    function getStartTime() external view returns (uint64) {
+        return startTime;
+    }
+
+    function getEndTime() external view returns (uint64) {
+        return endTime;
+    }
+
+    function getSubmissionBits() external view returns (uint16) {
+        return submissionBits;
+    }
+
+    function getCreationBlock() external view returns (uint64) {
+        return creationBlock;
+    }
+
+    function getSpecHash() external view returns (bytes32) {
+        return specHash;
+    }
+
+    function getBallotsEthFrom(address voter) external view
+        returns ( uint[] memory ids
+                , bytes32[] memory ballots
+                , uint32[] memory blockNs
+                , bytes32[] memory pks
+                , bytes32[2][] memory sigs
+                , bool authenticated) {
+        // ids = new uint[](0);
+        // ballots = new bytes32[](0);
+        // blockNs = new uint32[](0);
+        // pks = new bytes32[](0);
+        // sigs = new bytes32[2][](0);
+        authenticated = true;
+
+        for (uint i = 0; i < nVotesCast; i++) {
+            if (ballotsEth[i].sender == voter) {
+                ids = MemArrApp.appendUint256(ids, i);
+                ballots = MemArrApp.appendBytes32(ballots, ballotsEth[i].ballotData);
+                blockNs = MemArrApp.appendUint32(blockNs, ballotsEth[i].blockN);
+                pks = MemArrApp.appendBytes32(pks, curve25519Pubkeys[i]);
+                sigs = MemArrApp.appendBytes32Pair(sigs, ed25519Signatures[i]);
+            }
+        }
+    }
+
+    function getBallotsSignedFrom(bytes32 voter) external view
+        returns ( uint[] memory ids
+                , bytes32[] memory ballots
+                , uint32[] memory blockNs
+                , bytes32[] memory pks
+                , bytes32[2][] memory sigs
+                , bool authenticated) {
+        // ids = new uint[](0);
+        // ballots = new bytes32[](0);
+        // blockNs = new uint32[](0);
+        // pks = new bytes32[](0);
+        // sigs = new bytes32[2][](0);
+        authenticated = false;
+
+        for (uint i = 0; i < nVotesCast; i++) {
+            if (ballotsSigned[i].sender == voter) {
+                ids = MemArrApp.appendUint256(ids, i);
+                ballots = MemArrApp.appendBytes32(ballots, ballotsSigned[i].ballotData);
+                blockNs = MemArrApp.appendUint32(blockNs, ballotsSigned[i].blockN);
+                pks = MemArrApp.appendBytes32(pks, curve25519Pubkeys[i]);
+                sigs = MemArrApp.appendBytes32Pair(sigs, ed25519Signatures[i]);
+            }
+        }
     }
 
     /* ETH BALLOTS */
 
     // Ballot submission
     function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() external returns (uint id) {
-        id = addBallotEth(ballot, msg.sender);
+        id = _addBallotEth(ballot, msg.sender);
         emit SuccessfulVote(bytes32(msg.sender), id);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
     function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() external returns (uint id) {
-        id = addBallotEth(ballot, msg.sender);
+        id = _addBallotEth(ballot, msg.sender);
         curve25519Pubkeys[id] = encPK;
         emit SuccessfulVote(bytes32(msg.sender), id);
     }
 
-    function addBallotEth(bytes32 ballot, address sender) internal returns (uint256 id) {
+    function _addBallotEth(bytes32 ballot, address sender) internal returns (uint256 id) {
         id = nVotesCast;
         ballotsEth[id] = BallotEth(ballot, sender, uint32(block.number));
         nVotesCast += 1;
@@ -231,20 +313,20 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
     /* NON-ETH BALLOTS */
 
     function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedNoEnc() external returns (uint id) {
-        id = addBallotSigned(ballot, ed25519PK);
+        id = _addBallotSigned(ballot, ed25519PK);
         ed25519Signatures[id] = signature;
         emit SuccessfulVote(ed25519PK, id);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
     function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedWithEnc() external returns (uint id) {
-        id = addBallotSigned(ballot, ed25519PK);
+        id = _addBallotSigned(ballot, ed25519PK);
         curve25519Pubkeys[id] = curve25519PK;
         ed25519Signatures[id] = signature;
         emit SuccessfulVote(ed25519PK, id);
     }
 
-    function addBallotSigned(bytes32 ballot, bytes32 sender) internal returns (uint256 id) {
+    function _addBallotSigned(bytes32 ballot, bytes32 sender) internal returns (uint256 id) {
         id = nVotesCast;
         ballotsSigned[id] = BallotSigned(ballot, sender, uint32(block.number));
         nVotesCast += 1;
@@ -253,13 +335,13 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
     /* ADMIN STUFF */
 
     // Allow the owner to reveal the secret key after ballot conclusion
-    function revealSeckey(bytes32 _secKey) only_owner() req(block.timestamp > endTime, ERR_EARLY_SECKEY) public {
+    function revealSeckey(bytes32 _secKey) only_owner() req(now > endTime, ERR_EARLY_SECKEY) public {
         ballotEncryptionSeckey = _secKey;
         seckeyRevealed = true; // this flag allows the contract to be locked
         emit SeckeyRevealed(_secKey);
     }
 
-    function getEncSeckey() external constant returns (bytes32) {
+    function getEncSeckey() external view returns (bytes32) {
         return ballotEncryptionSeckey;
     }
 
@@ -274,12 +356,12 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
         emit DeprecatedContract();
     }
 
-    function isDeprecated() external constant returns (bool) {
+    function isDeprecated() external view returns (bool) {
         return deprecated;
     }
 
     // utils
-    function max(uint64 a, uint64 b) pure internal returns(uint64) {
+    function maxU64(uint64 a, uint64 b) pure internal returns(uint64) {
         if (a > b) {
             return a;
         }
@@ -289,48 +371,45 @@ contract SVLightBallotBox is descriptiveErrors, owned, BallotBoxIface {
     // submission bits stuff
     // submission bits are structured as follows:
 
-    uint16 constant USE_ETH = 1;    // 2^0
-    uint16 constant USE_SIGNED = 2; // 2^1
-    uint16 constant USE_NO_ENC = 4; // 2^2
-    uint16 constant USE_ENC = 8;    // 2^3
+    // do (bits & SETTINGS_MASK) to get just operational bits (as opposed to testing or official flag)
+    uint16 constant SETTINGS_MASK = 0xFFFF ^ USE_TESTING ^ IS_OFFICIAL ^ IS_BINDING;
 
-
-    uint16 constant IS_OFFICIAL = 16384;  // 2^14
-    uint16 constant USE_TESTING = 32768;  // 2^15
-    uint16 constant SETTINGS_MASK = 0xFFFF ^ USE_TESTING ^ IS_OFFICIAL;  // do (bits & SETTINGS_MASK) to get just operational bits (as opposed to testing or official flag)
-
-    function isEthNoEnc() constant internal returns (bool) {
+    function isEthNoEnc() view internal returns (bool) {
         return checkFlags(USE_ETH | USE_NO_ENC);
     }
 
-    function isEthWithEnc() constant internal returns (bool) {
+    function isEthWithEnc() view internal returns (bool) {
         return checkFlags(USE_ETH | USE_ENC);
     }
 
-    function isSignedNoEnc() constant internal returns (bool) {
+    function isSignedNoEnc() view internal returns (bool) {
         return checkFlags(USE_SIGNED | USE_NO_ENC);
     }
 
-    function isSignedWithEnc() constant internal returns (bool) {
+    function isSignedWithEnc() view internal returns (bool) {
         return checkFlags(USE_SIGNED | USE_ENC);
     }
 
-    function isOfficial() constant public returns (bool) {
+    function isOfficial() view public returns (bool) {
         return (submissionBits & IS_OFFICIAL) == IS_OFFICIAL;
     }
 
-    function isTesting() constant public returns (bool) {
+    function isBinding() view public returns (bool) {
+        return (submissionBits & IS_BINDING) == IS_BINDING;
+    }
+
+    function isTesting() view public returns (bool) {
         return (submissionBits & USE_TESTING) == USE_TESTING;
     }
 
-    function checkFlags(uint16 expected) constant internal returns (bool) {
+    function checkFlags(uint16 expected) view internal returns (bool) {
         // this should ignore ONLY the testing/flag bits - all other bits are significant
         uint16 sBitsNoSettings = submissionBits & SETTINGS_MASK;
         // then we want ONLY expected
         return sBitsNoSettings == expected;
     }
 
-    // function checkBit(uint16 bitToTest) constant internal returns (bool) {
+    // function checkBit(uint16 bitToTest) view internal returns (bool) {
     //     // first remove the testing bit, then check the bitToTest
     //     return (submissionBits & SETTINGS_MASK) & bitToTest > 0;
     // }

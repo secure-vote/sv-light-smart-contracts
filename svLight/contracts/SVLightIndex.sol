@@ -16,6 +16,7 @@ import { StringLib } from "../libs/StringLib.sol";
 import { Base32Lib } from "../libs/Base32Lib.sol";
 import { SvEnsEverythingPx } from "../../ensSCs/contracts/SvEnsEverythingPx.sol";
 import "./IndexInterface.sol";
+import { BallotBoxIface } from "./BallotBoxIface.sol";
 
 
 contract SVAdminPxFactory {
@@ -26,8 +27,8 @@ contract SVAdminPxFactory {
 
 
 contract SVBBoxFactory {
-    function spawn(bytes32 _specHash, uint128 packedTimes, uint16 _submissionBits, IxIface ix, address admin) external returns (SVLightBallotBox bb) {
-        bb = new SVLightBallotBox(_specHash, packedTimes, _submissionBits, ix);
+    function spawn(bytes32 _specHash, uint256 packed, IxIface ix, address admin) external returns (BallotBoxIface bb) {
+        bb = new SVLightBallotBox(_specHash, packed, ix);
         bb.setOwner(admin);
     }
 }
@@ -40,7 +41,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
     struct Ballot {
         bytes32 specHash;
         bytes32 extraData;
-        SVLightBallotBox bb;
+        BallotBoxIface bb;
         uint64 startTs;
         uint64 endTs;
     }
@@ -77,17 +78,25 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     //* GLOBAL INFO */
 
-    function nDemocs() external constant returns (uint) {
+    function getGDemocsN() external view returns (uint) {
         return democList.length;
     }
 
-    function nBallotsGlobal() external constant returns (uint) {
+    function getGDemoc(uint id) external view returns (bytes32) {
+        return democList[id];
+    }
+
+    function getGBallotsN() external view returns (uint) {
         return ballotList.length;
     }
 
-    //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
+    function getGBallot(uint id) external view returns (bytes32 democHash, uint ballotId) {
+        return (ballotList[id].democHash, ballotList[id].ballotId);
+    }
 
-    function initDemoc(string democName) only_editors() external returns (bytes32 democHash) {
+    //* DEMOCRACY ADMIN FUNCTIONS */
+
+    function dInit(string democName) only_editors() external returns (bytes32 democHash) {
         // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
         // (particularly because `this` and prevBlockHash are part of the hash)
         democHash = keccak256(democName, democList.length, blockhash(block.number-1), this);
@@ -102,7 +111,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         democs[democHash].admin = newAdmin;
     }
 
-    function addCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) only_editors() external returns (uint) {
+    function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) only_editors() external returns (uint) {
         uint catId = democCategories[democHash].nCategories;
         democCategories[democHash].categories[catId].name = categoryName;
         if (hasParent) {
@@ -113,68 +122,69 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         return catId;
     }
 
-    function deprecateCategory(bytes32 democHash, uint categoryId) only_editors() external {
+    function dDeprecateCategory(bytes32 democHash, uint categoryId) only_editors() external {
         democCategories[democHash].categories[categoryId].deprecated = true;
     }
 
-    function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 nBallots) {
+    /* democ getters */
+
+    function getDHash(bytes13 prefix) external view returns (bytes32) {
+        return democPrefixToHash[prefix];
+    }
+
+    function getDInfo(bytes32 democHash) external view returns (string name, address admin, uint256 nBallots) {
         return (democs[democHash].name, democs[democHash].admin, democs[democHash].ballots.length);
     }
 
-    function getDName(bytes32 democHash) external constant returns (string) {
+    function getDName(bytes32 democHash) external view returns (string) {
         return democs[democHash].name;
     }
 
-    function getDAdmin(bytes32 democHash) external constant returns (address) {
+    function getDAdmin(bytes32 democHash) external view returns (address) {
         return democs[democHash].admin;
     }
 
-    function nBallots(bytes32 democHash) external constant returns (uint256) {
+    function getDBallotsN(bytes32 democHash) external view returns (uint256) {
         return democs[democHash].ballots.length;
     }
 
-    function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, SVLightBallotBox bb, uint64 startTime, uint64 endTime) {
+    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime) {
         Ballot memory b = democs[democHash].ballots[n];
         return (b.specHash, b.extraData, b.bb, b.startTs, b.endTs);
     }
 
-    function getBallotAddr(bytes32 democHash, uint n) external constant returns (address) {
+    function getDBallotAddr(bytes32 democHash, uint n) external view returns (address) {
         return address(democs[democHash].ballots[n].bb);
     }
 
-    function getBallotBox(bytes32 democHash, uint id) external constant returns (SVLightBallotBox bb) {
+    function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface bb) {
         bb = democs[democHash].ballots[id].bb;
     }
 
-    function getDemocHash(bytes13 prefix) external constant returns (bytes32) {
-        return democPrefixToHash[prefix];
-    }
-
-    function getDemocNCategories(bytes32 democHash) external constant returns (uint) {
+    function getDCategoriesN(bytes32 democHash) external view returns (uint) {
         return democCategories[democHash].nCategories;
     }
 
-    function getDemocCategory(bytes32 democHash, uint categoryId) external constant returns (bool, bytes32, bool, uint) {
-        bool deprecated = democCategories[democHash].categories[categoryId].deprecated;
-        bytes32 catName = democCategories[democHash].categories[categoryId].name;
-        bool hasParent = democCategories[democHash].categories[categoryId].hasParent;
-        uint parent = democCategories[democHash].categories[categoryId].parent;
-        return (deprecated, catName, hasParent, parent);
+    function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool deprecated, bytes32 catName, bool hasParent, uint256 parent) {
+        deprecated = democCategories[democHash].categories[categoryId].deprecated;
+        catName = democCategories[democHash].categories[categoryId].name;
+        hasParent = democCategories[democHash].categories[categoryId].hasParent;
+        parent = democCategories[democHash].categories[categoryId].parent;
     }
 
     //* ADD BALLOT TO RECORD */
 
-    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, SVLightBallotBox bb, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
+    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
         ballotId = democs[democHash].ballots.length;
         democs[democHash].ballots.push(Ballot(specHash, extraData, bb, startTs, endTs));
         ballotList.push(BallotRef(democHash, ballotId));
         emit LowLevelNewBallot(democHash, ballotId);
     }
 
-    function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb) only_editors() external returns (uint ballotId) {
-        bytes32 specHash = bb.specHash();
-        uint64 startTs = bb.startTime();
-        uint64 endTs = bb.endTime();
+    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb) only_editors() external returns (uint ballotId) {
+        bytes32 specHash = bb.getSpecHash();
+        uint64 startTs = bb.getStartTime();
+        uint64 endTs = bb.getEndTime();
         ballotId = _commitBallot(democHash, specHash, extraData, bb, startTs, endTs);
     }
 
@@ -237,9 +247,9 @@ contract SVIndexPaymentSettings is IxPaymentsSettingsIface, permissioned {
     }
 
     function() payable public {
+        // check gas because we need to look up payTo
         if (gasleft() > 25000) {
-            // note: allow this to fail, we have `payoutAll()` if need be.
-            payTo.send(msg.value);
+            payTo.transfer(msg.value);
         }
     }
 
@@ -268,7 +278,7 @@ contract SVIndexPaymentSettings is IxPaymentsSettingsIface, permissioned {
         payTo.transfer(msg.value);
     }
 
-    function accountInGoodStanding(bytes32 democHash) external constant returns (bool) {
+    function accountInGoodStanding(bytes32 democHash) external view returns (bool) {
         return accounts[democHash].paidUpTill > now;
     }
 
@@ -305,7 +315,7 @@ contract SVIndexPaymentSettings is IxPaymentsSettingsIface, permissioned {
     }
 
     function payoutAll() external {
-        require(payTo.call.value(address(this).balance)());
+        payTo.transfer(address(this).balance);
     }
 
     //* PAYMENT AND OWNER FUNCTIONS */
@@ -336,31 +346,31 @@ contract SVIndexPaymentSettings is IxPaymentsSettingsIface, permissioned {
 
     /* Getters */
 
-    function getPayTo() external constant returns(address) {
+    function getPayTo() external view returns(address) {
         return payTo;
     }
 
-    function getPaymentEnabled() external constant returns (bool) {
+    function getPaymentEnabled() external view returns (bool) {
         return paymentEnabled;
     }
 
-    function getCommunityBallotFee() external constant returns(uint) {
+    function getCommunityBallotFee() external view returns(uint) {
         return communityBallotFee;
     }
 
-    function getBasicPricePerSecond() external constant returns(uint) {
+    function getBasicPricePerSecond() external view returns(uint) {
         return basicPricePerSecond;
     }
 
-    function getPremiumMultiplier() external constant returns (uint8) {
+    function getPremiumMultiplier() external view returns (uint8) {
         return premiumMultiplier;
     }
 
-    function getPremiumPricePerSecond() external constant returns (uint) {
+    function getPremiumPricePerSecond() external view returns (uint) {
         return _premiumPricePerSec();
     }
 
-    function _premiumPricePerSec() internal constant returns (uint) {
+    function _premiumPricePerSec() internal view returns (uint) {
         return uint(premiumMultiplier) * basicPricePerSecond;
     }
 }
@@ -372,6 +382,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     SVAdminPxFactory public adminPxFactory;
     SVBBoxFactory public bbFactory;
     SvEnsEverythingPx public ensPx;
+
+    uint256 constant _version = 2;
 
     //* EVENTS /
 
@@ -397,29 +409,14 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         _;
     }
 
-    modifier payReq(uint8 paymentType) {
-        // get our whitelist, generalFee, and fee's for particular addresses
-        if (paymentSettings.getPaymentEnabled()){
-            revert("need to update payReq to check minutes avialable for democ");
-
-            // require(msg.sender.call.value(remainder)(), ERR_FAILED_TO_PROVIDE_CHANGE);
-            // require(paymentSettings.call.value(v)(), ERR_FAILED_TO_FWD_PAYMENT);
-            // emit PaymentMade([v, remainder]);
-        }
-        // do main
-        _;
-    }
-
-
-    //* FUNCTIONS /
-
+    //* FUNCTIONS *//
 
     // constructor
-    constructor(IxBackendIface _backend, IxPaymentsSettingsIface _payBackend, SVAdminPxFactory _pxFactory, SVBBoxFactory _bbFactory, SvEnsEverythingPx _ensPx) public {
-        backend = _backend;
-        paymentSettings = _payBackend;
-        adminPxFactory = _pxFactory;
-        bbFactory = _bbFactory;
+    constructor(IxBackendIface _b, IxPaymentsSettingsIface _pay, SVAdminPxFactory _pxF, SVBBoxFactory _bbF, SvEnsEverythingPx _ensPx) public {
+        backend = _b;
+        paymentSettings = _pay;
+        adminPxFactory = _pxF;
+        bbFactory = _bbF;
         ensPx = _ensPx;
     }
 
@@ -444,79 +441,12 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
     //* GLOBAL INFO */
 
-    function getPaymentEnabled() public constant returns (bool) {
+    function getVersion() external view returns (uint256) {
+        return _version;
+    }
+
+    function getPaymentEnabled() external view returns (bool) {
         return paymentSettings.getPaymentEnabled();
-    }
-
-    function nDemocs() public constant returns (uint256) {
-        return backend.nDemocs();
-    }
-
-    //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
-
-    // todo: handling payments for creating a democ
-    function initDemoc(string democName) not_upgraded() public payable returns (bytes32) {
-        // address admin;
-        // if(isContract(msg.sender)) {
-        //     // if the caller is a contract we presume they can handle multisig themselves...
-        //     admin = msg.sender;
-        // } else {
-        //     // otherwise let's create a proxy sc for them
-        //     SVLightAdminProxy adminPx = adminPxFactory.spawn(msg.sender, address(this));
-        //     admin = address(adminPx);
-        // }
-
-        bytes32 democHash = backend.initDemoc(democName);
-
-        SVLightAdminProxy adminPx = adminPxFactory.spawn(democHash, msg.sender, address(this));
-        address admin = address(adminPx);
-        backend.setDAdmin(democHash, admin);
-
-        emit DemocAdded(democHash, admin);
-
-        mkDomain(democHash, admin);
-
-        return democHash;
-    }
-
-    function setDAdmin(bytes32 democHash, address newAdmin) onlyDemocAdmin(democHash) external {
-        backend.setDAdmin(democHash, newAdmin);
-    }
-
-    function addCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) onlyDemocAdmin(democHash) external returns (uint) {
-        return backend.addCategory(democHash, categoryName, hasParent, parent);
-    }
-
-    function deprecateCategory(bytes32 democHash, uint categoryId) onlyDemocAdmin(democHash) external {
-        backend.deprecateCategory(democHash, categoryId);
-    }
-
-    function getDAdmin(bytes32 democHash) external constant returns (address) {
-        return backend.getDAdmin(democHash);
-    }
-
-    function nBallots(bytes32 democHash) external constant returns (uint256) {
-        return backend.nBallots(democHash);
-    }
-
-    function getDemocInfo(bytes32 democHash) external constant returns (string name, address admin, uint256 _nBallots) {
-        return backend.getDemocInfo(democHash);
-    }
-
-    function getNthBallot(bytes32 democHash, uint256 n) external constant returns (bytes32 specHash, bytes32 extraData, address votingContract, uint64 startTime, uint64 endTime) {
-        return backend.getNthBallot(democHash, n);
-    }
-
-    function getBallotAddr(bytes32 democHash, uint n) external constant returns (address) {
-        return backend.getBallotAddr(democHash, n);
-    }
-
-    function getDemocHash(bytes13 prefix) external constant returns (bytes32) {
-        return backend.getDemocHash(prefix);
-    }
-
-    function payForDemocracy(bytes32 democHash) external payable {
-        paymentSettings.payForDemocracy.value(msg.value)(democHash);
     }
 
     function getPayTo() external returns (address) {
@@ -527,41 +457,120 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return paymentSettings.getCommunityBallotFee();
     }
 
-    function accountInGoodStanding(bytes32 democHash) external constant returns (bool) {
+    function getGDemocsN() external view returns (uint256) {
+        return backend.getGDemocsN();
+    }
+
+    function getGDemoc(uint256 n) external view returns (bytes32) {
+        return backend.getGDemoc(n);
+    }
+
+    //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
+
+    // todo: handling payments for creating a democ
+    function dInit(string democName) not_upgraded() external payable returns (bytes32) {
+        // address admin;
+        // if(isContract(msg.sender)) {
+        //     // if the caller is a contract we presume they can handle multisig themselves...
+        //     admin = msg.sender;
+        // } else {
+        //     // otherwise let's create a proxy sc for them
+        //     SVLightAdminProxy adminPx = adminPxFactory.spawn(msg.sender, address(this));
+        //     admin = address(adminPx);
+        // }
+
+        bytes32 democHash = backend.dInit(democName);
+
+        SVLightAdminProxy adminPx = adminPxFactory.spawn(democHash, msg.sender, address(this));
+        address admin = address(adminPx);
+        backend.setDAdmin(democHash, admin);
+
+        emit DemocAdded(democHash, admin);
+
+        mkDomain(democHash, admin);
+
+        paymentSettings.payForDemocracy.value(msg.value)(democHash);
+
+        return democHash;
+    }
+
+    // democ payments
+    function payForDemocracy(bytes32 democHash) external payable {
+        paymentSettings.payForDemocracy.value(msg.value)(democHash);
+    }
+
+    function accountInGoodStanding(bytes32 democHash) external view returns (bool) {
         return paymentSettings.accountInGoodStanding(democHash);
     }
 
-    function getDemocNCategories(bytes32 democHash) external constant returns (uint) {
-        return backend.getDemocNCategories(democHash);
+    // admin methods
+    function setDAdmin(bytes32 democHash, address newAdmin) onlyDemocAdmin(democHash) external {
+        backend.setDAdmin(democHash, newAdmin);
     }
 
-    function getDemocCategory(bytes32 democHash, uint categoryId) external constant returns (bool, bytes32, bool, uint) {
-        return backend.getDemocCategory(democHash, categoryId);
+    function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) onlyDemocAdmin(democHash) external returns (uint) {
+        return backend.dAddCategory(democHash, categoryName, hasParent, parent);
+    }
+
+    function dDeprecateCategory(bytes32 democHash, uint categoryId) onlyDemocAdmin(democHash) external {
+        backend.dDeprecateCategory(democHash, categoryId);
+    }
+
+    // getters for democs
+    function getDAdmin(bytes32 democHash) external view returns (address) {
+        return backend.getDAdmin(democHash);
+    }
+
+    function getDBallotsN(bytes32 democHash) external view returns (uint256) {
+        return backend.getDBallotsN(democHash);
+    }
+
+    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface votingContract, uint64 startTime, uint64 endTime) {
+        return backend.getDBallot(democHash, n);
+    }
+
+    function getDInfo(bytes32 democHash) external view returns (string name, address admin, uint256 _nBallots) {
+        return backend.getDInfo(democHash);
+    }
+
+    function getDBallotAddr(bytes32 democHash, uint n) external view returns (address) {
+        return backend.getDBallotAddr(democHash, n);
+    }
+
+    function getDHash(bytes13 prefix) external view returns (bytes32) {
+        return backend.getDHash(prefix);
+    }
+
+    function getDCategoriesN(bytes32 democHash) external view returns (uint) {
+        return backend.getDCategoriesN(democHash);
+    }
+
+    function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool, bytes32, bool, uint) {
+        return backend.getDCategory(democHash, categoryId);
     }
 
     //* ADD BALLOT TO RECORD */
 
-    function _addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb) internal returns (uint id) {
-        id = backend.addBallot(democHash, extraData, bb);
+    function _addBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb) internal returns (uint id) {
+        id = backend.dAddBallot(democHash, extraData, bb);
         emit BallotAdded(democHash, id);
     }
 
-    function addBallot(bytes32 democHash, bytes32 extraData, SVLightBallotBox bb)
+    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb)
                       only_owner()
                       external
                       returns (uint) {
         return _addBallot(democHash, extraData, bb);
     }
 
-    function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes, uint16 _submissionBits)
+    function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed)
                           onlyBy(backend.getDAdmin(democHash))
                           // todo: handling payments here
                           external payable
                           returns (uint) {
-        SVLightBallotBox bb = bbFactory.spawn(
+        BallotBoxIface bb = bbFactory.spawn(
             specHash,
-            packedTimes,
-            _submissionBits,
+            packed,
             this,
             msg.sender);
         return _addBallot(democHash, extraData, bb);
@@ -586,7 +595,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
 
     // utils
-    function max(uint64 a, uint64 b) pure internal returns(uint64) {
+    function maxU64(uint64 a, uint64 b) pure internal returns(uint64) {
         if (a > b) {
             return a;
         }

@@ -78,12 +78,11 @@ contract owned is descriptiveErrors {
         _;
     }
 
-    constructor() descriptiveErrors() public {
+    constructor() public {
         owner = msg.sender;
-        emit OwnerChanged(msg.sender);
     }
 
-    function setOwner(address newOwner) only_owner() public {
+    function setOwner(address newOwner) only_owner() external {
         owner = newOwner;
         emit OwnerChanged(newOwner);
     }

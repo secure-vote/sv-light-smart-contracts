@@ -7,10 +7,11 @@ pragma solidity ^0.4.22;
 
 import { owned, claimReverseENS, copyMemAddrArray, upgradePtr } from "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
-import { SVLightBallotBox } from "./SVLightBallotBox.sol";
+import { SVLightBallotBox, BBSettings } from "./SVLightBallotBox.sol";
+import { BallotBoxIface } from "./BallotBoxIface.sol";
 
 
-contract SVLightAdminProxy is owned, claimReverseENS, copyMemAddrArray {
+contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
     bool public isProxyContract = true;
     uint public proxyVersion = 2;
 
@@ -29,9 +30,8 @@ contract SVLightAdminProxy is owned, claimReverseENS, copyMemAddrArray {
     event FailedToFwdCall(uint value, bytes data);
 
     modifier isAdmin() {
-        if(doRequire(admins[msg.sender], ERR_PX_FORBIDDEN)) {
-            _;
-        }
+        require(admins[msg.sender], ERR_PX_FORBIDDEN);
+        _;
     }
 
 
@@ -39,7 +39,6 @@ contract SVLightAdminProxy is owned, claimReverseENS, copyMemAddrArray {
         // this will mostly be called by SVLightIndex so we shouldn't use msg.sender.
         democHash = _democHash;
         _addNewAdmin(initAdmin);
-        initReverseENS(msg.sender);  // this is the SVLightIndex
         _forwardTo = upgradePtr(_fwdTo);
         owner = initAdmin;
     }
@@ -60,7 +59,7 @@ contract SVLightAdminProxy is owned, claimReverseENS, copyMemAddrArray {
                 require(admins[msg.sender], "must be admin to fwd data");
                 // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
                 // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
-                require(address(fwdTo).call.value(msg.value)(msg.data));
+                require(address(fwdTo).call.value(msg.value)(msg.data), "failed to fwd tx from admin");
             } else if (msg.value > 0) {
                 // allow fwding just money to the democracy
                 IxIface ix = IxIface(fwdTo);
@@ -105,22 +104,23 @@ contract SVLightAdminProxy is owned, claimReverseENS, copyMemAddrArray {
     }
 
     // flag in submissionBits that indicates if it's official or not
-    uint16 constant IS_OFFICIAL = 16384;  // 2^14
-    function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint128 packedTimes, uint16 _submissionBits) external payable returns (uint) {
-        // ensure we mark this as a community ballot:
-        uint16 submissionBits = _submissionBits & (0xFFFF ^ IS_OFFICIAL);
+    function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint256 _packed) external payable returns (uint) {
+        // ensure we mark this as a community ballot by disabling official and binding flags:
+        // submissionBits is a uint16 that lives at [112 bits][>> 16 bits <<][128 bits]
+        uint256 packed = _packed & ((uint256(0) - 1) ^ (uint256(IS_OFFICIAL | IS_BINDING) << 128));
+
+        address fwdTo = checkFwdAddressUpgrade();
         IxIface ix = IxIface(fwdTo);
 
         // if accounts are not in good standing then we always allow community ballots
         bool canDoCommunityBallots = communityBallotsEnabled || !ix.accountInGoodStanding(democHash);
         require(canDoCommunityBallots, "community ballots are not available");
 
-        address fwdTo = checkFwdAddressUpgrade();
-        uint id = ix.deployBallot(democHash, specHash, extraData, packedTimes, submissionBits);
-        SVLightBallotBox bb = SVLightBallotBox(ix.getBallotAddr(democHash, id));
+        uint id = ix.dDeployBallot(democHash, specHash, extraData, packed);
+        BallotBoxIface bb = BallotBoxIface(ix.getDBallotAddr(democHash, id));
         bb.setOwner(msg.sender);
 
-        require(bb.isOfficial() == false, "community ballots are never official");
+        require(bb.isOfficial() == false && bb.isBinding() == false, "community ballots are never official or binding");
     }
 
     // admin management
