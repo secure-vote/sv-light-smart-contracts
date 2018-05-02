@@ -30,4 +30,19 @@ interface BallotBoxIface {
     function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) external returns (uint id);
 
     function setOwner(address) external;
+
+    function getBallotsEthFrom(address voter) external view
+        returns ( uint[] memory ids
+                , bytes32[] memory ballots
+                , uint32[] memory blockNs
+                , bytes32[] memory pks
+                , bytes32[2][] memory sigs
+                , bool authenticated);
+    function getBallotsSignedFrom(bytes32 voter) external view
+        returns ( uint[] memory ids
+                , bytes32[] memory ballots
+                , uint32[] memory blockNs
+                , bytes32[] memory pks
+                , bytes32[2][] memory sigs
+                , bool authenticated);
 }
