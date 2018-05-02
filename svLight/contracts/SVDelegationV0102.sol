@@ -12,9 +12,10 @@ pragma solidity ^0.4.22;
 
 import "./SVCommon.sol";
 import "./SVDelegationV0101.sol";
+import { MemArrApp } from "../libs/MemArrApp.sol";
 
 
-contract SVDelegationBackend is permissioned, copyMemAddrArray, copyMemBytes32Array, copyMemUint256Array {
+contract SVDelegationBackend is permissioned {
     SVDelegationV0101 public v1DlgtSC;
 
     uint256 constant GLOBAL_NAMESPACE = 0;
@@ -140,8 +141,8 @@ contract SVDelegationBackend is permissioned, copyMemAddrArray, copyMemBytes32Ar
             d = _allDelegations[i];
             if (d.delegate == bytes32(delegate)) {
                 // since `.push` isn't available on memory arrays, use their length as the next index location
-                voters = _appendMemArray(voters, address(d.voter));
-                tokenContracts = _appendMemArray(tokenContracts, address(d.namespace));
+                voters = MemArrApp.appendAddress(voters, address(d.voter));
+                tokenContracts = MemArrApp.appendAddress(tokenContracts, address(d.namespace));
             }
         }
 
@@ -166,8 +167,8 @@ contract SVDelegationBackend is permissioned, copyMemAddrArray, copyMemBytes32Ar
             d = _allDelegations[i];
             if (d.delegate == bytes32(delegate)) {
                 // since `.push` isn't available on memory arrays, use their length as the next index location
-                voters = _appendB32MemArray(voters, d.voter);
-                namespaces = _appendUint256MemArray(namespaces, d.namespace);
+                voters = MemArrApp.appendBytes32(voters, d.voter);
+                namespaces = MemArrApp.appendUint256(namespaces, d.namespace);
             }
         }
 
