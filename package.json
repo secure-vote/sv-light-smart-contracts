@@ -27,7 +27,7 @@
     "yargs": "^11.0.0"
   },
   "scripts": {
-    "test": "cd svLight && truffle test",
+    "test": "./compileAllSvLight.sh && cd svLight && truffle test",
     "test-watch": "cd svLight && reflex truffle test",
     "deploy": "node ./bin/deploy.js",
     "cli": "node -i ./bin/contractCli.js --name",
