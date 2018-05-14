@@ -268,7 +268,7 @@ contract canCheckOtherContracts {
 
 
 // interface for ENS reverse registrar
-interface ReverseRegistrar {
+interface ReverseRegistrarIface {
     function claim(address owner) external returns (bytes32);
 }
 
@@ -279,7 +279,7 @@ contract claimReverseENS is canCheckOtherContracts {
         // 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069 is ENS ReverseRegistrar on Mainnet
         address ensRevAddr = 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069;
         if (isContract(ensRevAddr)) {
-            ReverseRegistrar ens = ReverseRegistrar(ensRevAddr);
+            ReverseRegistrarIface ens = ReverseRegistrarIface(ensRevAddr);
             ens.claim(_owner);
         }
     }

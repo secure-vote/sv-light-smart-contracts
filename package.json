@@ -31,7 +31,7 @@
     "test-watch": "cd svLight && reflex truffle test",
     "deploy": "node ./bin/deploy.js",
     "cli": "node -i ./bin/contractCli.js --name",
-    "compile-sv-light": "for f in $(ls ./svLight/contracts | grep sol); do ./bin/compile.sh -d svLight -c $f; done",
+    "compile-sv-light": "./compileAllSvLight.sh",
     "compile-ens": "for f in $(ls ./ensSCs/contracts | grep sol); do ./bin/compile.sh -d ensSCs -c $f -o _distEns; done"
   }
 }

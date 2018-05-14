@@ -5,7 +5,7 @@ import "./ENS.sol";
 /**
  * The ENS registry contract.
  */
-contract SvEnsRegistry is SvEns {
+contract SvEnsRegistry is SvEnsIface {
     struct Record {
         address owner;
         address resolver;

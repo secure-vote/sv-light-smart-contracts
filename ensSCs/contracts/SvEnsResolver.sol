@@ -37,7 +37,7 @@ contract PublicResolver {
         mapping(uint256=>bytes) abis;
     }
 
-    ENS ens;
+    ENSIface ens;
 
     mapping (bytes32 => Record) records;
 
@@ -50,7 +50,7 @@ contract PublicResolver {
      * Constructor.
      * @param ensAddr The ENS registrar contract.
      */
-    constructor(ENS ensAddr) public {
+    constructor(ENSIface ensAddr) public {
         ens = ensAddr;
     }
 

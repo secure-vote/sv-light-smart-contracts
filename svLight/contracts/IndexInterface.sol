@@ -8,17 +8,25 @@ interface IxIface {
     function getVersion() external view returns (uint256);
 
     function doUpgrade(address) external;
-    function setPaymentBackend(IxPaymentsSettingsIface) external;
+    function setPaymentBackend(IxPaymentsIface) external;
     function setBackend(IxBackendIface) external;
 
     function getPaymentEnabled() external view returns (bool);
-    function getPayTo() external returns(address);
+    function getPayTo() external returns (address);
+    function getCommunityBallotCentsPrice() external returns (uint);
+
+    function getGDemocsN() external view returns (uint256);
+    function getGDemoc(uint256 n) external view returns (bytes32);
+
+    function dInit(string democName) external payable returns (bytes32);
+
     function payForDemocracy(bytes32 democHash) external payable;
     function accountInGoodStanding(bytes32 democHash) external view returns (bool);
 
-    function getCommunityBallotFee() external returns (uint);
+    function setDAdmin(bytes32 democHash, address newAdmin) external;
+    function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
+    function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
 
-    function dInit(string name) external payable returns (bytes32);
     function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint);
     // only ix owner - used for adding past ballots
     function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb) external returns (uint);
@@ -33,15 +41,13 @@ interface IxIface {
 
     /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
-    function getDBallot(bytes32 democHash, uint n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime);
+    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime);
     function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface);
     function getDBallotAddr(bytes32 democHash, uint n) external view returns (address);
-
-    event DemocAdded(bytes32 democHash, address admin);
 }
 
 
-interface IxPaymentsSettingsIface {
+interface IxPaymentsIface {
     function upgradeMe(address) external returns (bool);
 
     function payoutAll() external;
@@ -52,14 +58,17 @@ interface IxPaymentsSettingsIface {
     function setPaymentEnabled(bool) external;
     function getPaymentEnabled() external view returns (bool);
 
-    function getCommunityBallotFee() external view returns (uint);
-    function setCommunityBallotFee(uint) external;
+    function getCommunityBallotCentsPrice() external view returns (uint);
+    function setCommunityBallotCentsPrice(uint) external;
 
-    function setBasicPricePerSecond(uint amount) external;
-    function getBasicPricePerSecond() external view returns(uint);
+    function setBasicCentsPricePer30Days(uint amount) external;
+    function getBasicCentsPricePer30Days() external view returns(uint);
     function setPremiumMultiplier(uint8 amount) external;
     function getPremiumMultiplier() external view returns (uint8);
-    function getPremiumPricePerSecond() external view returns (uint);
+    function getPremiumPricePer30Days() external view returns (uint);
+    function setWeiPerCent(uint weiPerCent) external;
+    function getWeiPerCent() external view returns (uint weiPerCent);
+    function getUsdEthExchangeRate() external view returns (uint centsPerEth);
 
     function downgradeToBasic(bytes32 democHash) external;
     function upgradeToPremium(bytes32 democHash) external;
@@ -68,6 +77,20 @@ interface IxPaymentsSettingsIface {
     function accountInGoodStanding(bytes32 democHash) external view returns (bool);
 
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) external;
+
+    function getPaymentLogN() external view returns (uint);
+    function getPaymentLog(uint n) external view returns (bool _external, bytes32 _democHash, uint _seconds, uint _ethValue);
+
+    event PaymentEnabled(bool feeEnabled);
+    event UpgradedToPremium(bytes32 indexed democHash);
+    event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
+    event AccountPayment(bytes32 indexed democHash, uint additionalSeconds);
+    event SetCommunityBallotFee(uint amount);
+    event SetBasicCentsPricePer30Days(uint amount);
+    event SetPremiumMultiplier(uint8 multiplier);
+    event DowngradeToBasic(bytes32 indexed democHash);
+    event UpgradeToPremium(bytes32 indexed democHash);
+    event SetExchangeRate(uint weiPerCent);
 }
 
 

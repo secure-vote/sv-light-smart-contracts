@@ -6,7 +6,7 @@ import "./ENS.sol";
  * A registrar that allocates subdomains to the first admin to claim them
  */
 contract SvEnsRegistrar {
-    SvEns public ens;
+    SvEnsIface public ens;
     bytes32 public rootNode;
     mapping (bytes32 => bool) knownNodes;
     mapping (address => bool) admins;
@@ -24,7 +24,7 @@ contract SvEnsRegistrar {
      * @param ensAddr The address of the ENS registry.
      * @param node The node that this registrar administers.
      */
-    constructor(SvEns ensAddr, bytes32 node) public {
+    constructor(SvEnsIface ensAddr, bytes32 node) public {
         ens = ensAddr;
         rootNode = node;
         admins[msg.sender] = true;
