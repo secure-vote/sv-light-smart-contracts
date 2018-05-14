@@ -24,6 +24,13 @@ module.exports = function () {
         return s.shln(64).add(e)
     }
 
+    this.mkPacked = (start, end, submissionBits) => {
+        const s = new BN(start)
+        const e = new BN(end)
+        const sb = new BN(submissionBits)
+        return sb.shln(64).add(s).shln(64).add(e);
+    }
+
     this.wrapTest = (accounts, f) => {
         return async () => {
             return await f({accounts});
@@ -150,9 +157,13 @@ module.exports = function () {
     }
 
     this.bytes32AddrToAddr = (bytes32Addr) => {
-        return Web3.utils.bytesToHex(Web3.utils.hexToBytes(bytes32Addr).slice(12));
+        if (bytes32Addr.length != 66) {
+            throw Error(`bytes32AddrToAddr error: not correct length: ${bytes32Addr}`);
+        }
+        return Web3.utils.bytesToHex(Web3.utils.hexToBytes(bytes32Addr).slice(0, 12));
     }
 
+    // this is from the bech32 spec (Bitcoin)
     const B32_ALPHA = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
     const toAlphabet = arr => {
         ret = "";

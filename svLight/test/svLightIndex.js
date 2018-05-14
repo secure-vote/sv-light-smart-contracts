@@ -376,13 +376,69 @@ const testInit = async () => {
 }
 
 
+const testCreateDemoc = async () => {
+    // todo: test domain stuff here
+}
+
+
 const testPaymentsForDemoc = async ({}) => {
     // test that payments behave as expected
 
     // TODO: test payments with and without gas direct to SVPayments
+    // todo: test account in good standing
+}
+
+
+const testSVDemocCreation = async () => {
 
 }
 
+
+const testDemocAdminPermissions = async () => {
+
+}
+
+
+const testCommunityBallots = async () => {
+    // test in cases we have a community instance and in cases where
+    // they're enabled on a paying democ
+}
+
+
+const testCommunityBallotsNonPayment = async () => {
+    // test community ballots in the case a democ's payment runs out
+}
+
+
+const testNoCommunityBallots = async () => {
+    // ensure that community ballots don't work when we have an active
+    // democ that disables them
+}
+
+
+const testCurrencyConversion = async () => {
+    // test our payment code around eth/usd stuff
+}
+
+
+const testPremiumUpgradeDowngrade = async () => {
+
+}
+
+
+const testCatagoriesCrud = async () => {
+    // test our ability to create and deprecate catagories
+}
+
+
+const testSetBackends = async () => {
+    // test ability to set backends dynamically
+}
+
+
+const testVersion = async ({svIx}) => {
+    assert.equal(2, await svIx.getVersion(), "expect version to be 2");
+}
 
 
 contract("SVLightIndex", function (accounts) {
@@ -391,15 +447,16 @@ contract("SVLightIndex", function (accounts) {
         ["test instantiation", testInit],
         ["test creating democ", testCreateDemoc],
         ["test payments for democ", testPaymentsForDemoc],
-        ["test admin democ creation", testAdminDemocCreation],
-        ["test admin permissions", testAdminPermissions],
+        ["test SV democ creation", testSVDemocCreation],
+        ["test democ admin permissions", testDemocAdminPermissions],
         ["test community ballots (default)", testCommunityBallots],
         ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
         ["test deny community ballots", testNoCommunityBallots],
         ["test currency conversion", testCurrencyConversion],
-        ["test premium upgrade", testPremiumUpgrade],
-        ["test basic downgrade", testBasicDowngrade],
+        ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
         ["test catagories (crud)", testCatagoriesCrud],
+        ["test setting payment + backend", testSetBackends],
+        ["test version", testVersion],
     ];
     S.map(([desc, f]) => it(desc, wrapTestIx({accounts}, f)), tests);
 });

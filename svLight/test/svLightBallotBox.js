@@ -21,11 +21,16 @@ const mkStartTime = () => Math.round(Date.now() / 1000)
 const mkFlags = ({useEnc, testing}) => [useEnc === true, testing === true];
 
 
+
+// TODO: BB contructor args: specHash, packed, ix
+
+
+
 async function testEarlyBallot({accounts}) {
     var startTime = mkStartTime() + 2;
     var endTime = startTime + 600;
 
-    const vc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC | USE_TESTING);
+    const vc = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
 }
 
@@ -33,7 +38,7 @@ async function testEarlyBallot({accounts}) {
 async function testSetOwner({accounts}) {
     const acc = accounts;
     const start = mkStartTime() - 1;
-    const vc = await SVBallotBox.new(specHash, start, start + 60, USE_ETH | USE_NO_ENC);
+    const vc = await SVBallotBox.new(specHash, mkPacked(start, start + 60, USE_ETH | USE_NO_ENC), zeroAddr);
     const owner1 = await vc.owner();
     assert.equal(acc[0], owner1, "owner should be acc[0]");
 
@@ -56,10 +61,10 @@ async function testEncryptionBranching({accounts}) {
     /* ENCRYPTION */
 
     // best BB with enc
-    const vcEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC | USE_TESTING);
+    const vcEnc = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
 
     // check we're using enc
-    assert.equal(await vcEnc.submissionBits(), USE_ETH | USE_ENC | USE_TESTING, "encryption should be enabled");
+    assert.equal(await vcEnc.getSubmissionBits(), USE_ETH | USE_ENC | USE_TESTING, "encryption should be enabled");
 
     // check submissions with enc
     const bData = hexPk;
@@ -71,29 +76,29 @@ async function testEncryptionBranching({accounts}) {
     assertNoErr(_wEnc);
     assert.equal(await vcEnc.nVotesCast(), 1, "1 vote");
     assertOnlyEvent("SuccessfulVote", _wEnc);
-    const ballot = await vcEnc.ballotMap(0);
+    const ballot = await vcEnc.getBallotEth(0);
     const blockN = await (mkPromise(web3.eth.getBlockNumber)());
     assert.equal(ballot[0], bData, "ballot data stored");
-    assert.equal(bytes32AddrToAddr(ballot[1]), accounts[0], "voter stored correctly");
+    assert.equal(ballot[1], accounts[0], "voter stored correctly");
     assert.equal(ballot[2].toNumber(), blockN, "blockN matches expected");
-    assert.equal(await vcEnc.curve25519Pubkeys(0), tempPk, "pk stored matches");
+    assert.equal(await vcEnc.getPubkey(0), tempPk, "pk stored matches");
 
     /* NO ENCRYPTION */
 
     // create ballot box with no enc
-    const vcNoEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING);
+    const vcNoEnc = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
 
     // assert useEnc is false with no enc
-    assert.equal(await vcNoEnc.submissionBits(), USE_ETH | USE_NO_ENC | USE_TESTING, "encryption should be disabled");
+    assert.equal(await vcNoEnc.getSubmissionBits(), USE_ETH | USE_NO_ENC | USE_TESTING, "encryption should be disabled");
     // test ballot submissions w no enc
     const _bData = hexSk;
     const _noEnc = await vcNoEnc.submitBallotNoPk(_bData);
     assertNoErr(_noEnc);
     assertOnlyEvent("SuccessfulVote", _noEnc);
-    const _bReturned = await vcNoEnc.ballotMap(0);
+    const _bReturned = await vcNoEnc.getBallotEth(0);
     assert.equal(_bReturned[0], _bData, "ballot data matches");
-    assert.equal(bytes32AddrToAddr(_bReturned[1]), accounts[0], "voter acc matches")
-    assert.equal(await vcNoEnc.curve25519Pubkeys(0), bytes32zero, "pubkey is zero");
+    assert.equal(_bReturned[1], accounts[0], "voter acc matches")
+    assert.equal(await vcNoEnc.getPubkey(0), bytes32zero, "pubkey is zero");
 
     assert.equal(await vcEnc.nVotesCast(), 1, "1 vote");
     await assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, vcNoEnc.submitBallotWithPk(hexSk, hexSk), "should throw with enc disabled");
@@ -101,7 +106,7 @@ async function testEncryptionBranching({accounts}) {
 
     /* NO ENC SIGNED */
 
-    vcSignedNoEnc = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_NO_ENC | USE_TESTING);
+    vcSignedNoEnc = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_NO_ENC | USE_TESTING), zeroAddr);
 
     const _txSignedNoEnc = await vcSignedNoEnc.submitBallotSignedNoEnc(_bData, tempPk, [tempPk, tempPk]);
     assertNoErr(_txSignedNoEnc);
@@ -115,7 +120,7 @@ async function testEncryptionBranching({accounts}) {
 
     /* ENC SIGNED */
 
-    vcSigned = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING);
+    vcSigned = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING), zeroAddr);
 
     await assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC,
         vcSigned.submitBallotSignedNoEnc(_bData, tempPk, [tempPk, tempPk]),
@@ -130,17 +135,17 @@ async function testInstantiation({accounts}) {
     var endTime = startTime + 600;
     var shortEndTime = 0;
 
-    const vc = await SVBallotBox.new(specHash, startTime, endTime, USE_ETH | USE_ENC | USE_TESTING);
+    const vc = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
 
     // log(accounts[0]);
     assert.equal(await vc.owner(), accounts[0], "Owner must be set on launch.");
 
-    assert.equal(await vc.specHash(), specHash, "specHash should be equal");
+    assert.equal(await vc.getSpecHash(), specHash, "specHash should be equal");
 
-    const _startTime = await vc.startTime();
+    const _startTime = await vc.getStartTime();
     assert.equal(startTime, _startTime.toNumber(), "startTime matches");
 
-    const _endTime = await vc.endTime();
+    const _endTime = await vc.getEndTime();
     assert.equal(endTime, _endTime.toNumber(), "endTime matches");
 
     const _testMode = await vc.isTesting();
@@ -194,7 +199,7 @@ async function testInstantiation({accounts}) {
 }
 
 async function testTestMode({accounts}) {
-    var vc = await SVBallotBox.new(specHash, 0, 1, USE_ETH | USE_NO_ENC);
+    var vc = await SVBallotBox.new(specHash, mkPacked(0, 1, USE_ETH | USE_NO_ENC), zeroAddr);
     await assertErrStatus(ERR_TESTING_REQ, vc.setEndTime(0), "throws on set end time when not in testing");
 }
 
@@ -217,13 +222,13 @@ const testABallot = accounts => async (_vc = S.Nothing, account = S.Nothing, msg
     const {ballotId: _ballotId} = args;
 
     // const _nVotesRet = await vc.nVotesCast();
-    const _pkRet = await vc.curve25519Pubkeys(_ballotId);
-    const [_ballotRet, _addr, _blockN] = await vc.ballotMap(_ballotId);
+    const _pkRet = await vc.getPubkey(_ballotId);
+    const [_ballotRet, _addr, _blockN] = await vc.getBallotEth(_ballotId);
 
     // note: these two tests do not work in parallel - disabled
     // assert.equal(_nVotesRet.toNumber(), expectedVotes, "should have " + expectedVotes.toString() + " vote");
     // assert.equal(_ballotId.toNumber(), expectedVotes - 1, "should be " + (expectedVotes - 1) + "th ballot");
-    assert.equal(bytes32AddrToAddr(_addr), myAddr, "account should match");
+    assert.equal(_addr, myAddr, "account should match");
     assert.equal(_pkRet, vtrPubkey, "pubkey should match");
     assert.equal(_ballotRet, encBallot, "ballots should match");
 
@@ -243,9 +248,9 @@ const _genSigned = () => {
 
 async function testSignedBallotNoEnc({accounts, log}){
     const [startTime, endTime] = genStartEndTimes();
-    const bb = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_NO_ENC | USE_TESTING);
+    const bb = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_NO_ENC | USE_TESTING), zeroAddr);
 
-    assert.equal((await bb.startTime()).toNumber(), startTime, "start times match");
+    assert.equal((await bb.getStartTime()).toNumber(), startTime, "start times match");
 
     b1 = _genSigned();
 
@@ -257,13 +262,12 @@ async function testSignedBallotNoEnc({accounts, log}){
     await log("voter matches 1")
 
     const _r1o1 = {};
-    _r1o1.ballot = await bb.ballotMap(_v1o1.ballotId).then(([b]) => b);
+    _r1o1.ballot = await bb.getBallotSigned(_v1o1.ballotId).then(([b]) => b);
     assert.deepEqual(_r1o1.ballot, b1.ballot, "ballots should match");
     await log("ballot matches 1")
 
-    _r1o1.sig0 = await bb.ed25519Signatures(_v1o1.ballotId, 0);
-    _r1o1.sig1 = await bb.ed25519Signatures(_v1o1.ballotId, 1);
-    assert.deepEqual([_r1o1.sig0, _r1o1.sig1], b1.sig, "sigs should match");
+    _r1o1.sig = await bb.getSignature(_v1o1.ballotId);
+    assert.deepEqual(_r1o1.sig, b1.sig, "sigs should match");
     await log("edSig matches 1")
 
 
@@ -275,9 +279,9 @@ async function testSignedBallotNoEnc({accounts, log}){
 
 async function testSignedBallotWithEnc({accounts, log}){
     const [startTime, endTime] = genStartEndTimes();
-    const bb = await SVBallotBox.new(specHash, startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING);
+    const bb = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING), zeroAddr);
 
-    assert.equal((await bb.startTime()).toNumber(), startTime, "start times match");
+    assert.equal((await bb.getStartTime()).toNumber(), startTime, "start times match");
 
     b1 = _genSigned();
 
@@ -289,16 +293,15 @@ async function testSignedBallotWithEnc({accounts, log}){
     await log("voter matches 1")
 
     const _r1o1 = {};
-    _r1o1.sig0 = await bb.ed25519Signatures(_v1o1.ballotId, 0);
-    _r1o1.sig1 = await bb.ed25519Signatures(_v1o1.ballotId, 1);
-    assert.deepEqual([_r1o1.sig0, _r1o1.sig1], b1.sig, "sigs should match");
+    _r1o1.sig = await bb.getSignature(_v1o1.ballotId);
+    assert.deepEqual(_r1o1.sig, b1.sig, "sigs should match");
     await log('edsig match 1')
 
-    _r1o1.ballot = await bb.ballotMap(_v1o1.ballotId).then(([b]) => b);
+    _r1o1.ballot = await bb.getBallotSigned(_v1o1.ballotId).then(([b]) => b);
     assert.deepEqual(_r1o1.ballot, b1.ballot, "ballots should match");
     await log('ballot match 1')
 
-    _r1o1.curvePk = await bb.curve25519Pubkeys(_v1o1.ballotId);
+    _r1o1.curvePk = await bb.getPubkey(_v1o1.ballotId);
     assert.equal(_r1o1.curvePk, b1.curvePk, "curvePks should match");
 
     await assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, bb.submitBallotNoPk(b1.ballot));

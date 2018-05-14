@@ -211,10 +211,12 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
     }
 
     function getPubkey(uint256 id) external view returns (bytes32) {
+        // NOTE: These are the curve25519 pks associated with encryption
         return curve25519Pubkeys[id];
     }
 
     function getSignature(uint256 id) external view returns (bytes32[2]) {
+        // NOTE: these are ed25519 signatures associated with signed ballots
         return ed25519Signatures[id];
     }
 
