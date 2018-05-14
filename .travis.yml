@@ -7,3 +7,8 @@ cache:
   yarn: true
   directories:
     - "node_modules"
+sudo: enabled
+before_install:
+  - sudo add-apt-repository -y ppa:ethereum/ethereum
+  - sudo apt-get update
+  - sudo apt-get install -y solc
