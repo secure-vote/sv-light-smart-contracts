@@ -1,5 +1,5 @@
 // sourced: https://theethereum.wiki/w/index.php?title=ERC20_Token_Standard&action=edit
-pragma solidity ^0.4.22;
+pragma solidity ^0.4.24;
 
 // ----------------------------------------------------------------------------------------------
 // Sample fixed supply token contract

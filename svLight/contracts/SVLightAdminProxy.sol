@@ -1,4 +1,4 @@
-pragma solidity ^0.4.22;
+pragma solidity ^0.4.24;
 
 // Admin Proxy SC for SVDemocIndex v1.0
 // (c) SecureVote 2018

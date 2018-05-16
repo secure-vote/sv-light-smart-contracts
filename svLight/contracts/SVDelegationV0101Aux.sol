@@ -1,4 +1,4 @@
-pragma solidity ^0.4.22;
+pragma solidity ^0.4.24;
 
 // small aux contract for v0101 delegation to add some features
 contract SVDelegationV0101Aux {

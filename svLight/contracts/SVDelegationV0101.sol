@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.24;
 
 // DELEGATION SC v1.1
 // (c) SecureVote 2018
