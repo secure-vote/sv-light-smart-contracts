@@ -368,16 +368,19 @@ const wrapTestIx = ({accounts}, f) => {
 
 const testUpgrade = async () => {
     // test that upgrades to new Indexes work
+    throw Error('not implemented');
 }
 
 
 const testInit = async () => {
     // just test the initialization params and sanity check
+    throw Error('not implemented');
 }
 
 
 const testCreateDemoc = async () => {
     // todo: test domain stuff here
+    throw Error('not implemented');
 }
 
 
@@ -386,15 +389,18 @@ const testPaymentsForDemoc = async ({}) => {
 
     // TODO: test payments with and without gas direct to SVPayments
     // todo: test account in good standing
+    throw Error('not implemented');
 }
 
 
 const testSVDemocCreation = async () => {
+    throw Error('not implemented');
 
 }
 
 
 const testDemocAdminPermissions = async () => {
+    throw Error('not implemented');
 
 }
 
@@ -402,37 +408,52 @@ const testDemocAdminPermissions = async () => {
 const testCommunityBallots = async () => {
     // test in cases we have a community instance and in cases where
     // they're enabled on a paying democ
+
+    // todo: ensure we're setting the right submission bits on the ballot
+    // when doing community ballots. (i.e. IS_OFFICIAL and IS_BINDING both false)
+    throw Error('not implemented');
 }
 
 
 const testCommunityBallotsNonPayment = async () => {
     // test community ballots in the case a democ's payment runs out
+    throw Error('not implemented');
 }
 
 
 const testNoCommunityBallots = async () => {
     // ensure that community ballots don't work when we have an active
     // democ that disables them
+    throw Error('not implemented');
 }
 
 
 const testCurrencyConversion = async () => {
     // test our payment code around eth/usd stuff
+    throw Error('not implemented');
 }
 
 
 const testPremiumUpgradeDowngrade = async () => {
+    throw Error('not implemented');
 
 }
 
 
 const testCatagoriesCrud = async () => {
     // test our ability to create and deprecate catagories
+    throw Error('not implemented');
 }
 
 
 const testSetBackends = async () => {
     // test ability to set backends dynamically
+    throw Error('not implemented');
+}
+
+
+const testSponsorshipOfCommunityBallots = async () => {
+    throw Error('not implemented');
 }
 
 
@@ -452,6 +473,7 @@ contract("SVLightIndex", function (accounts) {
         ["test community ballots (default)", testCommunityBallots],
         ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
         ["test deny community ballots", testNoCommunityBallots],
+        ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
         ["test currency conversion", testCurrencyConversion],
         ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
         ["test catagories (crud)", testCatagoriesCrud],

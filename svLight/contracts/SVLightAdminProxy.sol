@@ -107,7 +107,10 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
     function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint256 _packed) external payable returns (uint) {
         // ensure we mark this as a community ballot by disabling official and binding flags:
         // submissionBits is a uint16 that lives at [112 bits][>> 16 bits <<][128 bits]
-        uint256 packed = _packed & ((uint256(0) - 1) ^ (uint256(IS_OFFICIAL | IS_BINDING) << 128));
+        uint256 all1s = uint256(0) - 1;
+        uint256 disallowedMask = all1s ^ (uint256(IS_OFFICIAL | IS_BINDING | USE_ENC) << 128);
+        uint256 necessaryFlags = uint256(USE_NO_ENC) << 128;
+        uint256 packed = (_packed | necessaryFlags) & disallowedMask;
 
         address fwdTo = checkFwdAddressUpgrade();
         IxIface ix = IxIface(fwdTo);
