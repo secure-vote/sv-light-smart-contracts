@@ -45,19 +45,19 @@ contract SvEnsEverythingPx {
 
     function _regName(bytes32 labelhash) internal returns (bytes32 node) {
         registrar.register(labelhash, this);
-        node = keccak256(rootNode, labelhash);
+        node = keccak256(abi.encodePacked(rootNode, labelhash));
         registry.setResolver(node, resolver);
     }
 
     function regName(string name, address resolveTo) only_admin() external returns (bytes32 node) {
-        bytes32 labelhash = keccak256(name);
+        bytes32 labelhash = keccak256(bytes(name));
         node = _regName(labelhash);
         resolver.setAddr(node, resolveTo);
         registry.setOwner(node, msg.sender);
     }
 
     function regNameWOwner(string name, address resolveTo, address domainOwner) only_admin() external returns (bytes32 node) {
-        bytes32 labelhash = keccak256(name);
+        bytes32 labelhash = keccak256(bytes(name));
         node = _regName(labelhash);
         resolver.setAddr(node, resolveTo);
         registry.setOwner(node, domainOwner);

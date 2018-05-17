@@ -48,7 +48,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
     }
 
     struct Democ {
-        string name;
+        address erc20;
         address admin;
         Ballot[] ballots;
     }
@@ -75,6 +75,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
     mapping (bytes32 => Democ) public democs;
     mapping (bytes32 => CategoriesIx) public democCategories;
     mapping (bytes13 => bytes32) public democPrefixToHash;
+    mapping (address => bytes32[]) public erc20ToDemoc;
     bytes32[] public democList;
 
     //* GLOBAL INFO */
@@ -87,29 +88,38 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         return democList[id];
     }
 
-    function getGBallotsN() external view returns (uint) {
-        return ballotList.length;
-    }
-
     function getGBallot(uint id) external view returns (bytes32 democHash, uint ballotId) {
         return (ballotList[id].democHash, ballotList[id].ballotId);
     }
 
+    function getGBallotsN() external view returns (uint) {
+        return ballotList.length;
+    }
+
+    function getGErc20ToDemocs(address erc20) external view returns (bytes32[] democHashes) {
+        return erc20ToDemoc[erc20];
+    }
+
     //* DEMOCRACY ADMIN FUNCTIONS */
 
-    function dInit(string democName) only_editors() external returns (bytes32 democHash) {
+    function dInit(address defaultErc20) only_editors() external returns (bytes32 democHash) {
         // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
         // (particularly because `this` and prevBlockHash are part of the hash)
-        democHash = keccak256(democName, democList.length, blockhash(block.number-1), this);
+        democHash = keccak256(abi.encodePacked(democList.length, blockhash(block.number-1), this, msg.sender, defaultErc20));
         democList.push(democHash);
-        democs[democHash].name = democName;
+        democs[democHash].erc20 = defaultErc20;
         require(democPrefixToHash[bytes13(democHash)] == bytes32(0), "democ prefix exists");
         democPrefixToHash[bytes13(democHash)] = democHash;
+        erc20ToDemoc[defaultErc20].push(democHash);
         emit LowLevelNewDemoc(democHash);
     }
 
     function setDAdmin(bytes32 democHash, address newAdmin) only_editors() external {
         democs[democHash].admin = newAdmin;
+    }
+
+    function setDErc20(bytes32 democHash, address newErc20) only_editors() external {
+        democs[democHash].erc20 = newErc20;
     }
 
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) only_editors() external returns (uint) {
@@ -133,12 +143,12 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         return democPrefixToHash[prefix];
     }
 
-    function getDInfo(bytes32 democHash) external view returns (string name, address admin, uint256 nBallots) {
-        return (democs[democHash].name, democs[democHash].admin, democs[democHash].ballots.length);
+    function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 nBallots) {
+        return (democs[democHash].erc20, democs[democHash].admin, democs[democHash].ballots.length);
     }
 
-    function getDName(bytes32 democHash) external view returns (string) {
-        return democs[democHash].name;
+    function getDErc20(bytes32 democHash) external view returns (address) {
+        return democs[democHash].erc20;
     }
 
     function getDAdmin(bytes32 democHash) external view returns (address) {
@@ -295,10 +305,14 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return backend.getGDemoc(n);
     }
 
+    function getGErc20ToDemocs(address erc20) external view returns (bytes32[] democHashes) {
+        return backend.getGErc20ToDemocs(erc20);
+    }
+
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
     // todo: handling payments for creating a democ
-    function dInit(string democName) not_upgraded() external payable returns (bytes32) {
+    function dInit(address defaultErc20) not_upgraded() external payable returns (bytes32) {
         // address admin;
         // if(isContract(msg.sender)) {
         //     // if the caller is a contract we presume they can handle multisig themselves...
@@ -309,7 +323,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         //     admin = address(adminPx);
         // }
 
-        bytes32 democHash = backend.dInit(democName);
+        bytes32 democHash = backend.dInit(defaultErc20);
 
         SVLightAdminProxy adminPx = adminPxFactory.spawn(democHash, msg.sender, address(this));
         address admin = address(adminPx);
@@ -338,6 +352,10 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         backend.setDAdmin(democHash, newAdmin);
     }
 
+    function setDErc20(bytes32 democHash, address newErc20) onlyDemocAdmin(democHash) external {
+        backend.setDErc20(democHash, newErc20);
+    }
+
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) onlyDemocAdmin(democHash) external returns (uint) {
         return backend.dAddCategory(democHash, categoryName, hasParent, parent);
     }
@@ -359,12 +377,12 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return backend.getDBallot(democHash, n);
     }
 
-    function getDInfo(bytes32 democHash) external view returns (string name, address admin, uint256 _nBallots) {
+    function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 _nBallots) {
         return backend.getDInfo(democHash);
     }
 
-    function getDName(bytes32 democHash) external view returns (string) {
-        return backend.getDName(democHash);
+    function getDErc20(bytes32 democHash) external view returns (address erc20) {
+        return backend.getDErc20(democHash);
     }
 
     function getDBallotAddr(bytes32 democHash, uint n) external view returns (address) {
