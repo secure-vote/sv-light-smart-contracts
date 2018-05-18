@@ -365,7 +365,7 @@ contract upgradePtr {
         _;
     }
 
-    function getUpgradePointer() constant external returns (address) {
+    function getUpgradePointer() view external returns (address) {
         return ptr;
     }
 

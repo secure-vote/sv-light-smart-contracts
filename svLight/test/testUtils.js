@@ -211,6 +211,9 @@ module.exports = function () {
     this.USE_SIGNED = 2**1;
     this.USE_NO_ENC = 2**2;
     this.USE_ENC = 2**3;
+
+    this.IS_BINDING = 2**13;
+    this.IS_OFFICIAL = 2**14;
     this.USE_TESTING = 2**15;
 
     // general errors

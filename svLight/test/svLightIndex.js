@@ -379,9 +379,35 @@ const wrapTestIx = ({accounts}, f) => {
 
 
 
-const testUpgrade = async () => {
+const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, owner, pxF, bbF}) => {
     // test that upgrades to new Indexes work
-    throw Error('not implemented');
+
+    /**
+     * Things to test:
+     * internal upgrade pointer
+     * upgrading backend permissions
+     * payment perms
+     * ensPx perms
+     * ensOwnerPx
+     */
+
+    const newIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address);
+
+    await svIx.doUpgrade(newIx.address);
+
+    await assertRevert(svIx.doUpgrade(zeroAddr), "upgrade cannot be performed twice");
+
+    assert.equal(await be.hasPermissions(newIx.address), true, "new ix should have BE permissions");
+    assert.equal(await paySC.hasPermissions(newIx.address), true, "new ix should have payments permissions");
+    assert.equal(await ensPx.admins(newIx.address), true, "new ix should have ensPx permissions");
+    assert.equal(await ixEnsPx.isAdmin(newIx.address), true, "new ix should have ixEnsPx permissions");
+
+    assert.equal(await be.hasPermissions(svIx.address), false, "old ix should not have BE permissions");
+    assert.equal(await paySC.hasPermissions(svIx.address), false, "old ix should not have payments permissions");
+    assert.equal(await ensPx.admins(svIx.address), false, "old ix should not have ensPx permissions");
+    assert.equal(await ixEnsPx.isAdmin(svIx.address), false, "old ix should not have ixEnsPx permissions");
+
+    assert.equal(await svIx.getUpgradePointer(), newIx.address, "svIx.getUpgradePointer should point to new ix");
 }
 
 
@@ -475,7 +501,7 @@ const testVersion = async ({svIx}) => {
 }
 
 
-const testEnsProxyAndUpgrade = async () => {
+const testEnsSelfManagement = async () => {
     // test we can set and upgrade ENS via upgrades and permissions work out
     throw Error("not implemented");
 }
@@ -509,7 +535,7 @@ contract("SVLightIndex", function (accounts) {
         ["test catagories (crud)", testCatagoriesCrud],
         ["test setting payment + backend", testSetBackends],
         ["test version", testVersion],
-        ["test ens upgrade", testEnsProxyAndUpgrade],
+        ["test ens self-management", testEnsSelfManagement],
         ["test nfp tier", testNFPTierAndPayments],
         ["test payments backup admin", testPaymentsBackupAdmin],
     ];

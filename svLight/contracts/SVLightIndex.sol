@@ -223,7 +223,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     SVAdminPxFactory public adminPxFactory;
     SVBBoxFactory public bbFactory;
     SvEnsEverythingPx public ensPx;
-    EnsOwnerProxy public ensNodeAdminPx;
+    EnsOwnerProxy public ensOwnerPx;
 
     uint256 constant _version = 2;
 
@@ -259,14 +259,14 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
                , SVAdminPxFactory _pxF
                , SVBBoxFactory _bbF
                , SvEnsEverythingPx _ensPx
-               , EnsOwnerProxy _ensNodeAdminPx
+               , EnsOwnerProxy _ensOwnerPx
                ) public {
         backend = _b;
         payments = _pay;
         adminPxFactory = _pxF;
         bbFactory = _bbF;
         ensPx = _ensPx;
-        ensNodeAdminPx = _ensNodeAdminPx;
+        ensOwnerPx = _ensOwnerPx;
     }
 
     //* UPGRADE STUFF */
@@ -276,8 +276,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         require(backend.upgradeMe(nextSC));
         require(payments.upgradeMe(nextSC));
         ensPx.upgradeMe(nextSC);
-        ensNodeAdminPx.setAddr(nextSC);
-        ensNodeAdminPx.upgradeMeAdmin(nextSC);
+        ensOwnerPx.setAddr(nextSC);
+        ensOwnerPx.upgradeMeAdmin(nextSC);
     }
 
     // for emergencies
