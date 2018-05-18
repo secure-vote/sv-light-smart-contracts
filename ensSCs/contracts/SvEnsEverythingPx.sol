@@ -38,6 +38,12 @@ contract SvEnsEverythingPx {
         _addAdmin(a);
     }
 
+    function upgradeMe(address newAdmin) only_admin() external {
+        require(msg.sender != owner, "owner cannot upgrade self");
+        admins[msg.sender] = false;
+        _addAdmin(newAdmin);
+    }
+
     function remAdmin(address a) only_admin() external {
         require(a != owner && a != msg.sender);
         admins[a] = false;

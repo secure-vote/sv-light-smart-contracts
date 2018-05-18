@@ -53,6 +53,8 @@ contract SVPayments is IxPaymentsIface, permissioned {
     mapping (bytes32 => Account) accounts;
     PaymentLog[] payments;
 
+    mapping (bytes32 => bool) notForProfits;
+
 
     modifier owner_or(address addr) {
         require(msg.sender == addr || msg.sender == owner, "403 when sending from this address");
@@ -60,15 +62,23 @@ contract SVPayments is IxPaymentsIface, permissioned {
     }
 
 
-    constructor() permissioned() public {
+    /* BREAK GLASS IN CASE OF EMERGENCY */
+    address public emergencyAdmin;
+    function emergencySetOwner(address newOwner) external {
+        require(msg.sender == emergencyAdmin, "only callable by emergency backup key");
+        owner = newOwner;
+    }
+    /* END BREAK GLASS */
+
+
+    constructor(address _emergencyAdmin) permissioned() public {
         payTo = msg.sender;
+        emergencyAdmin = _emergencyAdmin;
+        require(_emergencyAdmin != address(0), "cannot have null address as backup admin");
     }
 
     function() payable public {
-        // check gas because we need to look up payTo
-        if (gasleft() > 25000) {
-            payTo.transfer(msg.value);
-        }
+        payTo.transfer(msg.value);
     }
 
     function _modAccountBalance(bytes32 democHash, uint additionalSeconds) internal {
@@ -102,6 +112,9 @@ contract SVPayments is IxPaymentsIface, permissioned {
     }
 
     function accountInGoodStanding(bytes32 democHash) external view returns (bool) {
+        if (notForProfits[democHash]) {
+            return true;
+        }
         return accounts[democHash].paidUpTill >= now;
     }
 
@@ -109,6 +122,10 @@ contract SVPayments is IxPaymentsIface, permissioned {
         _modAccountBalance(democHash, additionalSeconds);
         payments.push(PaymentLog(true, democHash, additionalSeconds, 0));
         emit GrantedAccountTime(democHash, additionalSeconds, ref);
+    }
+
+    function setNFPStatus(bytes32 democHash, bool isNFP) only_owner() external {
+        notForProfits[democHash] = isNFP;
     }
 
     function upgradeToPremium(bytes32 democHash) only_editors() external {

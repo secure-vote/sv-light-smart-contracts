@@ -9,6 +9,7 @@ const EnsPx = artifacts.require("./SvEnsEverythingPx");
 const EnsPR = artifacts.require("./PublicResolver");
 const EnsRegistrar = artifacts.require("./SvEnsRegistrar");
 const EnsRegistry = artifacts.require("./SvEnsRegistry");
+const EnsOwnerPx = artifacts.require("./EnsOwnerProxy");
 const EmitterTesting = artifacts.require("./EmitterTesting");
 
 const nh = require('eth-ens-namehash');
@@ -25,6 +26,7 @@ const S = create({checkTypes: true, env});
 const wrapTestIx = ({accounts}, f) => {
     return async () => {
         const owner = accounts[0];
+        const backupOwner = accounts[accounts.length - 1];
 
         const scLog = await EmitterTesting.new();
 
@@ -32,7 +34,7 @@ const wrapTestIx = ({accounts}, f) => {
 
         const be = await IxBackend.new();
         await scLog.log(`Created backend...`);
-        const paySC = await IxPayments.new();
+        const paySC = await IxPayments.new(backupOwner);
         await scLog.log(`Created payments backend...`);
         const pxF = await PxFactory.new();
         await scLog.log(`Created PxFactory...`);
@@ -44,6 +46,9 @@ const wrapTestIx = ({accounts}, f) => {
         const tld = "test";
         const testLH = web3.sha3(tld);
         const testNH = nh.hash(tld);
+        const indexLH = web3.sha3("index");
+        const indexNH = nh.hash("index." + tld);
+
         const ensRry = await EnsRegistry.new();
         const ensRrr = await EnsRegistrar.new(ensRry.address, testNH);
         await ensRry.setSubnodeOwner("0x0", testLH, ensRrr.address);
@@ -54,9 +59,17 @@ const wrapTestIx = ({accounts}, f) => {
 
         await scLog.log(`Created ensPx for tld: ${tld}`)
 
-        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, {gasPrice: 0});
+        const ixEnsPx = await EnsOwnerPx.new(indexNH, ensRry.address, ensPR.address)
+        await ensPx.regNameWOwner("index", zeroAddr, ixEnsPx.address);
+        await scLog.log(`Created index.${tld} owner px at ${ixEnsPx.address}`)
 
-        await scLog.log("Created svIx")
+        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, {gasPrice: 0});
+        await scLog.log(`Created svIx at ${svIx.address}`)
+
+        await ixEnsPx.setAddr(svIx.address);
+        await ixEnsPx.setAdmin(svIx.address, true);
+        const ixEnsResolution = await ensPR.addr(indexNH);
+        await scLog.log(`index.${tld} now resolves to ${ixEnsResolution}`)
 
         await be.setPermissions(svIx.address, true);
         await be.doLockdown();
@@ -80,7 +93,7 @@ const wrapTestIx = ({accounts}, f) => {
         await scLog.log(`be owner:    ${await be.owner()}`)
         await scLog.log(`svId owner:  ${await svIx.owner()}`)
 
-        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, owner}, accounts);
+        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, owner, backupOwner, ixEnsPx}, accounts);
     };
 };
 
@@ -462,6 +475,23 @@ const testVersion = async ({svIx}) => {
 }
 
 
+const testEnsProxyAndUpgrade = async () => {
+    // test we can set and upgrade ENS via upgrades and permissions work out
+    throw Error("not implemented");
+}
+
+
+const testNFPTierAndPayments = async () => {
+    // test that we can give and remove time on NFP accounts
+    throw Error("not implemented");
+}
+
+
+const testPaymentsBackupAdmin = async () => {
+    throw Error("not implemented")
+}
+
+
 contract("SVLightIndex", function (accounts) {
     tests = [
         ["test upgrade", testUpgrade],
@@ -479,6 +509,9 @@ contract("SVLightIndex", function (accounts) {
         ["test catagories (crud)", testCatagoriesCrud],
         ["test setting payment + backend", testSetBackends],
         ["test version", testVersion],
+        ["test ens upgrade", testEnsProxyAndUpgrade],
+        ["test nfp tier", testNFPTierAndPayments],
+        ["test payments backup admin", testPaymentsBackupAdmin],
     ];
     S.map(([desc, f]) => it(desc, wrapTestIx({accounts}, f)), tests);
 });

@@ -12,3 +12,5 @@ for f in $(ls ./_solDist/ | grep bin | grep -v Iface | grep -v Interface); do
         exit 1
     fi
 done
+
+echo "Compiled all contracts successfully."

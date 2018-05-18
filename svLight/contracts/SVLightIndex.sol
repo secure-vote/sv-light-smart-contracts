@@ -18,6 +18,7 @@ import { SvEnsEverythingPx } from "../../ensSCs/contracts/SvEnsEverythingPx.sol"
 import "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./SVPayments.sol";
+import "./EnsOwnerProxy.sol";
 
 
 contract SVAdminPxFactory {
@@ -222,6 +223,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     SVAdminPxFactory public adminPxFactory;
     SVBBoxFactory public bbFactory;
     SvEnsEverythingPx public ensPx;
+    EnsOwnerProxy public ensNodeAdminPx;
 
     uint256 constant _version = 2;
 
@@ -252,12 +254,19 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     //* FUNCTIONS *//
 
     // constructor
-    constructor(IxBackendIface _b, IxPaymentsIface _pay, SVAdminPxFactory _pxF, SVBBoxFactory _bbF, SvEnsEverythingPx _ensPx) public {
+    constructor( IxBackendIface _b
+               , IxPaymentsIface _pay
+               , SVAdminPxFactory _pxF
+               , SVBBoxFactory _bbF
+               , SvEnsEverythingPx _ensPx
+               , EnsOwnerProxy _ensNodeAdminPx
+               ) public {
         backend = _b;
         payments = _pay;
         adminPxFactory = _pxF;
         bbFactory = _bbF;
         ensPx = _ensPx;
+        ensNodeAdminPx = _ensNodeAdminPx;
     }
 
     //* UPGRADE STUFF */
@@ -266,7 +275,9 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         doUpgradeInternal(nextSC);
         require(backend.upgradeMe(nextSC));
         require(payments.upgradeMe(nextSC));
-        ensPx.addAdmin(nextSC);
+        ensPx.upgradeMe(nextSC);
+        ensNodeAdminPx.setAddr(nextSC);
+        ensNodeAdminPx.upgradeMeAdmin(nextSC);
     }
 
     // for emergencies

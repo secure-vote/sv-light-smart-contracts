@@ -80,6 +80,8 @@ interface IxPaymentsIface {
 
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) external;
 
+    function setNFPStatus(bytes32 democHash, bool isNFP) external;
+
     function getPaymentLogN() external view returns (uint);
     function getPaymentLog(uint n) external view returns (bool _external, bytes32 _democHash, uint _seconds, uint _ethValue);
 

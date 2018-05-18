@@ -102,10 +102,6 @@ contract hasAdmins is owned {
 
     modifier only_admin() {
         require(isAdmin(msg.sender), ERR_FORBIDDEN);
-        _;
-    }
-
-    modifier admin_not_disabled() {
         require(adminsDisabledForever == false, "admins must not be disabled");
         _;
     }
@@ -118,8 +114,18 @@ contract hasAdmins is owned {
         return admins[currAdminEpoch][a];
     }
 
-    function setAdmin(address a, bool _givePerms) only_admin() admin_not_disabled() external {
-        require(a != msg.sender && a != owner);
+    function upgradeMeAdmin(address newAdmin) only_admin() external {
+        // note: already checked msg.sender has admin with `only_admin` modifier
+        _setAdmin(msg.sender, false);
+        _setAdmin(newAdmin, true);
+    }
+
+    function setAdmin(address a, bool _givePerms) only_admin() external {
+        require(a != msg.sender && a != owner, "cannot change your own permissions");
+        _setAdmin(a, _givePerms);
+    }
+
+    function _setAdmin(address a, bool _givePerms) internal {
         admins[currAdminEpoch][a] = _givePerms;
         if (_givePerms) {
             emit AdminAdded(a);
@@ -129,12 +135,14 @@ contract hasAdmins is owned {
     }
 
     // safety feature if admins go bad or something
-    function incAdminEpoch() only_owner() admin_not_disabled() external {
+    function incAdminEpoch() only_owner() external {
         currAdminEpoch++;
         admins[currAdminEpoch][msg.sender] = true;
         emit AdminEpochInc();
     }
 
+    // this is internal so contracts can all it, but not exposed anywhere in this
+    // contract.
     function disableAdminForever() internal {
         currAdminEpoch++;
         adminsDisabledForever = true;
