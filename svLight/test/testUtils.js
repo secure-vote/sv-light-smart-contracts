@@ -4,6 +4,18 @@ var BN = require('bn.js');
 const R = require('ramda');
 
 module.exports = function () {
+    const w3 = Web3;
+
+    this.w3 = Web3;
+    this.oneEth = w3.utils.toWei(w3.utils.toBN(1), "ether");
+    this.toBN = i => w3.utils.toBN(i);
+    this.ethToWei = i => w3.utils.toWei(this.toBN(i), "ether");
+
+    this.toBigNumber = i => {
+        // BigNumber as in Web3 0.20.x
+        return web3.toBigNumber(i.toString());
+    }
+
     this.toJson = (obj) => {
         return JSON.stringify(obj, null, 2);
     }
@@ -93,6 +105,10 @@ module.exports = function () {
             })
         })
     };
+
+    this.sleep = async ms => new Promise((resolve, reject) => {
+        setTimeout(resolve, ms);
+    })
 
     this.assertRevert = async (doTx, msg) => {
         try {

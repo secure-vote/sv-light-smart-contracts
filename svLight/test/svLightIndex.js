@@ -11,6 +11,7 @@ const EnsRegistrar = artifacts.require("./SvEnsRegistrar");
 const EnsRegistry = artifacts.require("./SvEnsRegistry");
 const EnsOwnerPx = artifacts.require("./EnsOwnerProxy");
 const EmitterTesting = artifacts.require("./EmitterTesting");
+const FaucetErc20 = artifacts.require("./FaucetErc20");
 
 const nh = require('eth-ens-namehash');
 const b58 = require('bs58');
@@ -30,18 +31,25 @@ const wrapTestIx = ({accounts}, f) => {
 
         const scLog = await EmitterTesting.new();
 
-        await scLog.log(`Created logger...`);
+        // use this doLog function in the wrapper to easily turn on and off this logging
+        const loggingActive = false;
+        const doLog = async msg => {
+            if (loggingActive)
+                return await scLog.log(msg);
+        }
+
+        await doLog(`Created logger...`);
 
         const be = await IxBackend.new();
-        await scLog.log(`Created backend...`);
+        await doLog(`Created backend...`);
         const paySC = await IxPayments.new(backupOwner);
-        await scLog.log(`Created payments backend...`);
+        await doLog(`Created payments backend...`);
         const pxF = await PxFactory.new();
-        await scLog.log(`Created PxFactory...`);
+        await doLog(`Created PxFactory...`);
         const bbF = await BBFactory.new();
-        await scLog.log(`Created BBFactory...`);
+        await doLog(`Created BBFactory...`);
 
-        await scLog.log(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
+        await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
 
         const tld = "test";
         const testLH = web3.sha3(tld);
@@ -57,19 +65,20 @@ const wrapTestIx = ({accounts}, f) => {
         const ensPx = await EnsPx.new(ensRrr.address, ensRry.address, ensPR.address, testNH)
         await ensRrr.addAdmin(ensPx.address);
 
-        await scLog.log(`Created ensPx for tld: ${tld}`)
+        await doLog(`Created ensPx for tld: ${tld}`)
 
         const ixEnsPx = await EnsOwnerPx.new(indexNH, ensRry.address, ensPR.address)
         await ensPx.regNameWOwner("index", zeroAddr, ixEnsPx.address);
-        await scLog.log(`Created index.${tld} owner px at ${ixEnsPx.address}`)
+        await doLog(`Created index.${tld} owner px at ${ixEnsPx.address}`)
 
         const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, {gasPrice: 0});
-        await scLog.log(`Created svIx at ${svIx.address}`)
+        await doLog(`Created svIx at ${svIx.address}`)
 
         await ixEnsPx.setAddr(svIx.address);
         await ixEnsPx.setAdmin(svIx.address, true);
         const ixEnsResolution = await ensPR.addr(indexNH);
-        await scLog.log(`index.${tld} now resolves to ${ixEnsResolution}`)
+        await doLog(`index.${tld} now resolves to ${ixEnsResolution}`)
+        assert.equal(ixEnsResolution, svIx.address, "ixEns should resolve to ix")
 
         await be.setPermissions(svIx.address, true);
         await be.doLockdown();
@@ -77,23 +86,26 @@ const wrapTestIx = ({accounts}, f) => {
         await paySC.setPermissions(svIx.address, true);
         await paySC.doLockdown();
 
-        await scLog.log("set permissions for backend and paymentSettings - allow svIx")
+        await doLog("set permissions for backend and paymentSettings - allow svIx")
 
         await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, be.setPermissions(svIx.address, true), "should throw error after lockdown (be)")
         await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, paySC.setPermissions(svIx.address, true), "should throw error after lockdown (paySC)")
 
-        await scLog.log("asserted that setPermissions fails after lockdown")
+        await doLog("asserted that setPermissions fails after lockdown")
 
         await ensPx.addAdmin(svIx.address);
 
-        await scLog.log("added svIx as admin to ensPx")
+        await doLog("added svIx as admin to ensPx")
 
-        await scLog.log(`accounts[0]: ${accounts[0]}`)
-        await scLog.log(`paySC owner: ${await paySC.owner()}`)
-        await scLog.log(`be owner:    ${await be.owner()}`)
-        await scLog.log(`svId owner:  ${await svIx.owner()}`)
+        await doLog(`accounts[0]: ${accounts[0]}`)
+        await doLog(`paySC owner: ${await paySC.owner()}`)
+        await doLog(`be owner:    ${await be.owner()}`)
+        await doLog(`svId owner:  ${await svIx.owner()}`)
 
-        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, owner, backupOwner, ixEnsPx}, accounts);
+        const erc20 = await FaucetErc20.new();
+        await doLog(`Created erc20 w faucet at ${erc20.address}`)
+
+        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, owner, backupOwner, ixEnsPx, erc20, accounts}, accounts);
     };
 };
 
@@ -378,6 +390,18 @@ const wrapTestIx = ({accounts}, f) => {
 // }
 
 
+/* UTILITY FUNCTIONS */
+
+const mkDemoc = async ({svIx, txOpts, erc20}) => {
+    const createTx = await svIx.dInit(erc20.address, txOpts);
+    const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocAdded", createTx);
+    const adminPx = SVAdminPx.at(pxAddr);
+
+    return {democHash, adminPx};
+}
+
+
+/* ACTUAL TESTS */
 
 const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, owner, pxF, bbF}) => {
     // test that upgrades to new Indexes work
@@ -411,30 +435,95 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, owner, pxF, bbF}) =
 }
 
 
-const testInit = async () => {
+const testInit = async ({paySC, owner, svIx}) => {
     // just test the initialization params and sanity check
-    throw Error('not implemented');
+
+    /**
+     * To test:
+     * - payments.payTo
+     * - owner on SCs
+     * - other stuff?
+     */
+
+    assert.equal(await paySC.getPayTo(), owner, "payTo should be correct on paymentSC")
+    assert.equal(await paySC.owner(), owner, "owner on paymentSC")
+    assert.equal(await svIx.owner(), owner, "owner on svIx")
 }
 
 
-const testCreateDemoc = async () => {
-    // todo: test domain stuff here
-    throw Error('not implemented');
+const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner}) => {
+    const user1 = accounts[1];
+
+    const {democHash, adminPx} = await mkDemoc({svIx, erc20, txOpts: {from: user1, value: oneEth}})
+
+    await scLog.log(`Created democ w hash ${democHash} and admin ${adminPx.address}`)
+
+    // ensure domain created and matches for democ admin
+    const democPrefixHex = democHash.slice(0, 13*2+2);
+    const prefixB32 = hexToB32(democPrefixHex.slice(2));
+    const expectedDomain = prefixB32 + '.' + tld;
+    assert.equal(await ensPR.addr(nh.hash(expectedDomain)), adminPx.address, "adminPx addr resolves via ENS for democ")
+    await scLog.log(`Created ENS->admin at ${expectedDomain}`)
+
+    // test ercOwnerClaim
+    assert.equal(await adminPx.admins(owner), false, "erc20 owner not admin by default");
+    await adminPx.ercOwnerClaim({from: owner});
+
+    assert.equal(await adminPx.admins(owner), true, "erc20 owner claim works");
+
+    await adminPx.removeAdmin(owner, {from: user1});
+    await adminPx.setAllowErc20OwnerClaim(false, {from: user1});
+
+    await assertRevert(adminPx.ercOwnerClaim({from: owner}), "erc20 owner can't claim if feature disabled")
 }
 
 
-const testPaymentsForDemoc = async ({}) => {
+const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}) => {
     // test that payments behave as expected
 
-    // TODO: test payments with and without gas direct to SVPayments
-    // todo: test account in good standing
-    throw Error('not implemented');
+    // for simplicity we should set the exchange rate to something simple
+    // this means 10^14 wei per 1c => 1 eth per $100
+    await paySC.setWeiPerCent(toBigNumber(oneEth.divn(10000)), {from: owner});
+    await assertRevert(paySC.setWeiPerCent(1, {from: accounts[2]}), "can't set wei from non-admin account");
+    await scLog.log("set exchange rate")
+
+    await scLog.log(`${await paySC.weiBuysHowManySeconds(toBigNumber('1e13'))}`)
+    await scLog.log(`${await paySC.weiBuysHowManySeconds(toBigNumber('1e18'))}`)
+
+    const oneEthShouldBuy = await paySC.weiBuysHowManySeconds(toBigNumber(oneEth));
+    // this should be 10% of 30 days
+    assert.equal(oneEthShouldBuy.toNumber(), 3 * 24 * 60 * 60, "one eth should buy 3 days with testing params");
+    await scLog.log("1 eth buys correct number of days");
+
+    const user1 = accounts[1];
+
+    // create the democ with an absurdly small fee -
+    const {democHash, adminPx} = await mkDemoc({svIx, erc20, txOpts: {from: user1, value: 1}});
+    assert.equal(await svIx.accountInGoodStanding(democHash), false, "democ should not be in good standing with such a small fee");
+    await scLog.log("Created democ and ensured it's not in good standing");
+
+    await paySC.payForDemocracy(democHash, {from: user1, value: oneEth});
+    assert.equal(await svIx.accountInGoodStanding(democHash), true, "democ should now be in good standing");
+
+    const secRemaining = await paySC.getSecondsRemaining(democHash);
+    assert.equal(oneEthShouldBuy - secRemaining < 10, true, "should have correct time remaining to within 10s")
+
+    // some random sending $ for democ
+    await adminPx.sendTransaction({from: accounts[2], value: oneEth});
+
+    const secRemaining2 = await paySC.getSecondsRemaining(democHash);
+    assert.equal(2 * oneEthShouldBuy - secRemaining2 < 10, true, "should have correct time remaining (again) to within 10s")
+
+    const balPre = await getBalance(owner);
+    await paySC.sendTransaction({from: accounts[2], value: oneEth});
+    assert.deepEqual(balPre.plus(toBigNumber(oneEth)), await getBalance(owner), `paySC fallback works (pre-balance: ${balPre.toString()}`);
 }
 
 
 const testSVDemocCreation = async () => {
-    throw Error('not implemented');
+    // this tests the ability for SecureVote to create democs without payment
 
+    throw Error('not implemented');
 }
 
 
@@ -525,19 +614,19 @@ contract("SVLightIndex", function (accounts) {
         ["test creating democ", testCreateDemoc],
         ["test payments for democ", testPaymentsForDemoc],
         ["test SV democ creation", testSVDemocCreation],
-        ["test democ admin permissions", testDemocAdminPermissions],
-        ["test community ballots (default)", testCommunityBallots],
-        ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
-        ["test deny community ballots", testNoCommunityBallots],
-        ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
-        ["test currency conversion", testCurrencyConversion],
-        ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
-        ["test catagories (crud)", testCatagoriesCrud],
-        ["test setting payment + backend", testSetBackends],
-        ["test version", testVersion],
-        ["test ens self-management", testEnsSelfManagement],
-        ["test nfp tier", testNFPTierAndPayments],
-        ["test payments backup admin", testPaymentsBackupAdmin],
+        // ["test democ admin permissions", testDemocAdminPermissions],
+        // ["test community ballots (default)", testCommunityBallots],
+        // ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
+        // ["test deny community ballots", testNoCommunityBallots],
+        // ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
+        // ["test currency conversion", testCurrencyConversion],
+        // ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
+        // ["test catagories (crud)", testCatagoriesCrud],
+        // ["test setting payment + backend", testSetBackends],
+        // ["test version", testVersion],
+        // ["test ens self-management", testEnsSelfManagement],
+        // ["test nfp tier", testNFPTierAndPayments],
+        // ["test payments backup admin", testPaymentsBackupAdmin],
     ];
     S.map(([desc, f]) => it(desc, wrapTestIx({accounts}, f)), tests);
 });

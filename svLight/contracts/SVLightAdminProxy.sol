@@ -15,6 +15,8 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
     bool public isProxyContract = true;
     uint public proxyVersion = 2;
 
+    bool public allowErc20OwnerClaim = true;
+
     // storage variables
     bytes32 public democHash;
     bool public communityBallotsEnabled = true;
@@ -144,6 +146,22 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
         emit RemovedAdmin(oldAdmin);
     }
 
+    function ercOwnerClaim() external {
+        require(allowErc20OwnerClaim);
+
+        IxIface ix = IxIface(checkFwdAddressUpgrade());
+        address erc20 = ix.getDErc20(democHash);
+        address erc20Owner = owned(erc20).owner();
+
+        require(erc20Owner == msg.sender, "only erc20 owner may trigger the claim");
+
+        _addNewAdmin(erc20Owner);
+    }
+
+    function setAllowErc20OwnerClaim(bool canClaim) isAdmin() external {
+        allowErc20OwnerClaim = canClaim;
+    }
+
     // simple function to list all admins
     function listAllAdmins() public constant returns (address[]) {
         // start a dynamic memory array (note: will be replaced)
@@ -163,7 +181,5 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
     function setOwnerAsAdmin() only_owner() external {
         _addNewAdmin(owner);
     }
-
-    // option for community stuff
 
 }

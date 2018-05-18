@@ -17,7 +17,7 @@ contract EnsOwnerProxy is hasAdmins {
      * @param _ens The ENS Registrar
      * @param _resolver The ENS Resolver
      */
-    constructor(bytes32 _ensNode, ENSIface _ens, PublicResolver _resolver) {
+    constructor(bytes32 _ensNode, ENSIface _ens, PublicResolver _resolver) public {
         ensNode = _ensNode;
         ens = _ens;
         resolver = _resolver;

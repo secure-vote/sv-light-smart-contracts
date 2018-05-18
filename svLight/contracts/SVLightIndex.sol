@@ -296,10 +296,6 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return _version;
     }
 
-    function getPaymentEnabled() external view returns (bool) {
-        return payments.getPaymentEnabled();
-    }
-
     function getPayTo() external returns (address) {
         return payments.getPayTo();
     }
@@ -322,30 +318,17 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
-    // todo: handling payments for creating a democ
     function dInit(address defaultErc20) not_upgraded() external payable returns (bytes32) {
-        // address admin;
-        // if(isContract(msg.sender)) {
-        //     // if the caller is a contract we presume they can handle multisig themselves...
-        //     admin = msg.sender;
-        // } else {
-        //     // otherwise let's create a proxy sc for them
-        //     SVLightAdminProxy adminPx = adminPxFactory.spawn(msg.sender, address(this));
-        //     admin = address(adminPx);
-        // }
-
         bytes32 democHash = backend.dInit(defaultErc20);
 
         SVLightAdminProxy adminPx = adminPxFactory.spawn(democHash, msg.sender, address(this));
         address admin = address(adminPx);
         backend.setDAdmin(democHash, admin);
-
-        emit DemocAdded(democHash, admin);
-
         mkDomain(democHash, admin);
 
         payments.payForDemocracy.value(msg.value)(democHash);
 
+        emit DemocAdded(democHash, admin);
         return democHash;
     }
 

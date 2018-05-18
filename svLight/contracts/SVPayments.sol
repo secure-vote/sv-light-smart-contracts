@@ -14,7 +14,6 @@ import "./IndexInterface.sol";
 
 
 contract SVPayments is IxPaymentsIface, permissioned {
-    event PaymentEnabled(bool feeEnabled);
     event UpgradedToPremium(bytes32 indexed democHash);
     event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
     event AccountPayment(bytes32 indexed democHash, uint additionalSeconds);
@@ -42,13 +41,12 @@ contract SVPayments is IxPaymentsIface, permissioned {
 
     // payment details
     address public payTo;
-    bool paymentEnabled = true;
     uint communityBallotCentsPrice = 1000;  // $10/ballot
     uint basicCentsPricePer30Days = 100000; // $1000/mo
     uint8 premiumMultiplier = 5;
     uint weiPerCent = 0.00001390434 ether;  // $719.20, 13:00 May 14th AEST
     // this allows us to set an address that's allowed to update the exchange rate
-    address exchangeRateAddr;
+    address public exchangeRateAddr;
 
     mapping (bytes32 => Account) accounts;
     PaymentLog[] payments;
@@ -74,6 +72,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
     constructor(address _emergencyAdmin) permissioned() public {
         payTo = msg.sender;
         emergencyAdmin = _emergencyAdmin;
+        exchangeRateAddr = msg.sender;
         require(_emergencyAdmin != address(0), "cannot have null address as backup admin");
     }
 
@@ -91,20 +90,27 @@ contract SVPayments is IxPaymentsIface, permissioned {
         accounts[democHash].lastPaymentTs = now;
     }
 
+    function weiBuysHowManySeconds(uint amount) public view returns (uint) {
+        uint centsPaid = weiToCents(amount);
+        // multiply by 10**18 to ensure we make rounding errors insignificant
+        uint monthsOffsetPaid = ((10 ** 18) * centsPaid) / basicCentsPricePer30Days;
+        uint secondsOffsetPaid = monthsOffsetPaid * (30 days);
+        uint additionalSeconds = secondsOffsetPaid / (10 ** 18);
+        return additionalSeconds;
+    }
+
     function payForDemocracy(bytes32 democHash) external payable {
         require(msg.value > 0, "need to send some ether to make payment");
 
-        uint centsPaid = weiToCents(msg.value);
-        // multiply by 10^18 to ensure we make rounding errors insignificant
-        uint monthRatioOffsetPaid = (10^18) * centsPaid / basicCentsPricePer30Days;
-        uint secondsOffsetPaid = monthRatioOffsetPaid * 30 days;
-        uint additionalSeconds = secondsOffsetPaid / (10^18);
+        uint additionalSeconds = weiBuysHowManySeconds(msg.value);
 
         if (accounts[democHash].isPremium) {
             additionalSeconds /= premiumMultiplier;
         }
 
-        _modAccountBalance(democHash, additionalSeconds);
+        if (additionalSeconds >= 1) {
+            _modAccountBalance(democHash, additionalSeconds);
+        }
         payments.push(PaymentLog(false, democHash, additionalSeconds, msg.value));
         emit AccountPayment(democHash, additionalSeconds);
 
@@ -118,14 +124,19 @@ contract SVPayments is IxPaymentsIface, permissioned {
         return accounts[democHash].paidUpTill >= now;
     }
 
+    function getSecondsRemaining(bytes32 democHash) external view returns (uint) {
+        uint paidTill = accounts[democHash].paidUpTill;
+
+        if (paidTill < now) {
+            return 0;
+        }
+        return paidTill - now;
+    }
+
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) only_owner() external {
         _modAccountBalance(democHash, additionalSeconds);
         payments.push(PaymentLog(true, democHash, additionalSeconds, 0));
         emit GrantedAccountTime(democHash, additionalSeconds, ref);
-    }
-
-    function setNFPStatus(bytes32 democHash, bool isNFP) only_owner() external {
-        notForProfits[democHash] = isNFP;
     }
 
     function upgradeToPremium(bytes32 democHash) only_editors() external {
@@ -164,11 +175,6 @@ contract SVPayments is IxPaymentsIface, permissioned {
         payTo = newPayTo;
     }
 
-    function setPaymentEnabled(bool _enabled) only_owner() external {
-        paymentEnabled = _enabled;
-        emit PaymentEnabled(_enabled);
-    }
-
     function setCommunityBallotCentsPrice(uint amount) only_owner() external {
         communityBallotCentsPrice = amount;
         emit SetCommunityBallotFee(amount);
@@ -189,15 +195,19 @@ contract SVPayments is IxPaymentsIface, permissioned {
         emit SetExchangeRate(wpc);
     }
 
+    function setExchRateAddr(address a) only_owner() external {
+        exchangeRateAddr = a;
+    }
+
+    function setNFPStatus(bytes32 democHash, bool isNFP) only_owner() external {
+        notForProfits[democHash] = isNFP;
+    }
+
 
     /* Getters */
 
     function getPayTo() external view returns(address) {
         return payTo;
-    }
-
-    function getPaymentEnabled() external view returns (bool) {
-        return paymentEnabled;
     }
 
     function getCommunityBallotCentsPrice() external view returns(uint) {
@@ -244,7 +254,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
     /* payment util functions */
 
     function weiToCents(uint w) internal view returns (uint) {
-        return weiPerCent / w;
+        return w / weiPerCent;
     }
 
     function centsToWei(uint c) internal view returns (uint) {

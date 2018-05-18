@@ -11,9 +11,10 @@ var provider = TestRPC.provider({
 module.exports = {
   networks: {
     development: {
-      provider: provider,
+      provider,
       // host: "localhost",
       // port: 8545,
+      // port: 9545,
       gas: 6500000,
       network_id: "*" // Match any network id
     }

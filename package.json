@@ -29,6 +29,9 @@
   "scripts": {
     "test": "./compileAllSvLight.sh && cd svLight && truffle test",
     "test-watch": "cd svLight && reflex truffle test",
+    "test-watch-s": "cd svLight && reflex -s truffle test",
+    "reset-test": "cd svLight && truffle migrate --reset --compile-all",
+    "debug": "cd svLight && truffle debug",
     "deploy": "node ./bin/deploy.js",
     "cli": "node -i ./bin/contractCli.js --name",
     "compile-sv-light": "./compileAllSvLight.sh",

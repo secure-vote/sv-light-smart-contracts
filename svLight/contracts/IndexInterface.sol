@@ -11,7 +11,6 @@ interface IxIface {
     function setPaymentBackend(IxPaymentsIface) external;
     function setBackend(IxBackendIface) external;
 
-    function getPaymentEnabled() external view returns (bool);
     function getPayTo() external returns (address);
     function getCommunityBallotCentsPrice() external returns (uint);
 
@@ -57,9 +56,6 @@ interface IxPaymentsIface {
     function setPayTo(address) external;
     function getPayTo() external view returns (address);
 
-    function setPaymentEnabled(bool) external;
-    function getPaymentEnabled() external view returns (bool);
-
     function getCommunityBallotCentsPrice() external view returns (uint);
     function setCommunityBallotCentsPrice(uint) external;
 
@@ -68,15 +64,19 @@ interface IxPaymentsIface {
     function setPremiumMultiplier(uint8 amount) external;
     function getPremiumMultiplier() external view returns (uint8);
     function getPremiumPricePer30Days() external view returns (uint);
-    function setWeiPerCent(uint weiPerCent) external;
+    function setWeiPerCent(uint) external;
     function getWeiPerCent() external view returns (uint weiPerCent);
     function getUsdEthExchangeRate() external view returns (uint centsPerEth);
+    function setExchRateAddr(address) external;
+
+    function weiBuysHowManySeconds(uint amount) external view returns (uint secs);
 
     function downgradeToBasic(bytes32 democHash) external;
     function upgradeToPremium(bytes32 democHash) external;
 
     function payForDemocracy(bytes32 democHash) external payable;
     function accountInGoodStanding(bytes32 democHash) external view returns (bool);
+    function getSecondsRemaining(bytes32 democHash) external view returns (uint);
 
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) external;
 
@@ -85,7 +85,6 @@ interface IxPaymentsIface {
     function getPaymentLogN() external view returns (uint);
     function getPaymentLog(uint n) external view returns (bool _external, bytes32 _democHash, uint _seconds, uint _ethValue);
 
-    event PaymentEnabled(bool feeEnabled);
     event UpgradedToPremium(bytes32 indexed democHash);
     event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
     event AccountPayment(bytes32 indexed democHash, uint additionalSeconds);
