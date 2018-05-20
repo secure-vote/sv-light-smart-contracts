@@ -627,7 +627,7 @@ contract("SVLightIndex", function (accounts) {
         ["test instantiation", testInit],
         ["test creating democ", testCreateDemoc],
         ["test payments for democ", testPaymentsForDemoc],
-        ["test SV democ creation", testSVDemocCreation],
+        // ["test SV democ creation", testSVDemocCreation],
         // ["test democ admin permissions", testDemocAdminPermissions],
         // ["test community ballots (default)", testCommunityBallots],
         // ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
