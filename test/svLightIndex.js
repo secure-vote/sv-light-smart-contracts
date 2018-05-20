@@ -452,7 +452,7 @@ const testInit = async ({paySC, owner, svIx}) => {
 
 
 const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner}) => {
-    const user1 = accounts[1];
+    const [user0, user1, user2] = accounts;
 
     const {democHash, adminPx} = await mkDemoc({svIx, erc20, txOpts: {from: user1, value: oneEth}})
 
@@ -465,11 +465,20 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner}
     assert.equal(await ensPR.addr(nh.hash(expectedDomain)), adminPx.address, "adminPx addr resolves via ENS for democ")
     await scLog.log(`Created ENS->admin at ${expectedDomain}`)
 
+    // test some properties of adminPx
+    assert.equal(await adminPx.admins(user1), true, "user1 should be admin to start with");
+    await adminPx.addNewAdmin(user2, {from: user1});
+    await adminPx.removeAdmin(user1, {from: user2});
+    assert.equal(await adminPx.admins(user1), false, "user1 should no longer be admin");
+    await adminPx.setOwnerAsAdmin({from: user1});
+    assert.equal(await adminPx.admins(user1), true, "user1 should be admin again");
+
     // test ercOwnerClaim
     assert.equal(await adminPx.admins(owner), false, "erc20 owner not admin by default");
     await adminPx.ercOwnerClaim({from: owner});
 
     assert.equal(await adminPx.admins(owner), true, "erc20 owner claim works");
+    await assertRevert(adminPx.ercOwnerClaim({from: accounts[2]}), "erc20 owner can't claim if now actual owner")
 
     await adminPx.removeAdmin(owner, {from: user1});
     await adminPx.setAllowErc20OwnerClaim(false, {from: user1});

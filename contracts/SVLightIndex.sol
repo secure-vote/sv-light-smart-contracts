@@ -261,12 +261,12 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
     //* MODIFIERS /
 
     modifier onlyBy(address _account) {
-        require(msg.sender == _account, ERR_FORBIDDEN);
+        require(msg.sender == _account, "onlyBy: forbidden");
         _;
     }
 
     modifier onlyDemocAdmin(bytes32 democHash) {
-        require(msg.sender == backend.getDAdmin(democHash), "403: Forbidden. Not democ admin");
+        require(msg.sender == backend.getDAdmin(democHash), "onlyDemocAdmin: forbidden");
         _;
     }
 
