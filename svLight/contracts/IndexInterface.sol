@@ -23,6 +23,7 @@ interface IxIface {
 
     function payForDemocracy(bytes32 democHash) external payable;
     function accountInGoodStanding(bytes32 democHash) external view returns (bool);
+    function accountPremiumAndInGoodStanding(bytes32 democHash) external view returns (bool);
 
     // disable this method bc we don't want admins to move away from our admin SC
     // function setDAdmin(bytes32 democHash, address newAdmin) external;

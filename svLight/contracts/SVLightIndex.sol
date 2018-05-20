@@ -364,6 +364,10 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return payments.accountInGoodStanding(democHash);
     }
 
+    function accountPremiumAndInGoodStanding(bytes32 democHash) external view returns (bool) {
+        return payments.accountInGoodStanding(democHash) && payments.getPremiumStatus(democHash);
+    }
+
     // admin methods
 
     // disable `setDAdmin` bc users should not be able to migrate away from the
