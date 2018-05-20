@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 rm -r ./_solDist/*
 
 for f in $(ls ./contracts | grep sol); do

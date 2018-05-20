@@ -95,6 +95,7 @@ module.exports = function () {
     this.getBalance = toAsync(web3.eth.getBalance);
     this.getBlockNumber = toAsync(web3.eth.getBlockNumber);
     this.getBlock = toAsync(web3.eth.getBlock);
+    this.getBlockN = async () => (await this.getBlock('latest'))['number'];
     this.sendTransaction = toAsync(web3.eth.sendTransaction);
 
     this.log = (...args) => console.log(...args);

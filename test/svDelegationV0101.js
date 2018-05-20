@@ -1,5 +1,6 @@
 const DCOrig = artifacts.require("./SVDelegation.sol");
-const DCv11 = artifacts.require("./SVDelegationV0101.sol");
+// const DCv11 = artifacts.require("./SVDelegationV0101.sol");
+const DCv11 = artifacts.require("./SVDelegationV0101_1.sol");
 const R = require('ramda');
 
 require("./testUtils")();
@@ -17,36 +18,46 @@ const zeroAddr =
 
 
 async function testGlobalDelegation({accounts: acc}) {
+    const [v1, v2, d1, d2, t1, t2] = acc;
+
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
 
-    const v1 = acc[0];
-    const v2 = acc[1];
+    assert.deepEqual([[], []], await dc.findPossibleDelegatorsOf(d2), "await dc.findPossibleDelegatorsOf(d2) returns nothing");
 
-    const d1 = acc[2];
-    const d2 = acc[3];
+    // await dcOrig.setTokenDelegation(t1, d2, {from: v1})
+    // await dcOrig.setGlobalDelegation(d2, {from: v2})
 
-    const t1 = acc[4];
+    // assert.equal(d2, (await dc.resolveDelegation(v1, t1))[3], "resolveDelegation token good #0");
+    assert.equal(zeroAddr, (await dc.resolveDelegation(v1, zeroAddr))[3], "resolveDelegation Global good #0");
+    // assert.equal(d2, (await dc.resolveDelegation(v2, zeroAddr))[3], "resolveDelegation Global (d2) good #0");
 
-    // test before doing anything
-    assert.deepEqual([[], []], await dc.findPossibleDelegatorsOf(d1), "await dc.findPossibleDelegatorsOf(d1) returns nothing");
+    // this won't be true since dc doens't know about v1 or v2 yet - though will after
+    // they both make txs
+    // assert.deepEqual([[v1, v2], [t1, zeroAddr]], await dc.findPossibleDelegatorsOf(d2), "await dc.findPossibleDelegatorsOf(d2) returns 2 records");
 
     await dc.setGlobalDelegation(d1, {from: v1});
     assert.equal(d1, (await dc.resolveDelegation(v1, zeroAddr))[3], "resolveDelegation glob good #1");
+    // note: this next line (v1, t1) -> d1 is actually a bug! We set it to d2 above...
+    // documentation in SVDelegationV0101_1.sol
+    assert.equal(d1, (await dc.resolveDelegation(v1, t1))[3], "resolveDelegation token good #1");
 
     assert.deepEqual([[v1], [zeroAddr]], await dc.findPossibleDelegatorsOf(d1), "await dc.findPossibleDelegatorsOf(d1) returns one result");
 
-    await dc.setGlobalDelegation(d2, {from: v1});
-    assert.equal(d2, (await dc.resolveDelegation(v1, zeroAddr))[3], "resolveDelegation global good #1.1");
+    await dc.setGlobalDelegation(d1, {from: v2});
+    assert.equal(d1, (await dc.resolveDelegation(v2, zeroAddr))[3], "resolveDelegation global good #1.1");
 
     await dc.setTokenDelegation(t1, d1, {from: v1});
-    assert.equal(d2, (await dc.resolveDelegation(v1, zeroAddr))[3], "resolveDelegation Global good #2");
-    assert.equal(d1, (await dc.resolveDelegation(v1, t1))[3], "resolveDelegation token good #2");
+    assert.equal(d1, (await dc.resolveDelegation(v1, t1))[3], "resolveDelegation tokne good #2");
+    assert.equal(d1, (await dc.resolveDelegation(v1, zeroAddr))[3], "resolveDelegation global good #2");
 
     const votersForD1 = await dc.findPossibleDelegatorsOf(d1);
+    assert.deepEqual([[v1, v2, v1], [zeroAddr, zeroAddr, t1]], votersForD1, "possible delegators matches #3 d1");
+
+    await dc.setTokenDelegation(t2, d2, {from: v2});
+    await dc.setTokenDelegation(t2, d2, {from: v1});
     const votersForD2 = await dc.findPossibleDelegatorsOf(d2);
-    assert.deepEqual([[v1, v1], [zeroAddr, t1]], votersForD1, "possible delegators matches #3 d1");
-    assert.deepEqual([[v1], [zeroAddr]], votersForD2, "possible delegators matches #3 d2");
+    assert.deepEqual([[/*v1, v2,*/ v2, v1], [/*t1, zeroAddr,*/ t2, t2]], votersForD2, "possible delegators matches #3 d2");
 }
 
 
@@ -61,12 +72,32 @@ const testTokenDelegation = async ({accounts: acc}) => {
     const d2 = acc[3];
 
     const t1 = acc[4];
+    const t2 = acc[5];
 
     await dc.setTokenDelegation(t1, d1, {from: v1});
     assert.equal(d1, (await dc._rawGetTokenDelegation(v1, t1))[3], "rawGetTokenD good");
     assert.equal(d1, (await dc.resolveDelegation(v1, t1))[3], "resolve token delegation good");
     assert.equal(zeroAddr, (await dc.resolveDelegation(v1, zeroAddr))[3], "resolve token delegation does not carry to global");
     assert.equal(zeroAddr, (await dc.resolveDelegation(d1, t1))[3], "delegate is not a voter - has no delegation");
+
+    const hist = await dc.getHistoricalDelegation(1);
+    const blockN = await getBlockN();
+    const bnsToNums = xs => R.map(x => x.toNumber ? x.toNumber() : x, xs);
+    assert.deepEqual(bnsToNums(hist), [1, 0, blockN, d1, v1, t1], "delegation from sc should match expected")
+
+    await dc.setGlobalDelegation(d2, {from: v1});
+    const dGlobal = await dc._rawGetGlobalDelegation(v1)
+    assert.deepEqual(bnsToNums(dGlobal), [2, 0, await getBlockN(), d2, v1, zeroAddr]);
+
+    await dc.setTokenDelegation(t2, d1, {from: v1});
+    assert.equal(await dc._getLogTokenContract(0), zeroAddr, "logTokenContracts should work 1")
+    assert.equal(await dc._getLogTokenContract(1), t1, "logTokenContracts should work 2")
+    assert.equal(await dc._getLogTokenContract(2), t2, "logTokenContracts should work 3")
+
+    assert.equal(await dc.getDelegationID(v1, t1), 1, "delegationID matches expected - 1");
+    assert.equal((await dc.getDelegationID(v1, zeroAddr)).toNumber(), 2, "delegationID matches expected - 1.5");
+    assert.equal((await dc.getDelegationID(v1, t2)).toNumber(), 3, "delegationID matches expected - 2");
+    assert.equal(await dc.getDelegationID(v2, t2), 0, "delegationID 0 when not found")
 };
 
 
@@ -116,10 +147,10 @@ const testMultiDelegations = async ({accounts: acc}) => {
 
 
 const testBackwardsCompatibility = async ({accounts: acc}) => {
+    const [v1, v2, d1, d2, d3, d4, t1] = acc;
+
     const dcOrig = await DCOrig.new();
     const dc = await DCv11.new(dcOrig.address);
-
-    const [v1, v2, d1, d2, d3, d4, t1] = acc;
 
     await dcOrig.setTokenDelegation(t1, d1, {from: v1});
     await dcOrig.setGlobalDelegation(d2, {from: v2});
