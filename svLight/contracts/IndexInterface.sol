@@ -8,8 +8,9 @@ interface IxIface {
     function getVersion() external view returns (uint256);
 
     function doUpgrade(address) external;
-    function setPaymentBackend(IxPaymentsIface) external;
-    function setBackend(IxBackendIface) external;
+    function emergencySetPaymentBackend(IxPaymentsIface) external;
+    function emergencySetBackend(IxBackendIface) external;
+    function emergencySetAdmin(bytes32 democHash, address newAdmin) external;
 
     function getPayTo() external returns (address);
     function getCommunityBallotCentsPrice() external returns (uint);
@@ -23,7 +24,8 @@ interface IxIface {
     function payForDemocracy(bytes32 democHash) external payable;
     function accountInGoodStanding(bytes32 democHash) external view returns (bool);
 
-    function setDAdmin(bytes32 democHash, address newAdmin) external;
+    // disable this method bc we don't want admins to move away from our admin SC
+    // function setDAdmin(bytes32 democHash, address newAdmin) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
@@ -55,19 +57,22 @@ interface IxPaymentsIface {
 
     function setPayTo(address) external;
     function getPayTo() external view returns (address);
+    function setMinorEditsAddr(address) external;
 
     function getCommunityBallotCentsPrice() external view returns (uint);
     function setCommunityBallotCentsPrice(uint) external;
 
     function setBasicCentsPricePer30Days(uint amount) external;
     function getBasicCentsPricePer30Days() external view returns(uint);
+    function getBasicExtraBallotFeeWei() external view returns (uint);
+    function getBasicBallotsPer30Days() external view returns (uint);
+    function setBasicBallotsPer30Days(uint amount) external;
     function setPremiumMultiplier(uint8 amount) external;
     function getPremiumMultiplier() external view returns (uint8);
     function getPremiumPricePer30Days() external view returns (uint);
     function setWeiPerCent(uint) external;
     function getWeiPerCent() external view returns (uint weiPerCent);
     function getUsdEthExchangeRate() external view returns (uint centsPerEth);
-    function setExchRateAddr(address) external;
 
     function weiBuysHowManySeconds(uint amount) external view returns (uint secs);
 
@@ -77,10 +82,13 @@ interface IxPaymentsIface {
     function payForDemocracy(bytes32 democHash) external payable;
     function accountInGoodStanding(bytes32 democHash) external view returns (bool);
     function getSecondsRemaining(bytes32 democHash) external view returns (uint);
+    function getPremiumStatus(bytes32 democHash) external view returns (bool);
+    function getAccount(bytes32 democHash) external view returns (bool isPremium, uint lastPaymentTs, uint paidUpTill);
 
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) external;
 
-    function setNFPStatus(bytes32 democHash, bool isNFP) external;
+    function setDenyPremium(bytes32 democHash, bool isPremiumDenied) external;
+    function getDenyPremium(bytes32 democHash) external view returns (bool);
 
     function getPaymentLogN() external view returns (uint);
     function getPaymentLog(uint n) external view returns (bool _external, bytes32 _democHash, uint _seconds, uint _ethValue);
@@ -125,6 +133,9 @@ interface IxBackendIface {
     /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
     function getDBallot(bytes32 democHash, uint n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime);
+    function getDBallotCreationTs(bytes32 democHash, uint n) external view returns (uint256);
+    function getDOfficialBallotsN(bytes32 democHash) external view returns (uint256);
+    function getDOfficialBallotID(bytes32 democHash, uint256 officialN) external returns (uint256);
     function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface);
     function getDBallotAddr(bytes32 democHash, uint n) external view returns (address);
 

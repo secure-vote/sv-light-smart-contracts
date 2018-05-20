@@ -38,20 +38,22 @@ contract SVPayments is IxPaymentsIface, permissioned {
         uint _ethValue;
     }
 
+    // this is an address that's only allowed to make minor edits
+    // e.g. setExchangeRate, setDenyPremium, giveTimeToDemoc
+    address public minorEditsAddr;
 
     // payment details
     address public payTo;
     uint communityBallotCentsPrice = 1000;  // $10/ballot
     uint basicCentsPricePer30Days = 100000; // $1000/mo
+    uint basicBallotsPer30Days = 5;
     uint8 premiumMultiplier = 5;
     uint weiPerCent = 0.00001390434 ether;  // $719.20, 13:00 May 14th AEST
-    // this allows us to set an address that's allowed to update the exchange rate
-    address public exchangeRateAddr;
 
     mapping (bytes32 => Account) accounts;
     PaymentLog[] payments;
 
-    mapping (bytes32 => bool) notForProfits;
+    mapping (bytes32 => bool) denyPremium;
 
 
     modifier owner_or(address addr) {
@@ -72,7 +74,6 @@ contract SVPayments is IxPaymentsIface, permissioned {
     constructor(address _emergencyAdmin) permissioned() public {
         payTo = msg.sender;
         emergencyAdmin = _emergencyAdmin;
-        exchangeRateAddr = msg.sender;
         require(_emergencyAdmin != address(0), "cannot have null address as backup admin");
     }
 
@@ -118,9 +119,6 @@ contract SVPayments is IxPaymentsIface, permissioned {
     }
 
     function accountInGoodStanding(bytes32 democHash) external view returns (bool) {
-        if (notForProfits[democHash]) {
-            return true;
-        }
         return accounts[democHash].paidUpTill >= now;
     }
 
@@ -133,13 +131,24 @@ contract SVPayments is IxPaymentsIface, permissioned {
         return paidTill - now;
     }
 
-    function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) only_owner() external {
+    function getPremiumStatus(bytes32 democHash) external view returns (bool) {
+        return accounts[democHash].isPremium;
+    }
+
+    function getAccount(bytes32 democHash) external view returns (bool isPremium, uint lastPaymentTs, uint paidUpTill) {
+        isPremium = accounts[democHash].isPremium;
+        lastPaymentTs = accounts[democHash].lastPaymentTs;
+        paidUpTill = accounts[democHash].paidUpTill;
+    }
+
+    function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) owner_or(minorEditsAddr) external {
         _modAccountBalance(democHash, additionalSeconds);
         payments.push(PaymentLog(true, democHash, additionalSeconds, 0));
         emit GrantedAccountTime(democHash, additionalSeconds, ref);
     }
 
     function upgradeToPremium(bytes32 democHash) only_editors() external {
+        require(denyPremium[democHash] == false, "this democ is not allowed to upgrade to premium");
         require(!accounts[democHash].isPremium, "cannot upgrade to premium twice");
         accounts[democHash].isPremium = true;
         // convert basic minutes to premium minutes
@@ -185,37 +194,49 @@ contract SVPayments is IxPaymentsIface, permissioned {
         emit SetBasicCentsPricePer30Days(amount);
     }
 
+    function setBasicBallotsPer30Days(uint amount) only_owner() external {
+        basicBallotsPer30Days = amount;
+    }
+
     function setPremiumMultiplier(uint8 m) only_owner() external {
         premiumMultiplier = m;
         emit SetPremiumMultiplier(m);
     }
 
-    function setWeiPerCent(uint wpc) owner_or(exchangeRateAddr) external {
+    function setWeiPerCent(uint wpc) owner_or(minorEditsAddr) external {
         weiPerCent = wpc;
         emit SetExchangeRate(wpc);
     }
 
-    function setExchRateAddr(address a) only_owner() external {
-        exchangeRateAddr = a;
+    function setMinorEditsAddr(address a) only_owner() external {
+        minorEditsAddr = a;
     }
 
-    function setNFPStatus(bytes32 democHash, bool isNFP) only_owner() external {
-        notForProfits[democHash] = isNFP;
+    function setDenyPremium(bytes32 democHash, bool isPremiumDenied) owner_or(minorEditsAddr) external {
+        denyPremium[democHash] = isPremiumDenied;
     }
 
 
     /* Getters */
 
-    function getPayTo() external view returns(address) {
+    function getPayTo() external view returns (address) {
         return payTo;
     }
 
-    function getCommunityBallotCentsPrice() external view returns(uint) {
+    function getCommunityBallotCentsPrice() external view returns (uint) {
         return communityBallotCentsPrice;
     }
 
-    function getBasicCentsPricePer30Days() external view returns(uint) {
+    function getBasicCentsPricePer30Days() external view returns (uint) {
         return basicCentsPricePer30Days;
+    }
+
+    function getBasicExtraBallotFeeWei() external view returns (uint) {
+        return centsToWei(basicCentsPricePer30Days / basicBallotsPer30Days);
+    }
+
+    function getBasicBallotsPer30Days() external view returns (uint) {
+        return basicBallotsPer30Days;
     }
 
     function getPremiumMultiplier() external view returns (uint8) {
@@ -237,6 +258,10 @@ contract SVPayments is IxPaymentsIface, permissioned {
     function getUsdEthExchangeRate() external view returns (uint) {
         // this returns cents per ether
         return 1 ether / weiPerCent;
+    }
+
+    function getDenyPremium(bytes32 democHash) external view returns (bool) {
+        return denyPremium[democHash];
     }
 
     function getPaymentLogN() external view returns (uint) {

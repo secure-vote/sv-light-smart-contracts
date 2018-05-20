@@ -310,6 +310,11 @@ async function testSignedBallotWithEnc({accounts, log}){
 }
 
 
+async function testDeprecation({accounts}) {
+    throw Error('not implemented')
+}
+
+
 function sAssertEq(a, b, msg) {
     return assert.true(S.equals(a, b), msg);
 }
@@ -363,7 +368,8 @@ contract("LittleBallotBox", function(_accounts) {
         ["should not allow testing functions if testing mode is false", testTestMode],
         ["should throw on early ballot", testEarlyBallot],
         ["should handle signed ballots", testSignedBallotNoEnc],
-        ["should handle signed ballots with enc", testSignedBallotWithEnc]
+        ["should handle signed ballots with enc", testSignedBallotWithEnc],
+        ["should allow deprecation", testDeprecation],
     ]
     S.map(([desc, f]) => it(desc, _wrapTest(_accounts, f)), tests);
 });

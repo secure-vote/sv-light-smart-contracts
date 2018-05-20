@@ -7,11 +7,12 @@ pragma solidity ^0.4.24;
 
 import { owned, claimReverseENS, copyMemAddrArray, upgradePtr } from "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
-import { SVLightBallotBox, BBSettings } from "./SVLightBallotBox.sol";
+import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
+import { SVBallotConsts } from "./SVBallotConsts.sol";
 
 
-contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
+contract SVLightAdminProxy is owned, copyMemAddrArray, SVBallotConsts {
     bool public isProxyContract = true;
     uint public proxyVersion = 2;
 
@@ -114,8 +115,7 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
         uint256 necessaryFlags = uint256(USE_NO_ENC) << 128;
         uint256 packed = (_packed | necessaryFlags) & disallowedMask;
 
-        address fwdTo = checkFwdAddressUpgrade();
-        IxIface ix = IxIface(fwdTo);
+        IxIface ix = IxIface(checkFwdAddressUpgrade());
 
         // if accounts are not in good standing then we always allow community ballots
         bool canDoCommunityBallots = communityBallotsEnabled || !ix.accountInGoodStanding(democHash);
@@ -155,6 +155,7 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
 
         require(erc20Owner == msg.sender, "only erc20 owner may trigger the claim");
 
+        // note: the erc20 owner is added as an admin, not owner of the contract
         _addNewAdmin(erc20Owner);
     }
 
@@ -181,5 +182,4 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, BBSettings {
     function setOwnerAsAdmin() only_owner() external {
         _addNewAdmin(owner);
     }
-
 }

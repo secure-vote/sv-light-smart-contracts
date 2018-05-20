@@ -514,9 +514,12 @@ const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}
     const secRemaining2 = await paySC.getSecondsRemaining(democHash);
     assert.equal(2 * oneEthShouldBuy - secRemaining2 < 10, true, "should have correct time remaining (again) to within 10s")
 
+    // check payments work via owner balance
     const balPre = await getBalance(owner);
     await paySC.sendTransaction({from: accounts[2], value: oneEth});
     assert.deepEqual(balPre.plus(toBigNumber(oneEth)), await getBalance(owner), `paySC fallback works (pre-balance: ${balPre.toString()}`);
+
+    // any more tests?
 }
 
 
@@ -556,6 +559,11 @@ const testNoCommunityBallots = async () => {
 }
 
 
+const testCommunityBallotsAllowedSubBits = async () => {
+    throw Error('not implemented')
+}
+
+
 const testCurrencyConversion = async () => {
     // test our payment code around eth/usd stuff
     throw Error('not implemented');
@@ -590,7 +598,7 @@ const testVersion = async ({svIx}) => {
 }
 
 
-const testEnsSelfManagement = async () => {
+const testIxEnsSelfManagement = async () => {
     // test we can set and upgrade ENS via upgrades and permissions work out
     throw Error("not implemented");
 }
@@ -603,7 +611,13 @@ const testNFPTierAndPayments = async () => {
 
 
 const testPaymentsBackupAdmin = async () => {
+    // test the emergency backup admin address in payments
     throw Error("not implemented")
+}
+
+
+const testBasicExtraBallots = async () => {
+    throw Error("not impl")
 }
 
 
@@ -618,13 +632,15 @@ contract("SVLightIndex", function (accounts) {
         // ["test community ballots (default)", testCommunityBallots],
         // ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
         // ["test deny community ballots", testNoCommunityBallots],
+        // ["test allowed submission bits on comm ballots", testCommunityBallotsAllowedSubBits],
         // ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
         // ["test currency conversion", testCurrencyConversion],
         // ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
+        // ["test paying for extra ballots (basic)", testBasicExtraBallots],
         // ["test catagories (crud)", testCatagoriesCrud],
         // ["test setting payment + backend", testSetBackends],
         // ["test version", testVersion],
-        // ["test ens self-management", testEnsSelfManagement],
+        // ["test index ens self-management", testIxEnsSelfManagement],
         // ["test nfp tier", testNFPTierAndPayments],
         // ["test payments backup admin", testPaymentsBackupAdmin],
     ];

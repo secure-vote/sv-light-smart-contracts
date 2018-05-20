@@ -19,6 +19,7 @@ import "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./SVPayments.sol";
 import "./EnsOwnerProxy.sol";
+import { BPackedUtils } from "../libs/BPackedUtils.sol";
 
 
 contract SVAdminPxFactory {
@@ -46,12 +47,14 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         BallotBoxIface bb;
         uint64 startTs;
         uint64 endTs;
+        uint256 creationTs;
     }
 
     struct Democ {
         address erc20;
         address admin;
         Ballot[] ballots;
+        uint256[] officialBallots;  // the IDs of official ballots
     }
 
     struct BallotRef {
@@ -165,6 +168,18 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         return (b.specHash, b.extraData, b.bb, b.startTs, b.endTs);
     }
 
+    function getDBallotCreationTs(bytes32 democHash, uint n) external view returns (uint256) {
+        return democs[democHash].ballots[n].creationTs;
+    }
+
+    function getDOfficialBallotsN(bytes32 democHash) external view returns (uint256) {
+        return democs[democHash].officialBallots.length;
+    }
+
+    function getDOfficialBallotID(bytes32 democHash, uint256 officialN) external returns (uint256) {
+        return democs[democHash].officialBallots[officialN];
+    }
+
     function getDBallotAddr(bytes32 democHash, uint n) external view returns (address) {
         return address(democs[democHash].ballots[n].bb);
     }
@@ -188,7 +203,12 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
         ballotId = democs[democHash].ballots.length;
-        democs[democHash].ballots.push(Ballot(specHash, extraData, bb, startTs, endTs));
+        democs[democHash].ballots.push(Ballot(specHash, extraData, bb, startTs, endTs, now));
+
+        if (bb.isOfficial()) {
+            democs[democHash].officialBallots.push(ballotId);
+        }
+
         ballotList.push(BallotRef(democHash, ballotId));
         emit LowLevelNewBallot(democHash, ballotId);
     }
@@ -227,6 +247,8 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
 
     uint256 constant _version = 2;
 
+    bool txMutex = false;
+
     //* EVENTS /
 
     event PaymentMade(uint[2] valAndRemainder);
@@ -236,14 +258,11 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     // event Log(string message);
     // event LogB32(bytes32 b32);
 
-    event PaymentTooLow(uint msgValue, uint feeReq);
-
     //* MODIFIERS /
 
     modifier onlyBy(address _account) {
-        if(doRequire(msg.sender == _account, ERR_FORBIDDEN)) {
-            _;
-        }
+        require(msg.sender == _account, ERR_FORBIDDEN);
+        _;
     }
 
     modifier onlyDemocAdmin(bytes32 democHash) {
@@ -280,14 +299,18 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         ensOwnerPx.upgradeMeAdmin(nextSC);
     }
 
-    // for emergencies
-    function setPaymentBackend(IxPaymentsIface newSC) only_owner() external {
+    /* FOR EMERGENCIES */
+
+    function emergencySetPaymentBackend(IxPaymentsIface newSC) only_owner() external {
         payments = newSC;
     }
 
-    // for emergencies
-    function setBackend(IxBackendIface newSC) only_owner() external {
+    function emergencySetBackend(IxBackendIface newSC) only_owner() external {
         backend = newSC;
+    }
+
+    function emergencySetAdmin(bytes32 democHash, address newAdmin) only_owner() external {
+        backend.setDAdmin(democHash, newAdmin);
     }
 
     //* GLOBAL INFO */
@@ -342,9 +365,12 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
     }
 
     // admin methods
-    function setDAdmin(bytes32 democHash, address newAdmin) onlyDemocAdmin(democHash) external {
-        backend.setDAdmin(democHash, newAdmin);
-    }
+
+    // disable `setDAdmin` bc users should not be able to migrate away from the
+    // admin smart contract
+    // function setDAdmin(bytes32 democHash, address newAdmin) onlyDemocAdmin(democHash) external {
+    //     backend.setDAdmin(democHash, newAdmin);
+    // }
 
     function setDErc20(bytes32 democHash, address newErc20) onlyDemocAdmin(democHash) external {
         backend.setDErc20(democHash, newErc20);
@@ -406,6 +432,7 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         emit BallotAdded(democHash, id);
     }
 
+    // manually add a ballot - only the owner can call this
     function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb)
                       only_owner()
                       external
@@ -413,36 +440,95 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         return _addBallot(democHash, extraData, bb);
     }
 
+    function _deployBallotChecks(bytes32 democHash, BallotBoxIface bb) internal view {
+        uint256 endTime = uint256(bb.getEndTime());
+        // end time must be in future
+        require(endTime > now, "ballot must end in the future");
+        require(bb.isTesting() == false, "ballot cannot be in testing mode");
+
+        // if the ballot is marked as official require the democracy is paid up to
+        // some relative amount - exclude NFP accounts from this check
+        if (bb.isOfficial()) {
+            uint secsLeft = payments.getSecondsRemaining(democHash);
+            // must be positive due to ending in future check
+            uint256 secsToEndTime = endTime - now;
+            // require ballots end no more than twice the time left on the democracy
+            require(secsLeft * 2 > secsToEndTime, "democracy not paid up enough for ballot");
+        }
+    }
+
+    function _basicBallotLimitOperations(bytes32 democHash, BallotBoxIface bb) internal {
+        // if we're an official ballot and the democ is basic, ensure the democ
+        // isn't over the ballots/mo limit
+        if (bb.isOfficial() && payments.getPremiumStatus(democHash) == false) {
+            uint nBallotsAllowed = payments.getBasicBallotsPer30Days();
+            uint nBallotsOfficial = backend.getDOfficialBallotsN(democHash);
+
+            // if the democ has less than nBallotsAllowed then it's guarenteed to be okay
+            if (nBallotsAllowed > nBallotsOfficial) {
+                return;
+            }
+
+            // we want to check the creation timestamp of the nth most recent ballot
+            // where n is the # of ballots allowed per month. Note: there isn't an off
+            // by 1 error here because if 1 ballots were allowed per month then we'd want
+            // to look at the most recent ballot, so nBallotsOfficial-1 in this case.
+            // similarly, if X ballots were allowed per month we want to look at
+            // nBallotsOfficial-X. There would thus be (X-1) ballots that are _more_
+            // recent than the one we're looking for.
+            uint earlyBallotId = backend.getDOfficialBallotID(democHash, nBallotsOfficial - nBallotsAllowed);
+            uint earlyBallotTs = backend.getDBallotCreationTs(democHash, earlyBallotId);
+
+            // if the earlyBallot was created more than 30 days in the past we're okay
+            if (earlyBallotTs < now - 30 days) {
+                return;
+            }
+
+            // at this point it may be the case that we shouldn't allow the ballot
+            // to be created. (It's an official ballot for a basic tier democracy
+            // where the Nth most recent ballot was created within the last 30 days.)
+            // We should now check for payment
+            uint extraBallotFee = payments.getBasicExtraBallotFeeWei();
+            require(msg.value >= extraBallotFee, "extra ballots at the basic tier require payment");
+
+            // now that we know they've paid the fee, we should send Eth to `payTo`
+            // and return the remainder.
+            uint remainder = msg.value - extraBallotFee;
+            safeSend(address(payments), extraBallotFee);
+            safeSend(msg.sender, remainder);
+
+            return;
+        }
+    }
+
     function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed)
-                          onlyBy(backend.getDAdmin(democHash))
+                          onlyDemocAdmin(democHash)
                           // todo: handling payments here
                           external payable
                           returns (uint) {
+
         BallotBoxIface bb = bbFactory.spawn(
             specHash,
             packed,
             this,
             msg.sender);
+
+        _basicBallotLimitOperations(democHash, bb);
+        _deployBallotChecks(democHash, bb);
+
         return _addBallot(democHash, extraData, bb);
     }
 
 
     // sv ens domains
     function mkDomain(bytes32 democHash, address adminSc) internal returns (bytes32 node) {
-        // create domain for admin!
-        // truncate the democHash to 13 bytes (which is the most that's safely convertable to a decimal string
-        // without going over 32 chars), then convert to uint, then uint to string (as bytes32)
+        // create domain for admin SC!
+        // truncate the democHash to 13 bytes and then to base32 (alphabet borrowed from bech32 spec)
         bytes13 democPrefix = bytes13(democHash);
-        // bytes32 democPrefixIntStr = StringLib.uintToBytes(uint(democPrefix));
-        // // although the address doesn't exist, it gives us something to lookup I suppose.
-        // ensPx.regName(b32ToStr(democPrefixIntStr), address(democPrefix), admin);
         bytes memory prefixB32 = Base32Lib.toBase32(b13ToBytes(democPrefix));
-        node = ensPx.regName(string(prefixB32), adminSc);
+        // set owner to 0 so it's well known the domain can't be redirected
+        node = ensPx.regNameWOwner(string(prefixB32), adminSc, address(0));
     }
-
-
-    // TODO: move these utils to a library before go-live
-
 
     // utils
     function maxU64(uint64 a, uint64 b) pure internal returns(uint64) {
@@ -479,5 +565,15 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
             bs[i] = b13[i];
         }
         return bs;
+    }
+
+
+    // we want to be able to call outside contracts (e.g. the admin proxy contract)
+    // but reentrency is bad, so here's a mutex.
+    function safeSend(address toAddr, uint amount) internal {
+        require(txMutex == false, "Guard is active");
+        txMutex = true;
+        require(toAddr.call.value(amount)(), "safeSend failed");
+        txMutex = false;
     }
 }

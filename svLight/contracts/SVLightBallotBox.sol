@@ -25,23 +25,10 @@ import "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
+import { SVBallotConsts } from "./SVBallotConsts.sol";
+import { BPackedUtils } from "../libs/BPackedUtils.sol";
 
-
-contract BBSettings {
-    // voting settings
-    uint16 constant USE_ETH = 1;          // 2^0
-    uint16 constant USE_SIGNED = 2;       // 2^1
-    uint16 constant USE_NO_ENC = 4;       // 2^2
-    uint16 constant USE_ENC = 8;          // 2^3
-
-    // ballot settings
-    uint16 constant IS_BINDING = 8192;    // 2^13
-    uint16 constant IS_OFFICIAL = 16384;  // 2^14
-    uint16 constant USE_TESTING = 32768;  // 2^15
-}
-
-
-contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owned {
+contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, owned {
     uint256 constant BB_VERSION = 3;
 
     //// ** Storage Variables
@@ -118,18 +105,18 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
     }
 
     modifier onlyTesting() {
-        if(doRequire(isTesting(), ERR_TESTING_REQ))
-            _;
+        require(isTesting(), ERR_TESTING_REQ);
+        _;
     }
 
     modifier isTrue(bool _b) {
-        if(doRequire(_b == true, ERR_500))
-            _;
+        require(_b == true, ERR_500);
+        _;
     }
 
     modifier isFalse(bool _b) {
-        if(doRequire(_b == false, ERR_500))
-            _;
+        require(_b == false, ERR_500);
+        _;
     }
 
     modifier ballotIsEthNoEnc() {
@@ -163,12 +150,17 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
     constructor(bytes32 _specHash, uint256 packed, IxIface ix) public {
         index = ix;
 
+        uint64 _startTs;
+        (submissionBits, _startTs, endTime) = BPackedUtils.unpackAll(packed);
+
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
-        submissionBits = uint16(packed >> 128);
-        bool okaySubmissionBits = isEthNoEnc() || isEthWithEnc() || isSignedNoEnc() || isSignedWithEnc();
-        if (!doRequire(okaySubmissionBits, ERR_BAD_SUBMISSION_BITS)) {
-            revert();
-        }
+        bool[] memory bools = new bool[](4);
+        bools[0] = isEthNoEnc();
+        bools[1] = isEthWithEnc();
+        bools[2] = isSignedNoEnc();
+        bools[3] = isSignedWithEnc();
+        bool okaySubmissionBits = 1 == countTrue(bools);
+        require(okaySubmissionBits, "submission bits not valid");
 
         bool _testing = isTesting();
         if (_testing) {
@@ -179,9 +171,7 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
 
         // take the max of the start time provided and the blocks timestamp to avoid a DoS against recent token holders
         // (which someone might be able to do if they could set the timestamp in the past)
-        uint64 _startTs = uint64(packed >> 64);
         startTime = _testing ? _startTs : maxU64(_startTs, uint64(now));
-        endTime = uint64(packed);
 
         emit CreatedBallot(specHash, startTime, endTime, submissionBits);
     }
@@ -247,11 +237,6 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
                 , bytes32[] memory pks
                 , bytes32[2][] memory sigs
                 , bool authenticated) {
-        // ids = new uint[](0);
-        // ballots = new bytes32[](0);
-        // blockNs = new uint32[](0);
-        // pks = new bytes32[](0);
-        // sigs = new bytes32[2][](0);
         authenticated = true;
 
         for (uint i = 0; i < nVotesCast; i++) {
@@ -272,11 +257,6 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
                 , bytes32[] memory pks
                 , bytes32[2][] memory sigs
                 , bool authenticated) {
-        // ids = new uint[](0);
-        // ballots = new bytes32[](0);
-        // blockNs = new uint32[](0);
-        // pks = new bytes32[](0);
-        // sigs = new bytes32[2][](0);
         authenticated = false;
 
         for (uint i = 0; i < nVotesCast; i++) {
@@ -337,7 +317,8 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
     /* ADMIN STUFF */
 
     // Allow the owner to reveal the secret key after ballot conclusion
-    function revealSeckey(bytes32 _secKey) only_owner() req(now > endTime, ERR_EARLY_SECKEY) public {
+    function revealSeckey(bytes32 _secKey) only_owner() public {
+        require(now > endTime, "secret key cannot be released early");
         ballotEncryptionSeckey = _secKey;
         seckeyRevealed = true; // this flag allows the contract to be locked
         emit SeckeyRevealed(_secKey);
@@ -411,8 +392,12 @@ contract SVLightBallotBox is BallotBoxIface, BBSettings, descriptiveErrors, owne
         return sBitsNoSettings == expected;
     }
 
-    // function checkBit(uint16 bitToTest) view internal returns (bool) {
-    //     // first remove the testing bit, then check the bitToTest
-    //     return (submissionBits & SETTINGS_MASK) & bitToTest > 0;
-    // }
+    function countTrue(bool[] memory bools) pure internal returns (uint n) {
+        n = 0;
+        for (uint256 i = 0; i < bools.length; i++) {
+            if (bools[i]) {
+                n += 1;
+            }
+        }
+    }
 }
