@@ -11,7 +11,7 @@ pragma solidity ^0.4.24;
 
 import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
-import { canCheckOtherContracts, permissioned, hasAdmins, owned, upgradePtr, base58EnsUtils } from "./SVCommon.sol";
+import { permissioned, hasAdmins, owned, upgradePtr } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
 import { Base32Lib } from "../libs/Base32Lib.sol";
 import { SvEnsEverythingPx } from "../ens/SvEnsEverythingPx.sol";
@@ -237,7 +237,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 }
 
 
-contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
+contract SVLightIndex is owned, upgradePtr, IxIface {
     IxBackendIface public backend;
     IxPaymentsIface public payments;
     SVAdminPxFactory public adminPxFactory;

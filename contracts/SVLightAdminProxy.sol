@@ -5,14 +5,15 @@ pragma solidity ^0.4.24;
 // Author: Max Kaye <max@secure.vote>
 // Released under MIT licence
 
-import { owned, claimReverseENS, copyMemAddrArray, upgradePtr } from "./SVCommon.sol";
+import { owned, upgradePtr } from "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
 import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
+import { MemArrApp } from "../libs/MemArrApp.sol";
 
 
-contract SVLightAdminProxy is owned, copyMemAddrArray, SVBallotConsts {
+contract SVLightAdminProxy is owned, SVBallotConsts {
     bool public isProxyContract = true;
     uint public proxyVersion = 2;
 
@@ -172,8 +173,7 @@ contract SVLightAdminProxy is owned, copyMemAddrArray, SVBallotConsts {
         for(uint i = 0; i < adminLog.length; i++) {
             address nextPossibleAdmin = adminLog[i];
             if (admins[nextPossibleAdmin]) {
-                // imported via `copyMemAddrArray` inheritence
-                allAdmins = _appendMemArray(allAdmins, nextPossibleAdmin);
+                allAdmins = MemArrApp.appendAddress(allAdmins, nextPossibleAdmin);
             }
         }
         return allAdmins;

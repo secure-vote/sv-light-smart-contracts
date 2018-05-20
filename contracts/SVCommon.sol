@@ -59,11 +59,6 @@ contract descriptiveErrors {
         require(condition, statusCode);
         _;
     }
-
-    function doRequire(bool condition, string statusCode) internal pure returns (bool) {
-        require(condition, statusCode);
-        return condition;
-    }
 }
 
 
@@ -151,147 +146,33 @@ contract hasAdmins is owned {
 }
 
 
+// // https://stackoverflow.com/a/40939341
+// contract canCheckOtherContracts {
+//     function isContract(address addr) constant internal returns (bool) {
+//         uint size;
+//         assembly { size := extcodesize(addr) }
+//         return size > 0;
+//     }
+// }
 
 
-// allow converting toBase58 from bytes
-contract toBase58C {
-    // base58 stuff copied from https://github.com/MrChico/verifyIPFS/blob/b4bfb3df52e7e012a4ef668c6b3dbc038f881fd9/contracts/verifyIPFS.sol
-    // MIT Licensed - https://github.com/MrChico/verifyIPFS/blob/b4bfb3df52e7e012a4ef668c6b3dbc038f881fd9/LICENSE
-    bytes constant ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    /// @dev Converts hex string to base 58
-    function toBase58(bytes source) pure internal returns (bytes) {
-        if (source.length == 0) return new bytes(0);
-        uint8[] memory digits = new uint8[](40); //TODO: figure out exactly how much is needed
-        digits[0] = 0;
-        uint8 digitlength = 1;
-        for (uint8 i = 0; i<source.length; ++i) {
-            uint carry = uint8(source[i]);
-            for (uint8 j = 0; j<digitlength; ++j) {
-                carry += uint(digits[j]) * 256;
-                digits[j] = uint8(carry % 58);
-                carry = carry / 58;
-            }
-
-            while (carry > 0) {
-                digits[digitlength] = uint8(carry % 58);
-                digitlength++;
-                carry = carry / 58;
-            }
-        }
-        //return digits;
-        return toAlphabet(reverse(truncate(digits, digitlength)));
-    }
-
-    function truncate(uint8[] array, uint8 length) pure internal returns (uint8[]) {
-        uint8[] memory output = new uint8[](length);
-        for (uint8 i = 0; i<length; i++) {
-            output[i] = array[i];
-        }
-        return output;
-    }
-
-    function reverse(uint8[] input) pure internal returns (uint8[]) {
-        uint8[] memory output = new uint8[](input.length);
-        for (uint8 i = 0; i<input.length; i++) {
-            output[i] = input[input.length-1-i];
-        }
-        return output;
-    }
-
-    function toAlphabet(uint8[] indices) pure internal returns (bytes) {
-        bytes memory output = new bytes(indices.length);
-        for (uint8 i = 0; i<indices.length; i++) {
-            output[i] = ALPHABET[indices[i]];
-        }
-        return output;
-    }
-}
+// // interface for ENS reverse registrar
+// interface ReverseRegistrarIface {
+//     function claim(address owner) external returns (bytes32);
+// }
 
 
-// base58 utils for creating ENS domains from democHash prefixes
-contract base58EnsUtils is toBase58C {
-    function b13ToBytes(bytes13 b13) pure internal returns(bytes) {
-        bytes memory bs = new bytes(13);
-        for (uint i = 0; i < 13; i++) {
-            bs[i] = b13[i];
-        }
-        return bs;
-    }
-}
-
-
-// contract to enable constructing a list of addresses - due to lack of type polymorphism
-// a new method is needed for arrays of different types
-contract copyMemAddrArray {
-    function _appendMemArray(address[] memory arr, address toAppend) internal pure returns(address[] memory arr2) {
-        arr2 = new address[](arr.length + 1);
-
-        for (uint k = 0; k < arr.length; k++) {
-            arr2[k] = arr[k];
-        }
-
-        arr2[arr.length] = toAppend;
-    }
-}
-
-
-// contract to enable constructing a list of bytes32 - due to lack of type polymorphism
-// a new method is needed for arrays of different types
-contract copyMemBytes32Array {
-    function _appendB32MemArray(bytes32[] memory arr, bytes32 toAppend) internal pure returns(bytes32[] memory arr2) {
-        arr2 = new bytes32[](arr.length + 1);
-
-        for (uint k = 0; k < arr.length; k++) {
-            arr2[k] = arr[k];
-        }
-
-        arr2[arr.length] = toAppend;
-    }
-}
-
-
-// contract to enable constructing a list of uint256 - due to lack of type polymorphism
-// a new method is needed for arrays of different types
-contract copyMemUint256Array {
-    function _appendUint256MemArray(uint256[] memory arr, uint256 toAppend) internal pure returns(uint256[] memory arr2) {
-        arr2 = new uint256[](arr.length + 1);
-
-        for (uint k = 0; k < arr.length; k++) {
-            arr2[k] = arr[k];
-        }
-
-        arr2[arr.length] = toAppend;
-    }
-}
-
-
-// https://stackoverflow.com/a/40939341
-contract canCheckOtherContracts {
-    function isContract(address addr) constant internal returns (bool) {
-        uint size;
-        assembly { size := extcodesize(addr) }
-        return size > 0;
-    }
-}
-
-
-// interface for ENS reverse registrar
-interface ReverseRegistrarIface {
-    function claim(address owner) external returns (bytes32);
-}
-
-
-// contract to allow claiming a reverse ENS lookup
-contract claimReverseENS is canCheckOtherContracts {
-    function initReverseENS(address _owner) internal {
-        // 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069 is ENS ReverseRegistrar on Mainnet
-        address ensRevAddr = 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069;
-        if (isContract(ensRevAddr)) {
-            ReverseRegistrarIface ens = ReverseRegistrarIface(ensRevAddr);
-            ens.claim(_owner);
-        }
-    }
-}
+// // contract to allow claiming a reverse ENS lookup
+// contract claimReverseENS is canCheckOtherContracts {
+//     function initReverseENS(address _owner) internal {
+//         // 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069 is ENS ReverseRegistrar on Mainnet
+//         address ensRevAddr = 0x9062C0A6Dbd6108336BcBe4593a3D1cE05512069;
+//         if (isContract(ensRevAddr)) {
+//             ReverseRegistrarIface ens = ReverseRegistrarIface(ensRevAddr);
+//             ens.claim(_owner);
+//         }
+//     }
+// }
 
 
 // is permissioned is designed around upgrading and synergistic SC networks
