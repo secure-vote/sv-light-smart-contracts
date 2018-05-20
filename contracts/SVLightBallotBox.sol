@@ -97,25 +97,8 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, 
         require(deprecated == false, "This ballot has been marked deprecated");
     }
 
-    // NOTE: the ballotIs<A>With<B> modifiers call _reqBallotOpen() too,
-    // so ballotOpen() isn't needed when using those modifiers
-    modifier ballotOpen() {
-        _reqBallotOpen();
-        _;
-    }
-
     modifier onlyTesting() {
         require(isTesting(), ERR_TESTING_REQ);
-        _;
-    }
-
-    modifier isTrue(bool _b) {
-        require(_b == true, ERR_500);
-        _;
-    }
-
-    modifier isFalse(bool _b) {
-        require(_b == false, ERR_500);
         _;
     }
 
@@ -230,14 +213,19 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, 
         return specHash;
     }
 
+    function getTotalSponsorship() external view returns (uint) {
+        return totalSponsorship;
+    }
+
     function getBallotsEthFrom(address voter) external view
-        returns ( uint[] memory ids
+        returns ( bool authenticated
+                , uint[] memory ids
                 , bytes32[] memory ballots
                 , uint32[] memory blockNs
                 , bytes32[] memory pks
-                , bytes32[2][] memory sigs
-                , bool authenticated) {
-        authenticated = true;
+                , bytes32[2][] memory sigs) {
+
+        require(unsafeIsEth(), "must have USE_ETH setting");
 
         for (uint i = 0; i < nVotesCast; i++) {
             if (ballotsEth[i].sender == voter) {
@@ -248,16 +236,19 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, 
                 sigs = MemArrApp.appendBytes32Pair(sigs, ed25519Signatures[i]);
             }
         }
+
+        return (true, ids, ballots, blockNs, pks, sigs);
     }
 
     function getBallotsSignedFrom(bytes32 voter) external view
-        returns ( uint[] memory ids
+        returns ( bool authenticated
+                , uint[] memory ids
                 , bytes32[] memory ballots
                 , uint32[] memory blockNs
                 , bytes32[] memory pks
-                , bytes32[2][] memory sigs
-                , bool authenticated) {
-        authenticated = false;
+                , bytes32[2][] memory sigs) {
+
+        require(unsafeIsSigned(), "must have USE_SIGNED setting");
 
         for (uint i = 0; i < nVotesCast; i++) {
             if (ballotsSigned[i].sender == voter) {
@@ -268,6 +259,8 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, 
                 sigs = MemArrApp.appendBytes32Pair(sigs, ed25519Signatures[i]);
             }
         }
+
+        return (false, ids, ballots, blockNs, pks, sigs);
     }
 
     /* ETH BALLOTS */
@@ -356,6 +349,16 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, 
 
     // do (bits & SETTINGS_MASK) to get just operational bits (as opposed to testing or official flag)
     uint16 constant SETTINGS_MASK = 0xFFFF ^ USE_TESTING ^ IS_OFFICIAL ^ IS_BINDING;
+
+    function unsafeIsEth() view internal returns (bool) {
+        // this is unsafe becuase it's not a valid configuration
+        return USE_ETH & submissionBits != 0;
+    }
+
+    function unsafeIsSigned() view internal returns (bool) {
+        // unsafe bc it's not a valid configuration
+        return USE_SIGNED & submissionBits != 0;
+    }
 
     function isEthNoEnc() view internal returns (bool) {
         return checkFlags(USE_ETH | USE_NO_ENC);

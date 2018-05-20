@@ -1,8 +1,8 @@
 pragma solidity ^0.4.24;
 
 import { hasAdmins } from "./SVCommon.sol";
-import "../../ensSCs/contracts/ENS.sol";
-import "../../ensSCs/contracts/SvEnsResolver.sol";
+import "../ens/ENS.sol";
+import "../ens/SvEnsResolver.sol";
 
 /**
  * EnsOwnerProxy allows multiple identities to own / manage an ENS domain.

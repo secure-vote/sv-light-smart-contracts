@@ -1,6 +1,7 @@
 # sv-light-smart-contracts
 
 [![build-status-image](https://travis-ci.org/secure-vote/sv-light-smart-contracts.svg?branch=master)](https://travis-ci.org/secure-vote/sv-light-smart-contracts)
+[![Coverage Status](https://coveralls.io/repos/github/secure-vote/sv-light-smart-contracts/badge.svg?branch=master)](https://coveralls.io/github/secure-vote/sv-light-smart-contracts?branch=master)
 
 Repo for all smart contracts associated with SV Light
 

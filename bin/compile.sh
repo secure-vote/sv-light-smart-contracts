@@ -11,14 +11,14 @@ LCYAN='\033[1;36m'
 if [ "$1" == "help" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     echo "Args:"
     echo "    -c CONTRACT_NAME  (note: include the .sol)"
-    echo "    -d CONTRACT_DIR  (note: full path will be ./CONTRACT_DIR/contracts/CONTRACT_NAME)"
+    echo "    -d CONTRACT_DIR  (note: full path will be ./CONTRACT_DIR/CONTRACT_NAME)"
     echo "    -o OUTPUT_DIR  (e.g. _solDist)"
     exit 1
 fi
 
 # getopts
 CONTRACT_NAME="UNKNOWN.sol"
-CONTRACT_DIR="svLight"
+CONTRACT_DIR="contracts"
 OUTPUT_DIR="_solDist"
 while getopts ":c:d:o:" opt; do
     case $opt in
@@ -43,7 +43,7 @@ while getopts ":c:d:o:" opt; do
 done
 
 # params
-CONTRACT_PATH="./$CONTRACT_DIR/contracts/$CONTRACT_NAME"
+CONTRACT_PATH="./$CONTRACT_DIR/$CONTRACT_NAME"
 
 if [ $(pwd | grep "bin") ]; then
     echo -e 'Please run this with Yarn from the source root.\n'
@@ -68,7 +68,7 @@ mkdir -p "./$OUTPUT_DIR"
 LIB_STR=$(cat ./bin/libs.txt | tr '\n' ' ')
 
 function solcCommon {
-    solc "$@" -o "./$OUTPUT_DIR/" --overwrite --optimize "$CONTRACT_PATH" --libraries "$LIB_STR" --allow-paths './ensSCs/contracts,./svLight/contracts,./svlight/libs,'
+    solc "$@" -o "./$OUTPUT_DIR/" --overwrite --optimize "$CONTRACT_PATH" --libraries "$LIB_STR" --allow-paths './ens,./contracts,./libs,'
 }
 
 

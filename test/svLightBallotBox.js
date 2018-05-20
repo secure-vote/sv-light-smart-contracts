@@ -1,10 +1,14 @@
 var SVBallotBox = artifacts.require("./SVLightBallotBox.sol");
 var EmitterTesting = artifacts.require("./EmitterTesting.sol");
+var SvIndex = artifacts.require("./SVLightIndex.sol");
+var SvPayments = artifacts.require("./SVPayments.sol");
 
 require("./testUtils")();
 
 var naclJs = require("js-nacl");
 var crypto = require("crypto");
+
+const R = require('ramda')
 
 const AsyncPar = require("async-parallel");
 
@@ -19,10 +23,6 @@ var specHash = "0x418781fb172c2a30c072d58628f5df3f12052a0b785450fb0105f1b98b5045
 
 const mkStartTime = () => Math.round(Date.now() / 1000)
 const mkFlags = ({useEnc, testing}) => [useEnc === true, testing === true];
-
-
-
-// TODO: BB contructor args: specHash, packed, ix
 
 
 
@@ -127,7 +127,7 @@ async function testEncryptionBranching({accounts}) {
         "should throw when submitting signed no enc when enc enabled");
 
     const _tx5o2 = await vcSigned.submitBallotSignedWithEnc(_bData, tempPk, tempPk, [tempPk, tempPk]);
-    assertNoErr(_txSignedNoEnc);
+    assertNoErr(_tx5o2);
 }
 
 async function testInstantiation({accounts}) {
@@ -136,6 +136,8 @@ async function testInstantiation({accounts}) {
     var shortEndTime = 0;
 
     const vc = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
+    const {number: creationBlock} = await getBlock('latest');
+    assert.equal(await vc.getCreationBlock(), creationBlock, "creation block should match")
 
     // log(accounts[0]);
     assert.equal(await vc.owner(), accounts[0], "Owner must be set on launch.");
@@ -151,6 +153,9 @@ async function testInstantiation({accounts}) {
     const _testMode = await vc.isTesting();
     assert.equal(_testMode, true, "We should be in test mode");
 
+    assert.equal(await vc.isOfficial(), false, "isOfficial should be false atm");
+    assert.equal(await vc.isBinding(), false, "isBinding should be false atm");
+
     const _nVotes = await vc.nVotesCast();
     assert.equal(_nVotes.toNumber(), 0, "Should have no votes at start");
 
@@ -164,6 +169,7 @@ async function testInstantiation({accounts}) {
 
     // try a single ballot first
     await testABallot(accounts)(S.Just(vc), S.Just(accounts[0]), "test ballot single");
+    assert.equal(await vc.hasVotedEth(accounts[0]), true, "hasVotedEth method should work.");
 
     const nVotes = 10;
     try {
@@ -194,6 +200,7 @@ async function testInstantiation({accounts}) {
     const _revealSK = await vc.revealSeckey(hexSk);
     assertOnlyEvent("SeckeyRevealed", _revealSK);
     assertNoErr(_revealSK);
+    assert.equal(await vc.getEncSeckey(), hexSk, "secret key should match");
 
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitBallotWithPk(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
 }
@@ -311,8 +318,127 @@ async function testSignedBallotWithEnc({accounts, log}){
 
 
 async function testDeprecation({accounts}) {
-    throw Error('not implemented')
+    const [startTime, endTime] = genStartEndTimes();
+    const bb = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
+
+    assert.equal(await bb.isDeprecated(), false, "should not be deprecated");
+    await bb.setDeprecated();
+    assert.equal(await bb.isDeprecated(), true, "should be deprecated");
+
+    await assertRevert(bb.submitBallotNoPk(genRandomBytes32()), "submit ballot should throw after deprecation");
 }
+
+
+const testVersion = async () => {
+    const [startTime, endTime] = genStartEndTimes();
+    const bb = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING), zeroAddr);
+    assert.equal(await bb.getVersion(), 3, "version should be 3");
+}
+
+
+const testSponsorship = async ({accounts}) => {
+    const [startTime, endTime] = genStartEndTimes();
+    const payments = await SvPayments.new(accounts[9]);
+    const ix = await SvIndex.new(zeroAddr, payments.address, zeroAddr, zeroAddr, zeroAddr, zeroAddr);
+    const bb = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING), ix.address);
+
+    assert.deepEqual(toBigNumber(0), await bb.getTotalSponsorship(), "sponsorship should be 0 atm");
+
+    const balPre = await getBalance(accounts[0]);
+    await sendTransaction({
+        to: bb.address,
+        from: accounts[1],
+        value: toBigNumber(oneEth)
+    });
+    const balPost = await getBalance(accounts[0]);
+    assert.deepEqual(balPost, toBigNumber(oneEth).plus(balPre), "sponsorship balance (payTo) should match expected");
+
+    assert.deepEqual(await bb.getTotalSponsorship(), toBigNumber(oneEth), "getTotalSponsorship should match expected");
+}
+
+
+const testBadSubmissionBits = async ({accounts}) => {
+    const [s, e] = genStartEndTimes();
+
+    const flags = [USE_ENC, USE_NO_ENC, USE_SIGNED, USE_ETH];
+    const flagCombos = R.map(f => R.reduce((acc, i) => {
+        return acc | i;
+    }, 0, R.without([f], flags)), flags);
+    const badPacked1 = R.map(combo => mkPacked(s, e, combo), flagCombos);
+    const badPacked2 = R.map(flag => mkPacked(s, e, flag), flags);
+
+    await Promise.all(R.map(p => {
+        return assertRevert(SVBallotBox.new(specHash, p, zeroAddr), "bad submission bits (conflicting) should fail");
+    }, badPacked1));
+
+    await Promise.all(R.map(p => {
+        return assertRevert(SVBallotBox.new(specHash, p, zeroAddr), "bad submission bits (not enough) should fail");
+    }, badPacked2));
+}
+
+
+
+const testGetVotes = async ({accounts}) => {
+    const [s, e] = genStartEndTimes();
+
+    const zeroSig = [bytes32zero, bytes32zero]
+    const testSig1 = [genRandomBytes32(), genRandomBytes32()];
+    const testSig2 = [genRandomBytes32(), genRandomBytes32()];
+
+    const _ballot1 = genRandomBytes32();
+    const _ballot2 = genRandomBytes32();
+
+    const _pk1 = genRandomBytes32();
+    const _pk2 = genRandomBytes32();
+
+    // test getBallotsEthFrom
+    const bbEth = await SVBallotBox.new(specHash, mkPacked(s - 10, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
+
+    await assertRevert(bbEth.getBallotsSignedFrom(bytes32zero), "cannot get signed ballots from eth bb");
+
+    const getVotesEthPre = await bbEth.getBallotsEthFrom(accounts[0]);
+    assert.deepEqual(getVotesEthPre, [true, [], [], [], [], []], "getBallotsEthFrom should be empty before any votes (with auth=true)");
+
+    await bbEth.submitBallotNoPk(_ballot1, {from: accounts[0]});
+    const {number: b1EPreBlockN} = await getBlock('latest');
+    await bbEth.submitBallotNoPk(_ballot2, {from: accounts[1]});
+
+    const getVotesEthPost = await bbEth.getBallotsEthFrom(accounts[0]);
+    assert.deepEqual(getVotesEthPost,
+            [ true
+            , [toBigNumber(0)]
+            , [_ballot1]
+            , [toBigNumber(b1EPreBlockN)]
+            , [bytes32zero]
+            , [zeroSig]
+        ], "getBallotsEthFrom should match expected");
+
+    // test getBallotsSignedFrom
+    const bbSigned = await SVBallotBox.new(specHash, mkPacked(s - 10, e, (USE_SIGNED | USE_NO_ENC)), zeroAddr);
+
+    await assertRevert(bbSigned.getBallotsEthFrom(accounts[0]), "cannot get eth ballots from signed bb");
+
+    const bSignedPre = await bbSigned.getBallotsSignedFrom(bytes32zero);
+    assert.deepEqual(bSignedPre, [false, [], [], [], [], []], "getBallotsSignedFrom should be empty before any votes (with auth=false)");
+
+    await bbSigned.submitBallotSignedNoEnc(_ballot1, _pk1, testSig1);
+    const {number: b2SPreBlockN} = await getBlock('latest');
+    await bbSigned.submitBallotSignedNoEnc(_ballot2, _pk2, testSig2);
+
+    const bSignedPost = await bbSigned.getBallotsSignedFrom(_pk1);
+    assert.deepEqual(bSignedPost,
+            [ false
+            , [toBigNumber(0)]
+            , [_ballot1]
+            , [toBigNumber(b2SPreBlockN)]
+            , [bytes32zero]
+            , [testSig1]
+        ], "getBallotsEthFrom should match expected");
+
+
+    // throw Error("not impl - and there's a super weird bug with the authenticated return param - returns false with no votes and true with votes, regardless of the actual return val from the methods!")
+}
+
 
 
 function sAssertEq(a, b, msg) {
@@ -370,6 +496,10 @@ contract("LittleBallotBox", function(_accounts) {
         ["should handle signed ballots", testSignedBallotNoEnc],
         ["should handle signed ballots with enc", testSignedBallotWithEnc],
         ["should allow deprecation", testDeprecation],
+        ["should have correct version", testVersion],
+        ["test sponsorship", testSponsorship],
+        ["test bad submission bits", testBadSubmissionBits],
+        ["test getBallots*From", testGetVotes],
     ]
     S.map(([desc, f]) => it(desc, _wrapTest(_accounts, f)), tests);
 });

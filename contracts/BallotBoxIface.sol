@@ -23,6 +23,7 @@ interface BallotBoxIface {
     function getStartTime() external view returns (uint64);
     function getEndTime() external view returns (uint64);
     function getCreationBlock() external view returns (uint64);
+    function getTotalSponsorship() external view returns (uint);
 
     function submitBallotNoPk(bytes32 ballot) external returns (uint id);
     function submitBallotWithPk(bytes32 ballot, bytes32 encPK) external returns (uint id);
@@ -32,17 +33,17 @@ interface BallotBoxIface {
     function setOwner(address) external;
 
     function getBallotsEthFrom(address voter) external view
-        returns ( uint[] memory ids
+        returns ( bool authenticated
+                , uint[] memory ids
                 , bytes32[] memory ballots
                 , uint32[] memory blockNs
                 , bytes32[] memory pks
-                , bytes32[2][] memory sigs
-                , bool authenticated);
+                , bytes32[2][] memory sigs);
     function getBallotsSignedFrom(bytes32 voter) external view
-        returns ( uint[] memory ids
+        returns ( bool authenticated
+                , uint[] memory ids
                 , bytes32[] memory ballots
                 , uint32[] memory blockNs
                 , bytes32[] memory pks
-                , bytes32[2][] memory sigs
-                , bool authenticated);
+                , bytes32[2][] memory sigs);
 }

@@ -2,8 +2,8 @@
 
 rm -r ./_solDist/*
 
-for f in $(ls ./svLight/contracts | grep sol); do
-    ./bin/compile.sh -d svLight -c $f;
+for f in $(ls ./contracts | grep sol); do
+    ./bin/compile.sh -d contracts -c $f;
 done
 
 for f in $(ls ./_solDist/ | grep bin | grep -v Iface | grep -v Interface); do

@@ -12,6 +12,7 @@
     "bech32": "^1.1.3",
     "bs58": "^4.0.1",
     "colors": "^1.2.1",
+    "coveralls": "^3.0.1",
     "eth-ens-namehash": "^2.0.8",
     "ethereumjs-testrpc": "^6.0.3",
     "ethereumjs-util": "^5.1.5",
@@ -20,21 +21,22 @@
     "prompt-confirm": "^1.2.0",
     "ramda": "^0.25.0",
     "sanctuary": "^0.14.1",
+    "solidity-coverage": "^0.5.1",
     "solium": "^1.1.6",
     "truffle": "trufflesuite/truffle",
-    "truffle-fast-compile": "^0.0.3",
     "web3": "^1.0.0-beta.33",
     "yargs": "^11.0.0"
   },
   "scripts": {
-    "test": "./compileAllSvLight.sh && cd svLight && truffle test",
-    "test-watch": "cd svLight && reflex truffle test",
-    "test-watch-s": "cd svLight && reflex -s truffle test",
-    "reset-test": "cd svLight && truffle migrate --reset --compile-all",
-    "debug": "cd svLight && truffle debug",
+    "test": "./compileAllSvLight.sh && truffle test",
+    "test-watch": "reflex truffle test",
+    "test-watch-s": "reflex -s truffle test",
+    "reset-test": "truffle migrate --reset --compile-all",
+    "debug": "truffle debug",
     "deploy": "node ./bin/deploy.js",
     "cli": "node -i ./bin/contractCli.js --name",
     "compile-sv-light": "./compileAllSvLight.sh",
-    "compile-ens": "for f in $(ls ./ensSCs/contracts | grep sol); do ./bin/compile.sh -d ensSCs -c $f -o _distEns; done"
+    "compile-ens": "for f in $(ls ./ens | grep sol); do ./bin/compile.sh -d ens -c $f -o _distEns; done",
+    "coverage": "solidity-coverage"
   }
 }
