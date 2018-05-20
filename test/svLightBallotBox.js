@@ -331,7 +331,7 @@ async function testDeprecation({accounts}) {
 
 const testVersion = async () => {
     const [startTime, endTime] = genStartEndTimes();
-    const bb = await SVBallotBox.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING), zeroAddr);
+    const bb = await SVBallotBox.new(specHash, mkPacked(startTime + 10, endTime, USE_ETH | USE_ENC), zeroAddr);
     assert.equal(await bb.getVersion(), 3, "version should be 3");
 }
 
@@ -391,9 +391,11 @@ const testGetVotes = async ({accounts}) => {
     const _pk1 = genRandomBytes32();
     const _pk2 = genRandomBytes32();
 
-    // test getBallotsEthFrom
-    const bbEth = await SVBallotBox.new(specHash, mkPacked(s - 10, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
 
+    const bbSigned = await SVBallotBox.new(specHash, mkPacked(s, e, (USE_SIGNED | USE_NO_ENC)), zeroAddr);
+    const bbEth = await SVBallotBox.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
+
+    // test getBallotsEthFrom
     await assertRevert(bbEth.getBallotsSignedFrom(bytes32zero), "cannot get signed ballots from eth bb");
 
     const getVotesEthPre = await bbEth.getBallotsEthFrom(accounts[0]);
@@ -414,8 +416,6 @@ const testGetVotes = async ({accounts}) => {
         ], "getBallotsEthFrom should match expected");
 
     // test getBallotsSignedFrom
-    const bbSigned = await SVBallotBox.new(specHash, mkPacked(s - 10, e, (USE_SIGNED | USE_NO_ENC)), zeroAddr);
-
     await assertRevert(bbSigned.getBallotsEthFrom(accounts[0]), "cannot get eth ballots from signed bb");
 
     const bSignedPre = await bbSigned.getBallotsSignedFrom(bytes32zero);
