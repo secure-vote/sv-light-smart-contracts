@@ -15,4 +15,5 @@ before_install:
 script:
   - yarn test
 after_script:
-  - yarn coverage && cat coverage/lcov.info | coveralls
+  - yarn coverage
+  - cat coverage/lcov.info | coveralls
