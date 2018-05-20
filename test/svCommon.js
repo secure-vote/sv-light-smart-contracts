@@ -50,6 +50,12 @@ const testPermissioned = async ({owner, accounts}) => {
     await permissioned.setAdmin(u2, true, {from: owner});
     await permissioned.doLockdown();
     await assertRevert(permissioned.setAdmin(u2, true, {from: owner}), "cannot set admin after lockdown");
+
+    assert.equal(await permissioned.hasPermissions(u3), true, "u3 was granted perms")
+    await permissioned.upgradeMe(u4, {from: u3});
+    assert.equal(await permissioned.hasPermissions(u3), false, "u3 no longer has perms")
+    assert.equal(await permissioned.hasPermissions(u4), true, "u4 got perms via upgrade")
+    await assertRevert(permissioned.upgradeMe(u4, {from: u3}), "cannot upgrade again");
 }
 
 
