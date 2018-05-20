@@ -28,7 +28,7 @@
     "yargs": "^11.0.0"
   },
   "scripts": {
-    "test": "./compileAllSvLight.sh && truffle test",
+    "test": "truffle test",
     "test-watch": "reflex truffle test",
     "test-watch-s": "reflex -s truffle test",
     "reset-test": "truffle migrate --reset --compile-all",

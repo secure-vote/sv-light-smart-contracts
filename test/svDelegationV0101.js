@@ -25,8 +25,8 @@ async function testGlobalDelegation({accounts: acc}) {
 
     assert.deepEqual([[], []], await dc.findPossibleDelegatorsOf(d2), "await dc.findPossibleDelegatorsOf(d2) returns nothing");
 
-    // await dcOrig.setTokenDelegation(t1, d2, {from: v1})
-    // await dcOrig.setGlobalDelegation(d2, {from: v2})
+    await dcOrig.setTokenDelegation(t1, d2, {from: v1})
+    await dcOrig.setGlobalDelegation(d2, {from: v2})
 
     // assert.equal(d2, (await dc.resolveDelegation(v1, t1))[3], "resolveDelegation token good #0");
     assert.equal(zeroAddr, (await dc.resolveDelegation(v1, zeroAddr))[3], "resolveDelegation Global good #0");
@@ -57,7 +57,10 @@ async function testGlobalDelegation({accounts: acc}) {
     await dc.setTokenDelegation(t2, d2, {from: v2});
     await dc.setTokenDelegation(t2, d2, {from: v1});
     const votersForD2 = await dc.findPossibleDelegatorsOf(d2);
-    assert.deepEqual([[/*v1, v2,*/ v2, v1], [/*t1, zeroAddr,*/ t2, t2]], votersForD2, "possible delegators matches #3 d2");
+
+    // (v2, zeroAddr) appears first here because old delegations are
+    // done in order of [oldToken] + logTokenContracts
+    assert.deepEqual([[v2, v1, v2, v1], [zeroAddr, t1, t2, t2]], votersForD2, "possible delegators matches #3 d2");
 }
 
 
