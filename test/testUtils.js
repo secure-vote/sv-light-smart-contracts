@@ -4,9 +4,9 @@ var BN = require('bn.js');
 const R = require('ramda');
 
 module.exports = function () {
-    console.log(`NOTE: test/testUtils.js is loaded.
-        Injecting LOTS of variables into the global namespace.
-        You should really read this file if you're reading tests.`)
+    // console.log(`NOTE: test/testUtils.js is loaded.
+    //     Injecting LOTS of variables into the global namespace.
+    //     You should really read this file if you're reading tests.`)
 
     const w3 = Web3;
 
