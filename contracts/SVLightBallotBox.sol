@@ -28,7 +28,7 @@ import { MemArrApp } from "../libs/MemArrApp.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { BPackedUtils } from "../libs/BPackedUtils.sol";
 
-contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, owned {
+contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
     uint256 constant BB_VERSION = 3;
 
     //// ** Storage Variables
@@ -98,30 +98,30 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, descriptiveErrors, 
     }
 
     modifier onlyTesting() {
-        require(isTesting(), ERR_TESTING_REQ);
+        require(isTesting(), "ballot is not in testing mode");
         _;
     }
 
     modifier ballotIsEthNoEnc() {
-        require(isEthNoEnc(), ERR_NOT_BALLOT_ETH_NO_ENC);
+        require(isEthNoEnc(), "ballot is not of type Eth-NoEnc");
         _reqBallotOpen();
         _;
     }
 
     modifier ballotIsEthWithEnc() {
-        require(isEthWithEnc(), ERR_NOT_BALLOT_ETH_WITH_ENC);
+        require(isEthWithEnc(), "ballot is not of type Eth-Enc");
         _reqBallotOpen();
         _;
     }
 
     modifier ballotIsSignedNoEnc() {
-        require(isSignedNoEnc(), ERR_NOT_BALLOT_SIGNED_NO_ENC);
+        require(isSignedNoEnc(), "ballot is not of type Signed-NoEnc");
         _reqBallotOpen();
         _;
     }
 
     modifier ballotIsSignedWithEnc() {
-        require(isSignedWithEnc(), ERR_NOT_BALLOT_SIGNED_WITH_ENC);
+        require(isSignedWithEnc(), "ballot is not of type Signed-Enc");
         _reqBallotOpen();
         _;
     }

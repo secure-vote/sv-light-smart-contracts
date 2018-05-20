@@ -34,7 +34,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     event FailedToFwdCall(uint value, bytes data);
 
     modifier isAdmin() {
-        require(admins[msg.sender], ERR_PX_FORBIDDEN);
+        require(admins[msg.sender], "isAdmin: forbidden");
         _;
     }
 
@@ -126,7 +126,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         BallotBoxIface bb = BallotBoxIface(ix.getDBallotAddr(democHash, id));
         bb.setOwner(msg.sender);
 
-        require(bb.isOfficial() == false && bb.isBinding() == false, "community ballots are never official or binding");
+        assert(bb.isOfficial() == false && bb.isBinding() == false); // "community ballots are never official or binding"
     }
 
     // admin management
@@ -142,7 +142,8 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         emit AddedAdminToPx(newAdmin);
     }
 
-    function removeAdmin(address oldAdmin) isAdmin() req(msg.sender != oldAdmin, ERR_CANNOT_REMOVE_SELF) public {
+    function removeAdmin(address oldAdmin) isAdmin() public {
+        require(msg.sender != oldAdmin, "removeAdmin: you can't remove yourself");
         admins[oldAdmin] = false;
         emit RemovedAdmin(oldAdmin);
     }

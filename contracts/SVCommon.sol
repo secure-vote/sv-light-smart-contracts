@@ -8,68 +8,15 @@ pragma solidity ^0.4.22;
 // Note: don't break backwards compatibility
 
 
-// contract to enable descriptive errors that emit events through use of `doRequire`
-contract descriptiveErrors {
-
-    // general errors
-    string constant ERR_FORBIDDEN                   = "403";
-    string constant ERR_500                         = "500";
-    string constant ERR_TESTING_REQ                 = "599";
-
-    // ballot box
-    string constant ERR_BALLOT_CLOSED               = "420001";
-    string constant ERR_EARLY_SECKEY                = "420100";
-    string constant ERR_BAD_SUBMISSION_BITS         = "420200";
-    string constant ERR_NOT_BALLOT_ETH_NO_ENC       = "420400";
-    string constant ERR_NOT_BALLOT_ETH_WITH_ENC     = "420401";
-    string constant ERR_NOT_BALLOT_SIGNED_NO_ENC    = "420402";
-    string constant ERR_NOT_BALLOT_SIGNED_WITH_ENC  = "420403";
-
-    // democ index
-    string constant ERR_BAD_PAYMENT                 = "421010";
-    string constant ERR_FAILED_TO_PROVIDE_CHANGE    = "421011";
-    string constant ERR_FAILED_TO_REFUND            = "421012";
-    string constant ERR_FAILED_TO_FWD_PAYMENT       = "421099";
-    // string constant ERR_INDEX_FORBIDDEN          = "421403";
-
-    // admin proxy
-    string constant ERR_CANNOT_REMOVE_SELF          = "428001";
-    string constant ERR_CALL_FWD_FAILED             = "428500";
-    string constant ERR_PX_ETH_TFER_FAILED          = "428501";
-    string constant ERR_PX_FORBIDDEN                = "428403";
-
-    // upgradable
-    string constant ERR_ALREADY_UPGRADED            = "429001";
-    string constant ERR_NOT_UPGRADED                = "429002";
-    string constant ERR_NO_UNDO_FOREVER             = "429010";
-    string constant ERR_CALL_UPGRADED_FAILED        = "429500";
-
-    // hasAdmin
-    string constant ERR_NO_ADMIN_PERMISSIONS        = "100001";
-
-    // permissioned
-    string constant ERR_NO_EDIT_PERMISSIONS         = "200001";
-    string constant ERR_ADMINS_LOCKED_DOWN          = "201001";
-
-
-    event Error(uint code);
-    // event Passed(uint code);
-
-    modifier req(bool condition, string statusCode) {
-        require(condition, statusCode);
-        _;
-    }
-}
-
 
 // owned contract - added isOwner modifier (otherwise from solidity examples)
-contract owned is descriptiveErrors {
+contract owned {
     address public owner;
 
     event OwnerChanged(address newOwner);
 
     modifier only_owner() {
-        require(msg.sender == owner, ERR_FORBIDDEN);
+        require(msg.sender == owner, "only_owner: forbidden");
         _;
     }
 
@@ -96,8 +43,8 @@ contract hasAdmins is owned {
     event AdminDisabledForever();
 
     modifier only_admin() {
-        require(isAdmin(msg.sender), ERR_FORBIDDEN);
         require(adminsDisabledForever == false, "admins must not be disabled");
+        require(isAdmin(msg.sender), "only_admin: forbidden");
         _;
     }
 
@@ -190,12 +137,12 @@ contract permissioned is owned, hasAdmins {
     event AdminLockdown();
 
     modifier only_editors() {
-        require(editAllowed[msg.sender], ERR_NO_EDIT_PERMISSIONS);
+        require(editAllowed[msg.sender], "only_editors: forbidden");
         _;
     }
 
     modifier no_lockdown() {
-        require(adminLockdown == false, ERR_ADMINS_LOCKED_DOWN);
+        require(adminLockdown == false, "no_lockdown: check failed");
         _;
     }
 
