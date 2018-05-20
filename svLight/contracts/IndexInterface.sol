@@ -29,6 +29,8 @@ interface IxIface {
     function setDErc20(bytes32 democHash, address newErc20) external;
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
+    function dUpgradeToPremium(bytes32 democHash) external;
+    function dDowngradeToBasic(bytes32 democHash) external;
 
     function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint);
     // only ix owner - used for adding past ballots

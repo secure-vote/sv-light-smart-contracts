@@ -384,6 +384,14 @@ contract SVLightIndex is owned, canCheckOtherContracts, upgradePtr, IxIface {
         backend.dDeprecateCategory(democHash, categoryId);
     }
 
+    function dUpgradeToPremium(bytes32 democHash) onlyDemocAdmin(democHash) external {
+        payments.upgradeToPremium(democHash);
+    }
+
+    function dDowngradeToBasic(bytes32 democHash) onlyDemocAdmin(democHash) external {
+        payments.downgradeToBasic(democHash);
+    }
+
     // getters for democs
     function getDAdmin(bytes32 democHash) external view returns (address) {
         return backend.getDAdmin(democHash);
