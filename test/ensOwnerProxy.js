@@ -83,6 +83,7 @@ const testFwdToEns = async ({accounts, ixEnsPx, ensPR, ensRrr, ensRry, indexNH})
     assert.equal(await ensRry.owner(indexNH), accounts[2], "owner changed via fwd to ENS")
 
     assertRevert(ixEnsPx.fwdToENS(ensDataSetOwner, {from: accounts[2]}), "should not allow non-admins to fwd data")
+    assertRevert(ixEnsPx.fwdToENS("0xdeadbeef"), "bad method should revert")
 }
 
 
@@ -96,6 +97,7 @@ const testFwdToResolver = async ({accounts, ixEnsPx, ensPR, ensRrr, ensRry, inde
     await assertRevert(ixEnsPx.fwdToResolver(resDataSetText1, {from: accounts[2]}), "don't fwd to resolver on bad auth")
     await ixEnsPx.fwdToResolver(resDataSetText1);
     assert.equal(await ensPR.text(indexNH, _key), _val, "test text key has expected value")
+    assertRevert(ixEnsPx.fwdToResolver("0xdeadbeef"), "bad method should revert")
 }
 
 
