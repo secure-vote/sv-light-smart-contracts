@@ -4,6 +4,10 @@ var BN = require('bn.js');
 const R = require('ramda');
 
 module.exports = function () {
+    console.log(`NOTE: test/testUtils.js is loaded.
+        Injecting LOTS of variables into the global namespace.
+        You should really read this file if you're reading tests.`)
+
     const w3 = Web3;
 
     this.w3 = Web3;
@@ -97,6 +101,9 @@ module.exports = function () {
     this.getBlock = toAsync(web3.eth.getBlock);
     this.getBlockN = async () => (await this.getBlock('latest'))['number'];
     this.sendTransaction = toAsync(web3.eth.sendTransaction);
+
+    // this is annoying but needed because truffle. Sigh.
+    this.getData = (c, ...args) => c.request(...args).params[0].data;
 
     this.log = (...args) => console.log(...args);
 
