@@ -159,7 +159,7 @@ async function testInstantiation({accounts}) {
     const _nVotes = await vc.nVotesCast();
     assert.equal(_nVotes.toNumber(), 0, "Should have no votes at start");
 
-    const _sk = await vc.ballotEncryptionSeckey();
+    const _sk = await vc.getEncSeckey();
     assert.equal(_sk, bytes32zero, "ballot enc key should be zeros before reveal");
 
     //// ASSERTIONS FOR INSTANTIATION COMPLETE

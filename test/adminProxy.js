@@ -20,6 +20,12 @@ require("./testUtils")();
 
 const R = require('ramda')
 
+const wrapTestNoPrep = ({accounts}, f) => {
+    return async () => {
+        return await f({accounts})
+    }
+}
+
 const wrapTest = ({accounts}, f) => {
     return async () => {
         const owner = accounts[0];
@@ -128,18 +134,18 @@ const testListAllAdmins = async ({accounts, owner, svIx, democHash, adminPx, ixP
 
     const [_, u1, u2, u3, u4, u5] = accounts;
 
-    await assertRevert(adminPx.addNewAdmin(u5, {from: u1}), "can't add admins without permission")
+    await assertRevert(adminPx.addAdmin(u5, {from: u1}), "can't add admins without permission")
 
-    await adminPx.addNewAdmin(u5, {from: owner})
+    await adminPx.addAdmin(u5, {from: owner})
     assert.deepEqual(await adminPx.listAllAdmins(), [owner, u5], "listAllAdmins works for 2")
 
-    await adminPx.addNewAdmin(u2, {from: u5})
+    await adminPx.addAdmin(u2, {from: u5})
     assert.deepEqual(await adminPx.listAllAdmins(), [owner, u5, u2], "listAllAdmins works for 3")
 
     await adminPx.removeAdmin(u5, {from: u2})
     assert.deepEqual(await adminPx.listAllAdmins(), [owner, u2], "listAllAdmins works after removing u5")
 
-    await adminPx.addNewAdmin(u5, {from: u2})
+    await adminPx.addAdmin(u5, {from: u2})
     assert.deepEqual(await adminPx.listAllAdmins(), [owner, u5, u2, u5], "listAllAdmins works for 4 with strange ordering too (due to adminLog)")
 
     await assertRevert(adminPx.removeAdmin(u2, {from: u2}), "can't remove self as admin")
@@ -227,38 +233,42 @@ const testFwdingManual = async ({scLog, accounts, owner, payments, svIx, democHa
 }
 
 
-const testReentrency = async ({accounts}) => {
+const testReentrancy = async ({accounts}) => {
     const [owner, u1, u2, u3, u4, u5] = accounts;
     // use lots of gas
     const gas = 5000000
-    const freetx = {gasPrice: 0, gas}
-    const testHelper = await TestHelper.new({gas})
+    const freetx = {gasPrice: 0}
+
+    const scLog = await EmitterTesting.new(freetx)
+    const log = async (msg) => await scLog.log(msg, freetx);
+    await log("Created scLog")
+
+    const testHelper = await TestHelper.new(freetx)
     const th = testHelper.address
+    await log("created testHelper")
 
-    const scLog = await EmitterTesting.new()
-
-    const px = await SVAdminPx.new(zeroHash, owner, th, {gas})
+    const px = await SVAdminPx.new(zeroHash, owner, th, freetx)
     const pxAddr = px.address
-    await scLog.log(`Proxy address: ${px.address}`)
+    await log(`Proxy address: ${px.address}`)
 
     // first test an expected "change" type transaction
     const halfEth = web3.toWei(0.5, "ether");
     const wholeEth = web3.toWei(1, "ether");
 
-    const reentrencyData = getData(testHelper.reentrencyHelper, pxAddr, "", halfEth)
-    await scLog.log(`Got friendly reentrency data ${reentrencyData}`)
-    await scLog.log(`About to get balance for owner (${owner})`)
+    const reentrancyData = getData(testHelper.reentrancyHelper, pxAddr, "", halfEth)
+    await log(`Got friendly reentrancy data ${reentrancyData}`)
+    await log(`About to get balance for owner (${owner})`)
 
     const preBal = await getBalance(owner);
-    await scLog.log(`Owner balance: ${preBal.toNumber()}`, freetx)
+    await log(`Owner balance: ${preBal.toNumber()}`)
 
-    const txh1 = await sendTransaction({to: pxAddr, data: reentrencyData, value: wholeEth, from: owner, ...freetx})
-    await scLog.log(`Sent reentrency tx as ${txh1}`,freetx)
+    const txh1 = await sendTransaction({to: pxAddr, data: reentrancyData, value: wholeEth, from: owner, ...freetx})
+    await log(`Sent reentrancy tx as ${txh1}`)
 
     const txr1 = await getTransactionReceipt(txh1);
     const tx1 = await getTransaction(txh1);
-    await scLog.log(`Got tx receipt: ${toJson(txr1)}`, freetx)
-    await scLog.log(`Got tx: ${toJson(tx1)}`, freetx)
+    await log(`Got tx receipt: ${toJson(txr1)}`)
+    await log(`Got tx: ${toJson(tx1)}`)
     assert.equal(txr1.status, 1, "tx should succeed")
 
     const postBal = await getBalance(owner);
@@ -267,20 +277,24 @@ const testReentrency = async ({accounts}) => {
     const postBalEther = web3.fromWei(postBal, "ether")
 
     const diff = web3.fromWei(preBal.minus(postBal), "ether");
-    await scLog.log(`Diff in balances: ${diff.toFixed()}`)
+    await log(`Diff in balances: ${diff.toFixed()}`)
     assert.deepEqual(postBalEther.toFixed(), expectedPostBal.toFixed(), "balances should match expected after reentrancy on fallback")
 
     // now test something less safe - try to trigger the safeTxMutex revert
 
     // set up th as admin so it can call certain methods
-    await px.addNewAdmin(th)
+    await px.addAdmin(th)
 
     // we'll declare data from the "inside out" like some kind of onion
-    // the plan is to have msgs bounce: PX.fwdData -> TH.reentrencyHelper -> PX.fwdData -> TH.storeData
+    // the plan is to have msgs bounce: PX.fwdData -> TH.reentrancyHelper -> PX.fwdData -> TH.storeData
     const finalData = getData(testHelper.storeData, "0x1337")
     const data1IntoPx = getData(px.fwdData, th, finalData)
-    const data2IntoTH = getData(testHelper.reentrencyHelper, pxAddr, data1IntoPx, 0)
+    const data2IntoTH = getData(testHelper.reentrancyHelper, pxAddr, data1IntoPx, 0)
     await assertRevert(px.fwdData(th, data2IntoTH), 'should trigger the safeTxMutex')
+
+    // the inner part should work though
+    await px.fwdData(th, finalData)
+    assert.equal(await testHelper.justData(pxAddr), "0x1337", "final part of reentrancy onion should be okay")
 }
 
 
@@ -290,7 +304,7 @@ contract("SVLightAdminProxy", function (accounts) {
         ["test list admins", testListAllAdmins],
         ["test fwd fallback", testFwdingFallback],
         ["test fwd manually", testFwdingManual],
-        ["test reentrency", testReentrency, true],
+        ["test reentrancy", testReentrancy, true],
     ];
-    R.map(([desc, f, skip]) => it(desc, skip === true ? (async () => f({accounts})) : wrapTest({accounts}, f)), tests);
+    R.map(([desc, f, skip]) => it(desc, skip === true ? wrapTestNoPrep({accounts}, f) : wrapTest({accounts}, f)), tests);
 });

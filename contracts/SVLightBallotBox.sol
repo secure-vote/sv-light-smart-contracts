@@ -28,6 +28,7 @@ import { MemArrApp } from "../libs/MemArrApp.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { BPackedUtils } from "../libs/BPackedUtils.sol";
 
+
 contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
     uint256 constant BB_VERSION = 3;
 
@@ -61,7 +62,7 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
     // Plus we're already storing the hash of the ballotSpec anyway...
 
     // Private key to be set after ballot conclusion - curve25519
-    bytes32 public ballotEncryptionSeckey;
+    bytes32 ballotEncryptionSeckey;
     bool seckeyRevealed = false;
 
     // Timestamps for start and end of ballot (UTC)

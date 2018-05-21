@@ -309,6 +309,14 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         backend = newSC;
     }
 
+    function emergencySetAdminPxFactory(SVAdminPxFactory _pxF) only_owner() external {
+        adminPxFactory = _pxF;
+    }
+
+    function emergencySetBBFactory(SVBBoxFactory _bbF) only_owner() external {
+        bbFactory = _bbF;
+    }
+
     function emergencySetAdmin(bytes32 democHash, address newAdmin) only_owner() external {
         backend.setDAdmin(democHash, newAdmin);
     }

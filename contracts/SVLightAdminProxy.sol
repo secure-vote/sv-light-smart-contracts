@@ -44,7 +44,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     constructor(bytes32 _democHash, address initAdmin, address _fwdTo) public {
         // this will mostly be called by SVLightIndex so we shouldn't use msg.sender.
         democHash = _democHash;
-        _addNewAdmin(initAdmin);
+        _addAdmin(initAdmin);
         _forwardTo = upgradePtr(_fwdTo);
         owner = initAdmin;
     }
@@ -135,11 +135,11 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     // admin management
 
     // add an admin
-    function addNewAdmin(address newAdmin) isAdmin() public {
-        _addNewAdmin(newAdmin);
+    function addAdmin(address newAdmin) isAdmin() public {
+        _addAdmin(newAdmin);
     }
 
-    function _addNewAdmin(address newAdmin) internal {
+    function _addAdmin(address newAdmin) internal {
         admins[newAdmin] = true;
         adminLog.push(newAdmin);
         emit AddedAdminToPx(newAdmin);
@@ -161,7 +161,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         require(erc20Owner == msg.sender, "only erc20 owner may trigger the claim");
 
         // note: the erc20 owner is added as an admin, not owner of the contract
-        _addNewAdmin(erc20Owner);
+        _addAdmin(erc20Owner);
     }
 
     function setAllowErc20OwnerClaim(bool canClaim) isAdmin() external {
@@ -184,6 +184,6 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     }
 
     function setOwnerAsAdmin() only_owner() external {
-        _addNewAdmin(owner);
+        _addAdmin(owner);
     }
 }

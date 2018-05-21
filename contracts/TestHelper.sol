@@ -30,7 +30,7 @@ contract TestHelper is upgradePtr {
         dataAndValue[msg.sender] = DataAndValue(data, msg.value);
     }
 
-    function reentrencyHelper(address to, bytes data, uint value) external payable {
+    function reentrancyHelper(address to, bytes data, uint value) external payable {
         require(to.call.value(value)(data), "tx should succeed");
     }
 }
