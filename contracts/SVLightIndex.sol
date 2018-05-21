@@ -309,12 +309,12 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         backend = newSC;
     }
 
-    function emergencySetAdminPxFactory(SVAdminPxFactory _pxF) only_owner() external {
-        adminPxFactory = _pxF;
+    function emergencySetAdminPxFactory(address _pxF) only_owner() external {
+        adminPxFactory = SVAdminPxFactory(_pxF);
     }
 
-    function emergencySetBBFactory(SVBBoxFactory _bbF) only_owner() external {
-        bbFactory = _bbF;
+    function emergencySetBBFactory(address _bbF) only_owner() external {
+        bbFactory = SVBBoxFactory(_bbF);
     }
 
     function emergencySetAdmin(bytes32 democHash, address newAdmin) only_owner() external {
@@ -333,6 +333,10 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
 
     function getCommunityBallotCentsPrice() external view returns (uint) {
         return payments.getCommunityBallotCentsPrice();
+    }
+
+    function getCommunityBallotWeiPrice() external view returns (uint) {
+        return payments.getCommunityBallotWeiPrice();
     }
 
     function getGDemocsN() external view returns (uint256) {

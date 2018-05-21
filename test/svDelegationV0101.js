@@ -10,12 +10,6 @@ const AsyncPar = require("async-parallel");
 const {create, env} = require("sanctuary");
 const S = create({checkTypes: true, env});
 
-const bytes32zero =
-    "0x0000000000000000000000000000000000000000000000000000000000000000";
-
-const zeroAddr =
-    "0x0000000000000000000000000000000000000000";
-
 
 async function testGlobalDelegation({accounts: acc}) {
     const [v1, v2, d1, d2, t1, t2] = acc;

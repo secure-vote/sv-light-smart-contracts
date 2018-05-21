@@ -17,7 +17,7 @@ module.exports = function () {
 
     this.toBigNumber = i => {
         // BigNumber as in Web3 0.20.x
-        return web3.toBigNumber(i.toString());
+        return web3.toBigNumber(i.toFixed ? i.toFixed() : i.toString());
     }
 
     this.toJson = (obj) => {

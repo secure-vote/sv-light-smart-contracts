@@ -54,7 +54,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     function() public payable {
         if (callActive) {
             // allows refunds to addresses
-            caller.transfer(msg.value);
+            safeSend(caller, "", msg.value);
         } else {
             callActive = true;
             caller = msg.sender;
@@ -62,7 +62,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
             address fwdTo = checkFwdAddressUpgrade();
 
             if (msg.data.length > 0) {
-                require(admins[msg.sender], "must be admin to fwd data");
+                require(admins[msg.sender], "fwd: must be admin");
                 // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
                 // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
                 require(address(fwdTo).call.value(msg.value)(msg.data), "failed to fwd tx from admin");
@@ -110,6 +110,10 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         communityBallotsEnabled = isEnabled;
     }
 
+    function getCommunityBallotsEnabled() external view returns (bool) {
+        return communityBallotsEnabled;
+    }
+
     // flag in submissionBits that indicates if it's official or not
     function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint256 _packed) external payable returns (uint) {
         // ensure we mark this as a community ballot by disabling official and binding flags:
@@ -121,13 +125,21 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
 
         IxIface ix = IxIface(checkFwdAddressUpgrade());
 
+        uint price = ix.getCommunityBallotWeiPrice();
+        require(price <= msg.value, "community ballots require the correct fee");
+
+        safeSend(ix.getPayTo(), "", price);
+        safeSend(msg.sender, "", msg.value - price);
+
         // if accounts are not in good standing then we always allow community ballots
         bool canDoCommunityBallots = communityBallotsEnabled || !ix.accountInGoodStanding(democHash);
         require(canDoCommunityBallots, "community ballots are not available");
 
         uint id = ix.dDeployBallot(democHash, specHash, extraData, packed);
         BallotBoxIface bb = BallotBoxIface(ix.getDBallotAddr(democHash, id));
-        bb.setOwner(msg.sender);
+
+        // should we set owner to 0 so admins can't interfere with community ballots?
+        bb.setOwner(address(0));
 
         assert(bb.isOfficial() == false && bb.isBinding() == false); // "community ballots are never official or binding"
     }
