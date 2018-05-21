@@ -31,10 +31,11 @@ const wrapTestIx = ({accounts}, f) => {
         const scLog = await EmitterTesting.new();
 
         // use this doLog function in the wrapper to easily turn on and off this logging
-        const loggingActive = false;
+        let loggingActive = false;
         const doLog = async msg => {
             if (loggingActive)
-                return await scLog.log(msg);
+                return await scLog.log(msg, {gasPrice: 0});
+            return;
         }
 
         await doLog(`Created logger...`);
@@ -104,7 +105,8 @@ const wrapTestIx = ({accounts}, f) => {
         const erc20 = await FaucetErc20.new();
         await doLog(`Created erc20 w faucet at ${erc20.address}`)
 
-        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, owner, backupOwner, ixEnsPx, erc20, accounts}, accounts);
+        loggingActive = true;
+        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, doLog, owner, backupOwner, ixEnsPx, erc20, accounts}, accounts);
     };
 };
 
@@ -277,22 +279,63 @@ const testDemocAdminPermissions = async () => {
 }
 
 
-const testCommunityBallots = async ({accounts, owner, svIx, erc20}) => {
+const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
     // test in cases we have a community instance and in cases where
     // they're enabled on a paying democ
 
     // todo: ensure we're setting the right submission bits on the ballot
     // when doing community ballots. (i.e. IS_OFFICIAL and IS_BINDING both false)
 
+    await doLog('start of testCommunityBallots')
+
     const {args: {democHash, admin}} = getEventFromTxR("DemocAdded", await svIx.dInit(erc20.address, {value: 1}))
     const adminPx = SVAdminPx.at(admin);
     const ixPx = SVIndex.at(admin);
 
-    assert.equal(await adminPx.communityBallotsEnabled(), true, "comm ballots on by default")
+    await doLog('prepped community ballots test')
+
+    assert.equal(await adminPx.getCommunityBallotsEnabled(), true, "comm ballots on by default")
+    await doLog('verified comm ballots enabled')
 
     const [s,e] = genStartEndTimes()
-    const packed = mkPacked(s, e, USE_ETH | USE_NO_ENC)
-    adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed)
+    const packed = toBigNumber(mkPacked(s, e, USE_ETH | USE_NO_ENC))
+
+    await doLog('getting cBallot price')
+    const commBPrice = await svIx.getCommunityBallotWeiPrice()
+    const commBPriceStr = web3.fromWei(commBPrice.toFixed(), 'ether')
+    await doLog(`got cBallot price: ${commBPriceStr}`)
+
+    const user = accounts[3];
+    const balPre = await getBalance(user)
+    const dcbTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
+    const balPost = await getBalance(user)
+    await doLog(`deployed community ballot!`)
+
+    const balPreStr = web3.fromWei(balPre, 'ether')
+    const balPostStr = web3.fromWei(balPost, 'ether')
+    await doLog(`\nCBallot: ${commBPriceStr}\nBalPre : ${balPreStr}\nBalPost: ${balPostStr}\n`)
+    assert.deepEqual(balPre.minus(commBPrice), balPost, "balances should match after community ballot fee")
+
+    await adminPx.setCommunityBallotStatus(false);
+    await doLog('set community ballot to false')
+
+    // this should still work because the democ is not in good standing
+    await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
+
+    assert.equal(await svIx.accountInGoodStanding(democHash), false, "account should not be in good standing")
+    await doLog('confirmed democ is not in good standing')
+
+    // after this tx the account should be in good standing and this should fail
+    await adminPx.sendTransaction({from: user, value: web3.toWei(1, 'ether')})
+    await doLog('sent funding tx for democ')
+
+    assert.equal(await svIx.accountInGoodStanding(democHash), true, "account should now be in good standing")
+    await doLog('paid 1 ether to democ & confirmed in good standing')
+
+    await assertRevert(
+        adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user}),
+        "should revert because the democ is now in good standing"
+    );
 }
 
 
@@ -389,7 +432,7 @@ contract("SVLightIndex", function (accounts) {
         // ["test paying for extra ballots (basic)", testBasicExtraBallots],
         // ["test catagories (crud)", testCatagoriesCrud],
         // ["test setting payment + backend", testSetBackends],
-        // ["test version", testVersion],
+        ["test version", testVersion],
         // ["test index ens self-management", testIxEnsSelfManagement],
         // ["test nfp tier", testNFPTierAndPayments],
         // ["test payments backup admin", testPaymentsBackupAdmin],

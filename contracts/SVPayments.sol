@@ -227,6 +227,10 @@ contract SVPayments is IxPaymentsIface, permissioned {
         return communityBallotCentsPrice;
     }
 
+    function getCommunityBallotWeiPrice() external view returns (uint) {
+        return centsToWei(communityBallotCentsPrice);
+    }
+
     function getBasicCentsPricePer30Days() external view returns (uint) {
         return basicCentsPricePer30Days;
     }

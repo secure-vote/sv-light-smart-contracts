@@ -11,9 +11,12 @@ interface IxIface {
     function emergencySetPaymentBackend(IxPaymentsIface) external;
     function emergencySetBackend(IxBackendIface) external;
     function emergencySetAdmin(bytes32 democHash, address newAdmin) external;
+    function emergencySetAdminPxFactory(address _pxF) external;
+    function emergencySetBBFactory(address _bbF) external;
 
     function getPayTo() external view returns (address);
     function getCommunityBallotCentsPrice() external view returns (uint);
+    function getCommunityBallotWeiPrice() external view returns (uint);
 
     function getGDemocsN() external view returns (uint256);
     function getGDemoc(uint256 n) external view returns (bytes32);
@@ -64,6 +67,7 @@ interface IxPaymentsIface {
 
     function getCommunityBallotCentsPrice() external view returns (uint);
     function setCommunityBallotCentsPrice(uint) external;
+    function getCommunityBallotWeiPrice() external view returns (uint);
 
     function setBasicCentsPricePer30Days(uint amount) external;
     function getBasicCentsPricePer30Days() external view returns(uint);
