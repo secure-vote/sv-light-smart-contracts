@@ -93,7 +93,7 @@ const wrapTestIx = ({accounts}, f) => {
 
         await doLog("asserted that setPermissions fails after lockdown")
 
-        await ensPx.addAdmin(svIx.address);
+        await ensPx.setAdmin(svIx.address, true);
 
         await doLog("added svIx as admin to ensPx")
 
@@ -423,12 +423,12 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, owner, pxF, bbF}) =
 
     assert.equal(await be.hasPermissions(newIx.address), true, "new ix should have BE permissions");
     assert.equal(await paySC.hasPermissions(newIx.address), true, "new ix should have payments permissions");
-    assert.equal(await ensPx.admins(newIx.address), true, "new ix should have ensPx permissions");
+    assert.equal(await ensPx.isAdmin(newIx.address), true, "new ix should have ensPx permissions");
     assert.equal(await ixEnsPx.isAdmin(newIx.address), true, "new ix should have ixEnsPx permissions");
 
     assert.equal(await be.hasPermissions(svIx.address), false, "old ix should not have BE permissions");
     assert.equal(await paySC.hasPermissions(svIx.address), false, "old ix should not have payments permissions");
-    assert.equal(await ensPx.admins(svIx.address), false, "old ix should not have ensPx permissions");
+    assert.equal(await ensPx.isAdmin(svIx.address), false, "old ix should not have ensPx permissions");
     assert.equal(await ixEnsPx.isAdmin(svIx.address), false, "old ix should not have ixEnsPx permissions");
 
     assert.equal(await svIx.getUpgradePointer(), newIx.address, "svIx.getUpgradePointer should point to new ix");

@@ -251,14 +251,14 @@ const addIndexToEnsPx = async ({deployAcct, ensIxDomain, ensProxy, index}) => {
 
     // exitIf(SV.utils.ethAddrEq(await cEns.methods.owner(rootNode).call(), ensProxy), `ENS Proxy does not own ${rootLabel}! Cannot register or admin ${ensIxDomain}`)
 
-    if (await cEnsPx.methods.admins(index).call() == true) {
+    if (await cEnsPx.methods.isAdmin(index).call() == true) {
         logInfo('Index already admin for EnsPx')
         return;
     }
-    const method = cEnsPx.methods.addAdmin(index);
+    const method = cEnsPx.methods.setAdmin(index, true);
 
     if (deployAcct) {
-        exitIf((await cEnsPx.methods.admins(deployAcct.address).call()) == false, `Deploy Acct is not an admin with Ens Proxy`)
+        exitIf((await cEnsPx.methods.isAdmin(deployAcct.address).call()) == false, `Deploy Acct is not an admin with Ens Proxy`)
     }
 
     logInfo(`Adding Index as admin to EnsPx`)

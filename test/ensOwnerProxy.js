@@ -52,8 +52,17 @@ const wrapTest = ({accounts}, f) => {
 };
 
 
-const testEnsOwnerInit = async () => {
-    throw Error("not impl")
+const testEnsOwnerInit = async ({accounts, owner, ixEnsPx, ensPR, ensRry, indexNH}) => {
+    assert.equal(await ixEnsPx.ensNode(), indexNH, "node for ensOwnerPx as expected")
+    assert.equal(await ixEnsPx.ens(), ensRry.address, "ens registry is as expected")
+    assert.equal(await ixEnsPx.resolver(), ensPR.address, "resolver is as expected")
+
+    assert.equal(await ixEnsPx.isAdmin(owner), true, "owner is an admin on instantiation")
+
+    const resTo = accounts[2];
+    await ixEnsPx.setAddr(resTo);
+
+    assert.equal(await ensPR.addr(indexNH), resTo, "we can setAddr as expected")
 }
 
 
