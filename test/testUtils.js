@@ -162,7 +162,7 @@ module.exports = function () {
     // this.assertNoErr = async (doTx) => assert.eventDoesNotOccur("Error", tx);
     this.assertNoErr = doTx => doTx;
 
-    this.getEventFromTxR = function(eventName, txR) {
+    this.getEventFromTxR = (eventName, txR) => {
         for (let i = 0; i < txR.logs.length; i++) {
             const l = txR.logs[i];
             if (l.event === eventName) {
@@ -229,7 +229,10 @@ module.exports = function () {
 
     }
 
+    this.toHex = w3.utils.toHex
+
     this.bytes32zero = "0x0000000000000000000000000000000000000000000000000000000000000000";
+    this.zeroHash = this.bytes32zero;
     this.zeroAddr = "0x0000000000000000000000000000000000000000";
 
     // submissionBits flags

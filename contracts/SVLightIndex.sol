@@ -319,11 +319,11 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         return _version;
     }
 
-    function getPayTo() external returns (address) {
+    function getPayTo() external view returns (address) {
         return payments.getPayTo();
     }
 
-    function getCommunityBallotCentsPrice() external returns (uint) {
+    function getCommunityBallotCentsPrice() external view returns (uint) {
         return payments.getCommunityBallotCentsPrice();
     }
 

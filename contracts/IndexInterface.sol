@@ -12,8 +12,8 @@ interface IxIface {
     function emergencySetBackend(IxBackendIface) external;
     function emergencySetAdmin(bytes32 democHash, address newAdmin) external;
 
-    function getPayTo() external returns (address);
-    function getCommunityBallotCentsPrice() external returns (uint);
+    function getPayTo() external view returns (address);
+    function getCommunityBallotCentsPrice() external view returns (uint);
 
     function getGDemocsN() external view returns (uint256);
     function getGDemoc(uint256 n) external view returns (bytes32);

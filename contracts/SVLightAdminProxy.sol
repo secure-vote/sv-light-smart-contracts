@@ -29,6 +29,8 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     bool callActive = false;
     address caller = address(0);
 
+    bool safeTxMutex = false;
+
     event AddedAdminToPx(address newAdmin);
     event RemovedAdmin(address oldAdmin);
     event FailedToFwdCall(uint value, bytes data);
@@ -84,21 +86,22 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     }
 
     function fwdData(address toAddr, bytes data) isAdmin() public {
-        if(!toAddr.call(data)){
-            emit FailedToFwdCall(0, data);
-        }
+        safeSend(toAddr, data, 0);
     }
 
     function fwdPayment(address toAddr) isAdmin() public payable {
-        if(!toAddr.send(msg.value)){
-            emit FailedToFwdCall(msg.value, new bytes(0));
-        }
+        safeSend(toAddr, "", msg.value);
     }
 
     function fwdPaymentAndData(address toAddr, bytes data) isAdmin() public payable {
-        if(!toAddr.call.value(msg.value)(data)){
-            emit FailedToFwdCall(msg.value, data);
-        }
+        safeSend(toAddr, data, msg.value);
+    }
+
+    function safeSend(address to, bytes data, uint val) internal {
+        require(safeTxMutex == false, "reentrency lock active");
+        safeTxMutex = true;
+        require(to.call.value(val)(data), "send failed");
+        safeTxMutex = false;
     }
 
     // community stuff
