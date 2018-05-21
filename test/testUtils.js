@@ -101,6 +101,8 @@ module.exports = function () {
     this.getBlock = toAsync(web3.eth.getBlock);
     this.getBlockN = async () => (await this.getBlock('latest'))['number'];
     this.sendTransaction = toAsync(web3.eth.sendTransaction);
+    this.getTransactionReceipt = toAsync(web3.eth.getTransactionReceipt)
+    this.getTransaction = toAsync(web3.eth.getTransaction)
 
     // this is annoying but needed because truffle. Sigh.
     this.getData = (c, ...args) => c.request(...args).params[0].data;

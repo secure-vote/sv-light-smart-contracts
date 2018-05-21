@@ -557,13 +557,22 @@ const testDemocAdminPermissions = async () => {
 }
 
 
-const testCommunityBallots = async () => {
+const testCommunityBallots = async ({accounts, owner, svIx, erc20}) => {
     // test in cases we have a community instance and in cases where
     // they're enabled on a paying democ
 
     // todo: ensure we're setting the right submission bits on the ballot
     // when doing community ballots. (i.e. IS_OFFICIAL and IS_BINDING both false)
-    throw Error('not implemented');
+
+    const {args: {democHash, admin}} = getEventFromTxR("DemocAdded", await svIx.dInit(erc20.address))
+    const adminPx = SVAdminPx.at(admin);
+    const ixPx = SVIndex.at(admin);
+
+    assert.equal(await adminPx.communityBallotsEnabled(), true, "comm ballots on by default")
+
+    const [s,e] = genStartEndTimes()
+    const packed = mkPacked(s, e, USE_ETH | USE_NO_ENC)
+    adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed)
 }
 
 
@@ -650,7 +659,7 @@ contract("SVLightIndex", function (accounts) {
         ["test payments for democ", testPaymentsForDemoc],
         // ["test SV democ creation", testSVDemocCreation],
         // ["test democ admin permissions", testDemocAdminPermissions],
-        // ["test community ballots (default)", testCommunityBallots],
+        ["test community ballots (default)", testCommunityBallots],
         // ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
         // ["test deny community ballots", testNoCommunityBallots],
         // ["test allowed submission bits on comm ballots", testCommunityBallotsAllowedSubBits],

@@ -180,9 +180,11 @@ const testFwdingFallback = async ({accounts, scLog, owner, payments, svIx, democ
     const secsRemaining = await payments.getSecondsRemaining(democHash);
     const secsPerEth = await payments.weiBuysHowManySeconds(toBigNumber(oneEth));
     assert.equal(await svIx.accountInGoodStanding(democHash), true, "democ now in good standing due to 1 eth payment")
-    assert.deepEqual(secsRemaining, secsPerEth, "democ should have plenty of secs now")
+    assert.deepEqual(secsRemaining.minus(secsPerEth).abs().toNumber() < 2, true, "democ should have plenty of secs now")
     assert.equal(secsRemaining.toNumber() > 1000000, true, "secsRemaining should be more than 1 million (about 12 days)")
 
+    // should do nothing - this checks the else part of `if (msg.value > 0)`
+    await sendTransaction({from: u1, to: adminPx.address, value: 0});
 }
 
 
@@ -225,12 +227,70 @@ const testFwdingManual = async ({scLog, accounts, owner, payments, svIx, democHa
 }
 
 
+const testReentrency = async ({accounts}) => {
+    const [owner, u1, u2, u3, u4, u5] = accounts;
+    // use lots of gas
+    const gas = 5000000
+    const freetx = {gasPrice: 0, gas}
+    const testHelper = await TestHelper.new({gas})
+    const th = testHelper.address
+
+    const scLog = await EmitterTesting.new()
+
+    const px = await SVAdminPx.new(zeroHash, owner, th, {gas})
+    const pxAddr = px.address
+    await scLog.log(`Proxy address: ${px.address}`)
+
+    // first test an expected "change" type transaction
+    const halfEth = web3.toWei(0.5, "ether");
+    const wholeEth = web3.toWei(1, "ether");
+
+    const reentrencyData = getData(testHelper.reentrencyHelper, pxAddr, "", halfEth)
+    await scLog.log(`Got friendly reentrency data ${reentrencyData}`)
+    await scLog.log(`About to get balance for owner (${owner})`)
+
+    const preBal = await getBalance(owner);
+    await scLog.log(`Owner balance: ${preBal.toNumber()}`, freetx)
+
+    const txh1 = await sendTransaction({to: pxAddr, data: reentrencyData, value: wholeEth, from: owner, ...freetx})
+    await scLog.log(`Sent reentrency tx as ${txh1}`,freetx)
+
+    const txr1 = await getTransactionReceipt(txh1);
+    const tx1 = await getTransaction(txh1);
+    await scLog.log(`Got tx receipt: ${toJson(txr1)}`, freetx)
+    await scLog.log(`Got tx: ${toJson(tx1)}`, freetx)
+    assert.equal(txr1.status, 1, "tx should succeed")
+
+    const postBal = await getBalance(owner);
+
+    const expectedPostBal = web3.fromWei(preBal.minus(halfEth).minus(tx1.gasPrice.times(txr1.gasUsed)), "ether")
+    const postBalEther = web3.fromWei(postBal, "ether")
+
+    const diff = web3.fromWei(preBal.minus(postBal), "ether");
+    await scLog.log(`Diff in balances: ${diff.toFixed()}`)
+    assert.deepEqual(postBalEther.toFixed(), expectedPostBal.toFixed(), "balances should match expected after reentrancy on fallback")
+
+    // now test something less safe - try to trigger the safeTxMutex revert
+
+    // set up th as admin so it can call certain methods
+    await px.addNewAdmin(th)
+
+    // we'll declare data from the "inside out" like some kind of onion
+    // the plan is to have msgs bounce: PX.fwdData -> TH.reentrencyHelper -> PX.fwdData -> TH.storeData
+    const finalData = getData(testHelper.storeData, "0x1337")
+    const data1IntoPx = getData(px.fwdData, th, finalData)
+    const data2IntoTH = getData(testHelper.reentrencyHelper, pxAddr, data1IntoPx, 0)
+    await assertRevert(px.fwdData(th, data2IntoTH), 'should trigger the safeTxMutex')
+}
+
+
 contract("SVLightAdminProxy", function (accounts) {
     tests = [
         ["test admin px init", testAdminPxInit],
         ["test list admins", testListAllAdmins],
         ["test fwd fallback", testFwdingFallback],
         ["test fwd manually", testFwdingManual],
+        ["test reentrency", testReentrency, true],
     ];
-    R.map(([desc, f]) => it(desc, wrapTest({accounts}, f)), tests);
+    R.map(([desc, f, skip]) => it(desc, skip === true ? (async () => f({accounts})) : wrapTest({accounts}, f)), tests);
 });

@@ -1,7 +1,8 @@
 pragma solidity ^0.4.24;
 
+import {upgradePtr} from "./SVCommon.sol";
 
-contract TestHelper {
+contract TestHelper is upgradePtr {
 
     struct DataAndValue {
         bytes data;
@@ -19,7 +20,6 @@ contract TestHelper {
 
     function willThrow() external payable {
         revert();
-        justData[address(0)] = "test123";
     }
 
     function storeData(bytes data) external {
@@ -30,4 +30,7 @@ contract TestHelper {
         dataAndValue[msg.sender] = DataAndValue(data, msg.value);
     }
 
+    function reentrencyHelper(address to, bytes data, uint value) external payable {
+        require(to.call.value(value)(data), "tx should succeed");
+    }
 }
