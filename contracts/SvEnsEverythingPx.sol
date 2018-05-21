@@ -1,8 +1,8 @@
 pragma solidity ^0.4.21;
 
-import { SvEnsRegistry } from "./SvEnsRegistry.sol";
-import { PublicResolver } from "./SvEnsResolver.sol";
-import { SvEnsRegistrar } from "./SvEnsRegistrar.sol";
+import { SvEnsRegistry } from "../ens/SvEnsRegistry.sol";
+import { PublicResolver } from "../ens/SvEnsResolver.sol";
+import { SvEnsRegistrar } from "../ens/SvEnsRegistrar.sol";
 
 contract SvEnsEverythingPx {
     address public owner;

@@ -21,6 +21,7 @@ const loadDetails = (contractName, contractDir) => {
         var prePath = "./" + prefix + solDist;
         const abi = JSON.parse(fs.readFileSync(prePath + '/' + contractName + '.abi').toString());
         const bin = fs.readFileSync(prePath + '/' + contractName + '.bin').toString();
+
         return [abi, bin];
     } catch (err) {
         console.log("Failed to find contract details.\n")
