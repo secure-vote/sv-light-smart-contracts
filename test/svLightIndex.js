@@ -14,7 +14,6 @@ const EmitterTesting = artifacts.require("./EmitterTesting");
 const FaucetErc20 = artifacts.require("./FaucetErc20");
 
 const nh = require('eth-ens-namehash');
-const b58 = require('bs58');
 
 require("./testUtils")();
 
