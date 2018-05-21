@@ -14,6 +14,7 @@ interface BallotBoxIface {
     function isTesting() external view returns (bool);
     function isOfficial() external view returns (bool);
     function isBinding() external view returns (bool);
+    function qualifiesAsCommunityBallot() external view returns (bool);
 
     function isDeprecated() external view returns (bool);
 
