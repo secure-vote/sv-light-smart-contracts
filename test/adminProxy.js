@@ -12,6 +12,7 @@ const EnsRegistry = artifacts.require("./SvEnsRegistry");
 const EnsOwnerPx = artifacts.require("./EnsOwnerProxy");
 const EmitterTesting = artifacts.require("./EmitterTesting");
 const FaucetErc20 = artifacts.require("./FaucetErc20");
+const TestHelper = artifacts.require("./TestHelper")
 
 const nh = require('eth-ens-namehash');
 
@@ -37,14 +38,14 @@ const wrapTest = ({accounts}, f) => {
 
         const be = await IxBackend.new();
         await doLog(`Created backend...`);
-        const paySC = await IxPayments.new(backupOwner);
+        const payments = await IxPayments.new(backupOwner);
         await doLog(`Created payments backend...`);
         const pxF = await PxFactory.new();
         await doLog(`Created PxFactory...`);
         const bbF = await BBFactory.new();
         await doLog(`Created BBFactory...`);
 
-        await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
+        await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${payments.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
 
         const tld = "test";
         const testLH = web3.sha3(tld);
@@ -66,7 +67,7 @@ const wrapTest = ({accounts}, f) => {
         await ensPx.regNameWOwner("index", zeroAddr, ixEnsPx.address);
         await doLog(`Created index.${tld} owner px at ${ixEnsPx.address}`)
 
-        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, {gasPrice: 0});
+        const svIx = await SVIndex.new(be.address, payments.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, {gasPrice: 0});
         await doLog(`Created svIx at ${svIx.address}`)
 
         await ixEnsPx.setAddr(svIx.address);
@@ -78,13 +79,13 @@ const wrapTest = ({accounts}, f) => {
         await be.setPermissions(svIx.address, true);
         await be.doLockdown();
 
-        await paySC.setPermissions(svIx.address, true);
-        await paySC.doLockdown();
+        await payments.setPermissions(svIx.address, true);
+        await payments.doLockdown();
 
         await doLog("set permissions for backend and paymentSettings - allow svIx")
 
         await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, be.setPermissions(svIx.address, true), "should throw error after lockdown (be)")
-        await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, paySC.setPermissions(svIx.address, true), "should throw error after lockdown (paySC)")
+        await assertErrStatus(ERR_ADMINS_LOCKED_DOWN, payments.setPermissions(svIx.address, true), "should throw error after lockdown (paySC)")
 
         await doLog("asserted that setPermissions fails after lockdown")
 
@@ -93,7 +94,7 @@ const wrapTest = ({accounts}, f) => {
         await doLog("added svIx as admin to ensPx")
 
         await doLog(`accounts[0]: ${accounts[0]}`)
-        await doLog(`paySC owner: ${await paySC.owner()}`)
+        await doLog(`paySC owner: ${await payments.owner()}`)
         await doLog(`be owner:    ${await be.owner()}`)
         await doLog(`svId owner:  ${await svIx.owner()}`)
 
@@ -101,24 +102,135 @@ const wrapTest = ({accounts}, f) => {
         await doLog(`Created erc20 w faucet at ${erc20.address}`)
 
         const dInitTxR = await svIx.dInit(erc20.address, {from: owner, value: 1});
-        const [democHash, adminPxAddr] = getEventFromTxR("DemocAdded", dInitTxR)
+        const {args: {democHash, admin: adminPxAddr}} = getEventFromTxR("DemocAdded", dInitTxR)
         const adminPx = SVAdminPx.at(adminPxAddr)
         const ixPx = SVIndex.at(adminPxAddr)
 
-        return await f({svIx, democHash, adminPx, ixPx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, owner, backupOwner, ixEnsPx, erc20, accounts});
+        return await f({svIx, democHash, adminPx, ixPx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, payments, scLog, owner, backupOwner, ixEnsPx, erc20, accounts});
     };
 };
 
 
 const testAdminPxInit = async ({accounts, owner, svIx, democHash, adminPx, ixPx}) => {
+    assert.equal(await adminPx.owner(), owner, "owner matches")
+    assert.equal(await adminPx.isProxyContract(), true, "isProxyContract is true")
+    assert.equal((await adminPx.proxyVersion()).toNumber(), 2, "proxyVersion is 2")
+    assert.equal(await adminPx.allowErc20OwnerClaim(), true, "allowErc20OwnerClaim is true by default")
+    assert.equal(await adminPx.democHash(), democHash, "democHash matches")
+    assert.equal(await adminPx.communityBallotsEnabled(), true, "community ballots on by default")
+    assert.equal(await adminPx.admins(owner), true, "owner is admin by default")
+    assert.equal(await adminPx._forwardTo(), svIx.address, "fwd to is ix addr")
+    assert.deepEqual(await adminPx.listAllAdmins(), [owner], "listAllAdmins is just owner to start with")
 }
 
 
+const testListAllAdmins = async ({accounts, owner, svIx, democHash, adminPx, ixPx}) => {
+
+    const [_, u1, u2, u3, u4, u5] = accounts;
+
+    await assertRevert(adminPx.addNewAdmin(u5, {from: u1}), "can't add admins without permission")
+
+    await adminPx.addNewAdmin(u5, {from: owner})
+    assert.deepEqual(await adminPx.listAllAdmins(), [owner, u5], "listAllAdmins works for 2")
+
+    await adminPx.addNewAdmin(u2, {from: u5})
+    assert.deepEqual(await adminPx.listAllAdmins(), [owner, u5, u2], "listAllAdmins works for 3")
+
+    await adminPx.removeAdmin(u5, {from: u2})
+    assert.deepEqual(await adminPx.listAllAdmins(), [owner, u2], "listAllAdmins works after removing u5")
+
+    await adminPx.addNewAdmin(u5, {from: u2})
+    assert.deepEqual(await adminPx.listAllAdmins(), [owner, u5, u2, u5], "listAllAdmins works for 4 with strange ordering too (due to adminLog)")
+
+    await assertRevert(adminPx.removeAdmin(u2, {from: u2}), "can't remove self as admin")
+}
+
+
+const testFwdingFallback = async ({accounts, scLog, owner, payments, svIx, democHash, adminPx, ixPx}) => {
+
+    const [_, u1, u2, u3, u4, u5] = accounts;
+
+    const [s, e] = genStartEndTimes()
+
+    const _packed = mkPacked(s, e, USE_ETH | USE_NO_ENC)
+    const packed = toBigNumber(_packed)
+    assert.equal(_packed.toString(10), packed.toString(10), "bigNumber and BN should match as strings")
+
+    const packedBadEndTime = toBigNumber(mkPacked(s, 0, USE_ETH | USE_NO_ENC))
+
+    const deployBallotBadSender = ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, packed, {from: u1})
+    await assertRevert(deployBallotBadSender, "does not fwd with bad sender")
+    await scLog.log("Confirmed bad senders can't deploy ballots")
+
+    // make sure the ballot deploys normally
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, packed, {from: owner})
+    await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, packedBadEndTime, {from: owner}), "cannot deploy ballot with end time in past")
+    await scLog.log("confirmed the ballot could be published only if end time in future")
+
+    // make sure we can fwd with no data and non-admin sender
+    assert.equal(await adminPx.admins(u1), false, "u1 should not be an admin")
+    assert.equal(await svIx.accountInGoodStanding(democHash), false, "democ should not yet be in good standing")
+    assert.equal(await payments.getSecondsRemaining(democHash), 0, "democ should have 0 seconds on it")
+    await scLog.log("confirmed admins, accountStanding, and secs remaining")
+
+    // a tx from u1 to pay for democ
+    await sendTransaction({from: u1, to: adminPx.address, value: oneEth, gasPrice: 0, gas: 5000000})
+    await scLog.log("payment of 1 ether made")
+
+    const secsRemaining = await payments.getSecondsRemaining(democHash);
+    const secsPerEth = await payments.weiBuysHowManySeconds(toBigNumber(oneEth));
+    assert.equal(await svIx.accountInGoodStanding(democHash), true, "democ now in good standing due to 1 eth payment")
+    assert.deepEqual(secsRemaining, secsPerEth, "democ should have plenty of secs now")
+    assert.equal(secsRemaining.toNumber() > 1000000, true, "secsRemaining should be more than 1 million (about 12 days)")
+
+}
+
+
+const testFwdingManual = async ({scLog, accounts, owner, payments, svIx, democHash, adminPx, ixPx}) => {
+
+    const [_, u1, u2, u3, u4, u5] = accounts;
+    // use lots of gas
+    const gas = 5000000
+
+    await assertRevert(adminPx.fwdPayment(u2, {from: u1, value: 1, gas}), "fwd payment fails on bad sender")
+    await assertRevert(adminPx.fwdData(u2, genRandomBytes32(), {from: u1, gas}), "fwd data fails on bad sender")
+    await assertRevert(adminPx.fwdPaymentAndData(u2, genRandomBytes32(), {from: u1, gas, value: 1}), "fwd payment and data fails on bad sender")
+    await scLog.log("confirmed fwding fails for bad permissions")
+
+    const testHelper = await TestHelper.new({gas})
+    const th = testHelper.address
+
+    await scLog.log("about to fwd payment")
+    await adminPx.fwdPayment(th, {value: 1, gas})
+    await scLog.log("done fwd payment")
+    assert.equal(await testHelper.justValue(adminPx.address), 1, "value recorded in test helper via px")
+
+    const sampleData = "some data"
+    const dataForTh = getData(testHelper.storeData, sampleData)
+    await adminPx.fwdData(th, dataForTh, {gas})
+    assert.equal(await testHelper.justData(adminPx.address), toHex(sampleData), "data recorded in test helper via px")
+    await scLog.log("fwd'd data!")
+
+    const sample2 = "more data"
+    const data2 = getData(testHelper.storeDataAndValue, sample2)
+    await adminPx.fwdPaymentAndData(th, data2, {value: 1337, gas})
+    assert.deepEqual(await testHelper.dataAndValue(adminPx.address), [toHex(sample2), toBigNumber(1337)], "data and value recorded in test helper via px")
+    await scLog.log("fwd'd payment and data!")
+
+    const dataThrow = getData(testHelper.willThrow)
+    await assertRevert(adminPx.fwdData(th, dataThrow, {gas}), "fwdData should revert when sending to `willThrow` on helper")
+    await assertRevert(adminPx.fwdPayment(th, {value: 1999, gas}), "fwdPayment should revert when sending 1999 wei to helper")
+    await assertRevert(adminPx.fwdPaymentAndData(th, dataThrow, {value: 9999, gas}) , "fwdPaymentAndData should revert when sending to `willThrow` on helper")
+    await scLog.log("make sure fwds that revert also revert the tx in the proxy")
+}
 
 
 contract("SVLightAdminProxy", function (accounts) {
     tests = [
         ["test admin px init", testAdminPxInit],
+        ["test list admins", testListAllAdmins],
+        ["test fwd fallback", testFwdingFallback],
+        ["test fwd manually", testFwdingManual],
     ];
     R.map(([desc, f]) => it(desc, wrapTest({accounts}, f)), tests);
 });

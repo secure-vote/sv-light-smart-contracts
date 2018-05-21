@@ -402,7 +402,7 @@ const mkDemoc = async ({svIx, txOpts, erc20}) => {
 
 /* ACTUAL TESTS */
 
-const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, owner, pxF, bbF}) => {
+const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbF, owner, erc20}) => {
     // test that upgrades to new Indexes work
 
     /**
@@ -412,8 +412,16 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, owner, pxF, bbF}) =
      * payment perms
      * ensPx perms
      * ensOwnerPx
+     * after upgrade does a proxy find the new Ix?
      */
 
+    // some prep so we can confirm the adminPx's upgradePtr works
+    const {args: {democHash, admin}} = getEventFromTxR("DemocAdded", await svIx.dInit(erc20.address, {from: owner, value: 1}))
+    const adminPx = SVAdminPx.at(admin);
+    const ixPx = SVIndex.at(admin);
+    assert.equal(await adminPx._forwardTo(), svIx.address, "adminPx fwdTo matches init")
+
+    // upgrade proper
     const newIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address);
 
     await svIx.doUpgrade(newIx.address);
@@ -431,6 +439,11 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, owner, pxF, bbF}) =
     assert.equal(await ixEnsPx.isAdmin(svIx.address), false, "old ix should not have ixEnsPx permissions");
 
     assert.equal(await svIx.getUpgradePointer(), newIx.address, "svIx.getUpgradePointer should point to new ix");
+
+    // now test the adminPx and make sure that fwds to new democ
+    assert.equal(await adminPx._forwardTo(), svIx.address, "adminPx fwdTo still matches init")
+    await ixPx.payForDemocracy(democHash, {value: 1})
+    assert.equal(await adminPx._forwardTo(), newIx.address, "adminPx fwdTo upgrades automagically when sending after upgrade")
 }
 
 
