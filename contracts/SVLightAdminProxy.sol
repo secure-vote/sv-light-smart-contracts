@@ -115,14 +115,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     }
 
     // flag in submissionBits that indicates if it's official or not
-    function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint256 _packed) external payable returns (uint) {
-        // ensure we mark this as a community ballot by disabling official and binding flags:
-        // submissionBits is a uint16 that lives at [112 bits][>> 16 bits <<][128 bits]
-        uint256 all1s = uint256(0) - 1;
-        uint256 disallowedMask = all1s ^ (uint256(IS_OFFICIAL | IS_BINDING | USE_ENC) << 128);
-        uint256 necessaryFlags = uint256(USE_NO_ENC) << 128;
-        uint256 packed = (_packed | necessaryFlags) & disallowedMask;
-
+    function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint) {
         IxIface ix = IxIface(checkFwdAddressUpgrade());
 
         uint price = ix.getCommunityBallotWeiPrice();
@@ -141,7 +134,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         // should we set owner to 0 so admins can't interfere with community ballots?
         bb.setOwner(address(0));
 
-        assert(bb.isOfficial() == false && bb.isBinding() == false); // "community ballots are never official or binding"
+        require(bb.qualifiesAsCommunityBallot(), "must be community ballot"); // community ballots are never official or binding
     }
 
     // admin management

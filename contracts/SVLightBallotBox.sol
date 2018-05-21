@@ -361,6 +361,10 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         return USE_SIGNED & submissionBits != 0;
     }
 
+    function unsafeIsEncrypted() view internal returns (bool) {
+        return USE_ENC & submissionBits != 0;
+    }
+
     function isEthNoEnc() view internal returns (bool) {
         return checkFlags(USE_ETH | USE_NO_ENC);
     }
@@ -387,6 +391,13 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     function isTesting() view public returns (bool) {
         return (submissionBits & USE_TESTING) == USE_TESTING;
+    }
+
+    function qualifiesAsCommunityBallot() view external returns (bool) {
+        // if submissionBits AND any of the bits that make this _not_ a community
+        // ballot is equal to zero that means none of those bits were active, so
+        // it could be a community ballot
+        return (submissionBits & (IS_BINDING | IS_OFFICIAL | USE_ENC)) == 0;
     }
 
     function checkFlags(uint16 expected) view internal returns (bool) {
