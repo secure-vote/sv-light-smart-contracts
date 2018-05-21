@@ -14,7 +14,7 @@ import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
 import { permissioned, hasAdmins, owned, upgradePtr } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
 import { Base32Lib } from "../libs/Base32Lib.sol";
-import { SvEnsEverythingPx } from "../ens/SvEnsEverythingPx.sol";
+import { SvEnsEverythingPx } from "./SvEnsEverythingPx.sol";
 import "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./SVPayments.sol";
