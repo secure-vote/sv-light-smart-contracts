@@ -294,7 +294,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         doUpgradeInternal(nextSC);
         require(backend.upgradeMe(nextSC));
         require(payments.upgradeMe(nextSC));
-        ensPx.upgradeMe(nextSC);
+        ensPx.upgradeMeAdmin(nextSC);
         ensOwnerPx.setAddr(nextSC);
         ensOwnerPx.upgradeMeAdmin(nextSC);
     }
