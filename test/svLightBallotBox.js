@@ -377,6 +377,37 @@ const testBadSubmissionBits = async ({accounts}) => {
 }
 
 
+const testCommStatus = async ({accounts}) => {
+    const [s,e] = genStartEndTimes();
+
+    const std = USE_ETH | USE_NO_ENC;
+    const goodBits = [
+        std,
+        USE_SIGNED | USE_NO_ENC,
+    ]
+
+    const badBits = [
+        std | IS_OFFICIAL,
+        std | IS_BINDING,
+        std | IS_OFFICIAL | IS_BINDING,
+        USE_ETH | USE_ENC,
+        USE_SIGNED | USE_ENC,
+    ]
+
+    const goodPacked = R.map(b => mkPacked(s,e,b), goodBits)
+    const badPacked = R.map(b => mkPacked(s,e,b), badBits)
+
+    await Promise.all(R.map(async p => {
+        const _bb = await SVBallotBox.new(genRandomBytes32(), toBigNumber(p), zeroAddr);
+        assert.equal(await _bb.qualifiesAsCommunityBallot(), true, `Ballot with subBits ${p} should qualify as comm`)
+    }, goodPacked))
+
+    await Promise.all(R.map(async p => {
+        const _bb = await SVBallotBox.new(genRandomBytes32(), toBigNumber(p), zeroAddr);
+        assert.equal(await _bb.qualifiesAsCommunityBallot(), false, `Ballot with bits ${p} should not qualify as community ballot`)
+    }, badPacked));
+}
+
 
 const testGetVotes = async ({accounts}) => {
     const [s, e] = genStartEndTimes();
@@ -500,6 +531,7 @@ contract("LittleBallotBox", function(_accounts) {
         ["test sponsorship", testSponsorship],
         ["test bad submission bits", testBadSubmissionBits],
         ["test getBallots*From", testGetVotes],
+        ["test community status", testCommStatus],
     ]
     S.map(([desc, f]) => it(desc, _wrapTest(_accounts, f)), tests);
 });
