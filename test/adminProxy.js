@@ -262,11 +262,10 @@ const testReentrancy = async ({accounts}) => {
     const preBal = await getBalance(owner);
     await log(`Owner balance: ${preBal.toNumber()}`)
 
-    const txh1 = await sendTransaction({to: pxAddr, data: reentrancyData, value: wholeEth, from: owner, ...freetx})
-    await log(`Sent reentrancy tx as ${txh1}`)
+    const {receipt: txr1} = await px.sendTransaction({data: reentrancyData, value: wholeEth, from: owner, ...freetx})
+    await log(`Sent reentrancy tx as ${txr1.transactionHash}`)
 
-    const txr1 = await getTransactionReceipt(txh1);
-    const tx1 = await getTransaction(txh1);
+    const tx1 = await getTransaction(txr1.transactionHash);
     await log(`Got tx receipt: ${toJson(txr1)}`)
     await log(`Got tx: ${toJson(tx1)}`)
     assert.equal(txr1.status, 1, "tx should succeed")
