@@ -361,9 +361,9 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         return USE_SIGNED & submissionBits != 0;
     }
 
-    function unsafeIsEncrypted() view internal returns (bool) {
-        return USE_ENC & submissionBits != 0;
-    }
+    // function unsafeIsEncrypted() view internal returns (bool) {
+    //     return USE_ENC & submissionBits != 0;
+    // }
 
     function isEthNoEnc() view internal returns (bool) {
         return checkFlags(USE_ETH | USE_NO_ENC);
