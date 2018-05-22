@@ -5,3 +5,4 @@ build
 coverage
 coverageEnv
 coverage.json
+scTopics
