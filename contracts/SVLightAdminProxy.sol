@@ -11,6 +11,8 @@ import { SVLightBallotBox } from "./SVLightBallotBox.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
+import "./BBLib.sol";
+import "../libs/BPackedUtils.sol";
 
 
 contract SVLightAdminProxy is owned, SVBallotConsts {
@@ -36,7 +38,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     event FailedToFwdCall(uint value, bytes data);
 
     modifier isAdmin() {
-        require(admins[msg.sender], "isAdmin: forbidden");
+        require(admins[msg.sender], "!admin");
         _;
     }
 
@@ -62,10 +64,10 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
             address fwdTo = checkFwdAddressUpgrade();
 
             if (msg.data.length > 0) {
-                require(admins[msg.sender], "fwd: must be admin");
+                require(admins[msg.sender], "!admin");
                 // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
                 // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
-                require(address(fwdTo).call.value(msg.value)(msg.data), "failed to fwd tx from admin");
+                require(address(fwdTo).call.value(msg.value)(msg.data), "failed to fwd tx");
             } else if (msg.value > 0) {
                 // allow fwding just money to the democracy
                 IxIface ix = IxIface(fwdTo);
@@ -98,7 +100,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     }
 
     function safeSend(address to, bytes data, uint val) internal {
-        require(safeTxMutex == false, "reentrency lock active");
+        require(safeTxMutex == false, "reentrency locked");
         safeTxMutex = true;
         require(to.call.value(val)(data), "send failed");
         safeTxMutex = false;
@@ -115,7 +117,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     }
 
     // flag in submissionBits that indicates if it's official or not
-    function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint) {
+    function deployCommunityBallot(bytes32 specHash, bytes32 extraData, uint128 packedTimes) external payable returns (uint id) {
         IxIface ix = IxIface(checkFwdAddressUpgrade());
 
         uint price = ix.getCommunityBallotWeiPrice();
@@ -126,15 +128,13 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
 
         // if accounts are not in good standing then we always allow community ballots
         bool canDoCommunityBallots = communityBallotsEnabled || !ix.accountInGoodStanding(democHash);
-        require(canDoCommunityBallots, "community ballots are not available");
-
-        uint id = ix.dDeployBallot(democHash, specHash, extraData, packed);
-        BallotBoxIface bb = BallotBoxIface(ix.getDBallotAddr(democHash, id));
+        require(canDoCommunityBallots, "!comm-b-enabled");
 
         // should we set owner to 0 so admins can't interfere with community ballots?
-        bb.setOwner(address(0));
+        BallotBoxIface(ix.getDBallotAddr(democHash, id)).setOwner(address(0));
+        uint256 packed = (USE_ETH | USE_NO_ENC) << 128 | uint256(packedTimes);
 
-        require(bb.qualifiesAsCommunityBallot(), "must be community ballot"); // community ballots are never official or binding
+        id = ix.dDeployBallot(democHash, specHash, extraData, packed);
     }
 
     // admin management

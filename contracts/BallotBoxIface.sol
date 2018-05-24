@@ -1,50 +1,57 @@
 pragma solidity ^0.4.24;
 
-
 interface BallotBoxIface {
-    function getVersion() external view returns (uint256);
+    function getVersion() external pure returns (uint256);
 
-    function getBallotSigned(uint256) external view returns (bytes32 ballotData, bytes32 sender, uint32 blockN);
-    function getBallotEth(uint256) external view returns (bytes32 ballotData, address sender, uint32 blockN);
+    function getBallotEth(uint256) external view returns (bytes32 ballotData, address sender);
     function getPubkey(uint256) external view returns (bytes32);
-    function getSignature(uint256) external view returns (bytes32[2]);
 
-    function hasVotedEth(address) external view returns (bool);
+    function getDetails(address voter) external view returns (
+        bool hasVoted,
+        uint nVotesCast,
+        bytes32 secKey,
+        uint16 submissionBits,
+        uint64 startTime,
+        uint64 endTime,
+        bytes32 specHash,
+        bool deprecated);
 
-    function isTesting() external view returns (bool);
-    function isOfficial() external view returns (bool);
-    function isBinding() external view returns (bool);
-    function qualifiesAsCommunityBallot() external view returns (bool);
-
-    function isDeprecated() external view returns (bool);
-
-    function getEncSeckey() external view returns (bytes32);
-    function getSpecHash() external view returns (bytes32);
-    function getSubmissionBits() external view returns (uint16);
-    function getStartTime() external view returns (uint64);
-    function getEndTime() external view returns (uint64);
-    function getCreationBlock() external view returns (uint64);
     function getTotalSponsorship() external view returns (uint);
 
-    function submitBallotNoPk(bytes32 ballot) external returns (uint id);
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) external returns (uint id);
-    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) external returns (uint id);
-    function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) external returns (uint id);
+    function submitBallotNoPk(bytes32 ballot) external;
+    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) external;
+
+    function revealSeckey(bytes32 sk) external;
+    function setEndTime(uint64 newEndTime) external;
+    function setDeprecated() external;
 
     function setOwner(address) external;
+    function getOwner() external view returns (address);
+}
 
-    function getBallotsEthFrom(address voter) external view
-        returns ( bool authenticated
-                , uint[] memory ids
-                , bytes32[] memory ballots
-                , uint32[] memory blockNs
-                , bytes32[] memory pks
-                , bytes32[2][] memory sigs);
-    function getBallotsSignedFrom(bytes32 voter) external view
-        returns ( bool authenticated
-                , uint[] memory ids
-                , bytes32[] memory ballots
-                , uint32[] memory blockNs
-                , bytes32[] memory pks
-                , bytes32[2][] memory sigs);
+
+interface BBAuxIface {
+    function isTesting(BallotBoxIface bb) external view returns (bool);
+    function isOfficial(BallotBoxIface bb) external view returns (bool);
+    function isBinding(BallotBoxIface bb) external view returns (bool);
+    function qualifiesAsCommunityBallot(BallotBoxIface bb) external view returns (bool);
+
+
+    function isDeprecated(BallotBoxIface bb) external view returns (bool);
+    function getEncSeckey(BallotBoxIface bb) external view returns (bytes32);
+    function getSpecHash(BallotBoxIface bb) external view returns (bytes32);
+    function getSubmissionBits(BallotBoxIface bb) external view returns (uint16);
+    function getStartTime(BallotBoxIface bb) external view returns (uint64);
+    function getEndTime(BallotBoxIface bb) external view returns (uint64);
+    function getNVotesCast(BallotBoxIface bb) external view returns (uint256 nVotesCast);
+
+    function hasVoted(BallotBoxIface bb, address voter) external view returns (bool hv);
+
+    function getBallots(BallotBoxIface bb) external view
+        returns ( bytes32[] memory ballots
+                , bytes32[] memory pks);
+
+    function getBallotsFrom(BallotBoxIface bb, address voter) external view
+        returns ( bytes32[] memory ballots
+                , bytes32[] memory pks);
 }

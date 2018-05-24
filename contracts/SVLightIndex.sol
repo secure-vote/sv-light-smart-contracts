@@ -20,6 +20,7 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./SVPayments.sol";
 import "./EnsOwnerProxy.sol";
 import { BPackedUtils } from "../libs/BPackedUtils.sol";
+import "./BBLib.sol";
 
 
 contract SVAdminPxFactory {
@@ -31,7 +32,7 @@ contract SVAdminPxFactory {
 
 contract SVBBoxFactory {
     function spawn(bytes32 _specHash, uint256 packed, IxIface ix, address admin) external returns (BallotBoxIface bb) {
-        bb = new SVLightBallotBox(_specHash, packed, ix);
+        bb = BallotBoxIface(new SVLightBallotBox(_specHash, packed, ix));
         bb.setOwner(admin);
     }
 }
@@ -201,11 +202,11 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     //* ADD BALLOT TO RECORD */
 
-    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
+    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint16 subBits, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
         ballotId = democs[democHash].ballots.length;
         democs[democHash].ballots.push(Ballot(specHash, extraData, bb, startTs, endTs, now));
 
-        if (bb.isOfficial()) {
+        if (BBLib.isOfficial(subBits)) {
             democs[democHash].officialBallots.push(ballotId);
         }
 
@@ -213,26 +214,12 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         emit LowLevelNewBallot(democHash, ballotId);
     }
 
-    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb) only_editors() external returns (uint ballotId) {
-        bytes32 specHash = bb.getSpecHash();
-        uint64 startTs = bb.getStartTime();
-        uint64 endTs = bb.getEndTime();
-        ballotId = _commitBallot(democHash, specHash, extraData, bb, startTs, endTs);
-    }
-
-    // function deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint64 _startTs, uint64 endTs, uint16 _submissionBits, SVBBoxFactory bbF, address admin) only_editors() external returns (uint id) {
-    //     // the start time is max(startTime, block.timestamp) to avoid a DoS whereby a malicious electioneer could disenfranchise
-    //     // token holders who have recently acquired tokens.
-    //     SVLightBallotBox bb = bbF.spawn(specHash, _startTs, endTs, _submissionBits, admin);
-    //     id = _commitBallot(democHash, specHash, extraData, bb, bb.startTime(), endTs);
-    // }
-
-    // utils
-    function max(uint64 a, uint64 b) pure internal returns(uint64) {
-        if (a > b) {
-            return a;
-        }
-        return b;
+    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed) only_editors() external returns (uint ballotId) {
+        uint64 startTs;
+        uint64 endTs;
+        uint16 subBits;
+        (subBits, startTs, endTs) = BPackedUtils.unpackAll(packed);
+        ballotId = _commitBallot(democHash, specHash, extraData, bb, subBits, startTs, endTs);
     }
 }
 
@@ -464,27 +451,20 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         return _addBallot(democHash, extraData, bb);
     }
 
-    function _deployBallotChecks(bytes32 democHash, BallotBoxIface bb) internal view {
-        uint256 endTime = uint256(bb.getEndTime());
-        // end time must be in future
-        require(endTime > now, "ballot must end in the future");
-        require(bb.isTesting() == false, "ballot cannot be in testing mode");
-
+    function _deployBallotChecks(bytes32 democHash, uint64 endTime) internal view {
         // if the ballot is marked as official require the democracy is paid up to
         // some relative amount - exclude NFP accounts from this check
-        if (bb.isOfficial()) {
-            uint secsLeft = payments.getSecondsRemaining(democHash);
-            // must be positive due to ending in future check
-            uint256 secsToEndTime = endTime - now;
-            // require ballots end no more than twice the time left on the democracy
-            require(secsLeft * 2 > secsToEndTime, "democracy not paid up enough for ballot");
-        }
+        uint secsLeft = payments.getSecondsRemaining(democHash);
+        // must be positive due to ending in future check
+        uint256 secsToEndTime = endTime - now;
+        // require ballots end no more than twice the time left on the democracy
+        require(secsLeft * 2 > secsToEndTime, "democracy not paid up enough for ballot");
     }
 
-    function _basicBallotLimitOperations(bytes32 democHash, BallotBoxIface bb) internal {
+    function _basicBallotLimitOperations(bytes32 democHash) internal {
         // if we're an official ballot and the democ is basic, ensure the democ
         // isn't over the ballots/mo limit
-        if (bb.isOfficial() && payments.getPremiumStatus(democHash) == false) {
+        if (payments.getPremiumStatus(democHash) == false) {
             uint nBallotsAllowed = payments.getBasicBallotsPer30Days();
             uint nBallotsOfficial = backend.getDOfficialBallotsN(democHash);
 
@@ -531,14 +511,23 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
                           external payable
                           returns (uint) {
 
+        // we need to end in the future
+        uint64 endTime = BPackedUtils.packedToEndTime(packed);
+        require(endTime > uint64(now), "ballot must end in future");
+
+        uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
+        require(BBLib.isTesting(submissionBits) == false, "ballot cannot be in testing mode");
+
+        if (BBLib.isOfficial(submissionBits)) {
+            _basicBallotLimitOperations(democHash);
+            _deployBallotChecks(democHash, endTime);
+        }
+
         BallotBoxIface bb = bbFactory.spawn(
             specHash,
             packed,
             this,
             msg.sender);
-
-        _basicBallotLimitOperations(democHash, bb);
-        _deployBallotChecks(democHash, bb);
 
         return _addBallot(democHash, extraData, bb);
     }
