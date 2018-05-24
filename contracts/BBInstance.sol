@@ -11,7 +11,7 @@ import { OwnedWLib } from "./SVLibs.sol";
 import { IxIface } from "./IndexInterface.sol";
 import { OwnedIface } from "./CommonIfaces.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
-import "../libs/BPackedUtils.sol";
+import "./BPackedUtils.sol";
 import "../libs/MemArrApp.sol";
 
 contract BBInstance is BallotBoxIface, OwnedWLib {
@@ -49,9 +49,10 @@ contract BBInstance is BallotBoxIface, OwnedWLib {
 
     /* Constructor */
 
-    constructor(bytes32 specHash, uint256 packed, IxIface ix) public {
+    constructor(bytes32 specHash, uint256 packed, IxIface ix, address admin) public {
         // we need to call the init functions on our libraries
         db.init(specHash, packed, ix);
+        o.owner = admin;
     }
 
     /* Fallback - Sponsorship */

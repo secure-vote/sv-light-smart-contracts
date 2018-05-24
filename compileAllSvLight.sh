@@ -2,7 +2,7 @@
 
 set -e
 
-rm -r ./_solDist/*
+rm -r ./_solDist/* || true
 
 for f in $(ls ./contracts | grep sol); do
     ./bin/compile.sh -d contracts -c $f;

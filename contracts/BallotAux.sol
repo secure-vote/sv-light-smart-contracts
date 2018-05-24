@@ -9,7 +9,7 @@ pragma solidity 0.4.24;
 
 import "./BallotBoxIface.sol";
 import "./BBLib.sol";
-import "../libs/BPackedUtils.sol";
+import "./BPackedUtils.sol";
 
 
 contract BallotAux is BBAuxIface {
