@@ -438,17 +438,17 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
 
     //* ADD BALLOT TO RECORD */
 
-    function _addBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb) internal returns (uint id) {
-        id = backend.dAddBallot(democHash, extraData, bb);
+    function _addBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed) internal returns (uint id) {
+        id = backend.dAddBallot(democHash, extraData, bb, specHash, packed);
         emit BallotAdded(democHash, id);
     }
 
     // manually add a ballot - only the owner can call this
-    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb)
+    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed)
                       only_owner()
                       external
                       returns (uint) {
-        return _addBallot(democHash, extraData, bb);
+        return _addBallot(democHash, extraData, bb, specHash, packed);
     }
 
     function _deployBallotChecks(bytes32 democHash, uint64 endTime) internal view {
@@ -529,7 +529,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
             this,
             msg.sender);
 
-        return _addBallot(democHash, extraData, bb);
+        return _addBallot(democHash, extraData, bb, specHash, packed);
     }
 
 
