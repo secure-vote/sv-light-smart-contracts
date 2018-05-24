@@ -32,7 +32,8 @@ contract SVAdminPxFactory {
 
 contract SVBBoxFactory {
     function spawn(bytes32 _specHash, uint256 packed, IxIface ix, address admin) external returns (BallotBoxIface bb) {
-        bb = new SVLightBallotBox(_specHash, packed, ix, admin);
+        bb = new SVLightBallotBox(_specHash, packed, ix);
+        bb.setOwner(admin);
     }
 }
 

@@ -110,9 +110,8 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     // Constructor function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    constructor(bytes32 _specHash, uint256 packed, IxIface ix, address newOwner) public {
+    constructor(bytes32 _specHash, uint256 packed, IxIface ix) public {
         index = ix;
-        owner = newOwner == address(0) ? msg.sender : newOwner;
 
         uint64 _startTs;
         (submissionBits, _startTs, endTime) = BPackedUtils.unpackAll(packed);
