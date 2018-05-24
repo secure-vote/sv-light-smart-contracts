@@ -38,7 +38,7 @@ interface IxIface {
 
     function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint);
     // only ix owner - used for adding past ballots
-    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb) external returns (uint);
+    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed) external returns (uint);
 
     /* global democ getters */
     function getDCategoriesN(bytes32 democHash) external view returns (uint);
