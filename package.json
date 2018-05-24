@@ -40,6 +40,7 @@
     "cli": "node -i ./bin/contractCli.js --name",
     "compile-sv-light": "./compileAllSvLight.sh",
     "compile-ens": "for f in $(ls ./ens | grep sol); do ./bin/compile.sh -d ens -c $f -o _distEns; done",
-    "coverage": "solidity-coverage"
+    "coverage": "solidity-coverage",
+    "c": "./bin/compile.sh -c"
   }
 }

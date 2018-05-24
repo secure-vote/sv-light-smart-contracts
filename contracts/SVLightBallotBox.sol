@@ -35,12 +35,6 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
     //// ** Storage Variables
 
     // struct for ballot
-    struct BallotSigned {
-        bytes32 ballotData;
-        bytes32 sender;
-        uint32 blockN;
-    }
-
     struct BallotEth {
         bytes32 ballotData;
         address sender;
@@ -49,10 +43,8 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     // Maps to store ballots, along with corresponding log of voters.
     // Should only be modified through `addBallotAndVoter` internal function
-    mapping (uint256 => BallotSigned) public ballotsSigned;
     mapping (uint256 => BallotEth) public ballotsEth;
     mapping (uint256 => bytes32) public curve25519Pubkeys;
-    mapping (uint256 => bytes32[2]) public ed25519Signatures;
     uint256 public nVotesCast = 0;
 
     mapping (address => bool) hasVotedMap;
@@ -63,7 +55,6 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     // Private key to be set after ballot conclusion - curve25519
     bytes32 ballotEncryptionSeckey;
-    bool seckeyRevealed = false;
 
     // Timestamps for start and end of ballot (UTC)
     uint64 startTime;
@@ -115,18 +106,6 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         _;
     }
 
-    modifier ballotIsSignedNoEnc() {
-        require(isSignedNoEnc(), "ballot is not of type Signed-NoEnc");
-        _reqBallotOpen();
-        _;
-    }
-
-    modifier ballotIsSignedWithEnc() {
-        require(isSignedWithEnc(), "ballot is not of type Signed-Enc");
-        _reqBallotOpen();
-        _;
-    }
-
     //// ** Functions
 
     // Constructor function - init core params on deploy
@@ -138,13 +117,15 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         (submissionBits, _startTs, endTime) = BPackedUtils.unpackAll(packed);
 
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
-        bool[] memory bools = new bool[](4);
-        bools[0] = isEthNoEnc();
-        bools[1] = isEthWithEnc();
-        bools[2] = isSignedNoEnc();
-        bools[3] = isSignedWithEnc();
-        bool okaySubmissionBits = 1 == countTrue(bools);
-        require(okaySubmissionBits, "submission bits not valid");
+        // check by converting bools to 0 or 1 and summing, making sure the result
+        // is 1.
+        bool validSubmissionBits = (isEthNoEnc() ? 1 : 0) + (isEthWithEnc() ? 1 : 0) == 1;
+        require(validSubmissionBits, "submission bits not valid");
+        // 0x1ff2 is 0001111111110010 in binary
+        // by ANDing with subBits we make sure that only bits in positions 0,2,3,13,14,15
+        // can be used. these correspond to the option flags at the top, and ETH ballots
+        // that are enc'd or plaintext.
+        require(submissionBits & 0x1ff2 == 0, "banned sub bits");
 
         bool _testing = isTesting();
         if (_testing) {
@@ -168,30 +149,41 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     // getters and constants
 
-    function getVersion() external view returns (uint256) {
+    function getDetails(address voter) external view returns (bool hasVoted, uint, bytes32 secKey, uint16, uint64, uint64, bytes32, bool) {
+        hasVoted = hasVotedMap[voter];
+        secKey = ballotEncryptionSeckey;
+        return (
+            hasVoted,
+            nVotesCast,
+            secKey,
+            submissionBits,
+            startTime,
+            endTime,
+            specHash,
+            deprecated
+        );
+    }
+
+    function getVersion() external pure returns (uint256) {
         return BB_VERSION;
+    }
+
+    function getNVotesCast() external view returns (uint) {
+        return nVotesCast;
     }
 
     function hasVotedEth(address v) external view returns (bool) {
         return hasVotedMap[v];
     }
 
-    function getBallotSigned(uint id) external view returns (bytes32 ballotData, bytes32 sender, uint32 blockN) {
-        return (ballotsSigned[id].ballotData, ballotsSigned[id].sender, ballotsSigned[id].blockN);
-    }
 
-    function getBallotEth(uint id) external view returns (bytes32 ballotData, address sender, uint32 blockN) {
-        return (ballotsEth[id].ballotData, ballotsEth[id].sender, ballotsEth[id].blockN);
+    function getBallotEth(uint id) external view returns (bytes32 ballotData, address sender) {
+        return (ballotsEth[id].ballotData, ballotsEth[id].sender);
     }
 
     function getPubkey(uint256 id) external view returns (bytes32) {
         // NOTE: These are the curve25519 pks associated with encryption
         return curve25519Pubkeys[id];
-    }
-
-    function getSignature(uint256 id) external view returns (bytes32[2]) {
-        // NOTE: these are ed25519 signatures associated with signed ballots
-        return ed25519Signatures[id];
     }
 
     function getStartTime() external view returns (uint64) {
@@ -218,65 +210,16 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         return totalSponsorship;
     }
 
-    function getBallotsEthFrom(address voter) external view
-        returns ( bool authenticated
-                , uint[] memory ids
-                , bytes32[] memory ballots
-                , uint32[] memory blockNs
-                , bytes32[] memory pks
-                , bytes32[2][] memory sigs) {
-
-        require(unsafeIsEth(), "must have USE_ETH setting");
-
-        for (uint i = 0; i < nVotesCast; i++) {
-            if (ballotsEth[i].sender == voter) {
-                ids = MemArrApp.appendUint256(ids, i);
-                ballots = MemArrApp.appendBytes32(ballots, ballotsEth[i].ballotData);
-                blockNs = MemArrApp.appendUint32(blockNs, ballotsEth[i].blockN);
-                pks = MemArrApp.appendBytes32(pks, curve25519Pubkeys[i]);
-                sigs = MemArrApp.appendBytes32Pair(sigs, ed25519Signatures[i]);
-            }
-        }
-
-        return (true, ids, ballots, blockNs, pks, sigs);
-    }
-
-    function getBallotsSignedFrom(bytes32 voter) external view
-        returns ( bool authenticated
-                , uint[] memory ids
-                , bytes32[] memory ballots
-                , uint32[] memory blockNs
-                , bytes32[] memory pks
-                , bytes32[2][] memory sigs) {
-
-        require(unsafeIsSigned(), "must have USE_SIGNED setting");
-
-        for (uint i = 0; i < nVotesCast; i++) {
-            if (ballotsSigned[i].sender == voter) {
-                ids = MemArrApp.appendUint256(ids, i);
-                ballots = MemArrApp.appendBytes32(ballots, ballotsSigned[i].ballotData);
-                blockNs = MemArrApp.appendUint32(blockNs, ballotsSigned[i].blockN);
-                pks = MemArrApp.appendBytes32(pks, curve25519Pubkeys[i]);
-                sigs = MemArrApp.appendBytes32Pair(sigs, ed25519Signatures[i]);
-            }
-        }
-
-        return (false, ids, ballots, blockNs, pks, sigs);
-    }
-
     /* ETH BALLOTS */
 
     // Ballot submission
-    function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() external returns (uint id) {
-        id = _addBallotEth(ballot, msg.sender);
-        emit SuccessfulVote(bytes32(msg.sender), id);
+    function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() external {
+        _addBallotEth(ballot, msg.sender);
     }
 
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() external returns (uint id) {
-        id = _addBallotEth(ballot, msg.sender);
-        curve25519Pubkeys[id] = encPK;
-        emit SuccessfulVote(bytes32(msg.sender), id);
+    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() external {
+        curve25519Pubkeys[_addBallotEth(ballot, msg.sender)] = encPK;
     }
 
     function _addBallotEth(bytes32 ballot, address sender) internal returns (uint256 id) {
@@ -284,28 +227,7 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         ballotsEth[id] = BallotEth(ballot, sender, uint32(block.number));
         nVotesCast += 1;
         hasVotedMap[sender] = true;
-    }
-
-    /* NON-ETH BALLOTS */
-
-    function submitBallotSignedNoEnc(bytes32 ballot, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedNoEnc() external returns (uint id) {
-        id = _addBallotSigned(ballot, ed25519PK);
-        ed25519Signatures[id] = signature;
-        emit SuccessfulVote(ed25519PK, id);
-    }
-
-    // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotSignedWithEnc(bytes32 ballot, bytes32 curve25519PK, bytes32 ed25519PK, bytes32[2] signature) ballotIsSignedWithEnc() external returns (uint id) {
-        id = _addBallotSigned(ballot, ed25519PK);
-        curve25519Pubkeys[id] = curve25519PK;
-        ed25519Signatures[id] = signature;
-        emit SuccessfulVote(ed25519PK, id);
-    }
-
-    function _addBallotSigned(bytes32 ballot, bytes32 sender) internal returns (uint256 id) {
-        id = nVotesCast;
-        ballotsSigned[id] = BallotSigned(ballot, sender, uint32(block.number));
-        nVotesCast += 1;
+        emit SuccessfulVote(bytes32(msg.sender), id);
     }
 
     /* ADMIN STUFF */
@@ -314,7 +236,6 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
     function revealSeckey(bytes32 _secKey) only_owner() public {
         require(now > endTime, "secret key cannot be released early");
         ballotEncryptionSeckey = _secKey;
-        seckeyRevealed = true; // this flag allows the contract to be locked
         emit SeckeyRevealed(_secKey);
     }
 
@@ -353,12 +274,12 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     function unsafeIsEth() view internal returns (bool) {
         // this is unsafe becuase it's not a valid configuration
-        return USE_ETH & submissionBits != 0;
+        return USE_ETH & submissionBits == USE_ETH;
     }
 
     function unsafeIsSigned() view internal returns (bool) {
         // unsafe bc it's not a valid configuration
-        return USE_SIGNED & submissionBits != 0;
+        return USE_SIGNED & submissionBits == USE_SIGNED;
     }
 
     // function unsafeIsEncrypted() view internal returns (bool) {
