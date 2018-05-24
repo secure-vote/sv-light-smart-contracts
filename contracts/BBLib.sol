@@ -12,7 +12,7 @@ import { IxIface } from "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
-import { BPackedUtils } from "../libs/BPackedUtils.sol";
+import { BPackedUtils } from "./BPackedUtils.sol";
 
 library BBLib {
     // ballot meta

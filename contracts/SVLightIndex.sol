@@ -19,7 +19,7 @@ import "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./SVPayments.sol";
 import "./EnsOwnerProxy.sol";
-import { BPackedUtils } from "../libs/BPackedUtils.sol";
+import { BPackedUtils } from "./BPackedUtils.sol";
 import "./BBLib.sol";
 
 
@@ -32,8 +32,7 @@ contract SVAdminPxFactory {
 
 contract SVBBoxFactory {
     function spawn(bytes32 _specHash, uint256 packed, IxIface ix, address admin) external returns (BallotBoxIface bb) {
-        bb = BallotBoxIface(new SVLightBallotBox(_specHash, packed, ix));
-        bb.setOwner(admin);
+        bb = new SVLightBallotBox(_specHash, packed, ix, admin);
     }
 }
 

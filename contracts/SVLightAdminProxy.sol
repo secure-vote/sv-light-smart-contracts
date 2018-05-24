@@ -12,12 +12,12 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
 import "./BBLib.sol";
-import "../libs/BPackedUtils.sol";
+import "./BPackedUtils.sol";
 
 
 contract SVLightAdminProxy is owned, SVBallotConsts {
-    bool public isProxyContract = true;
-    uint public proxyVersion = 2;
+
+    uint constant PROXY_VERSION = 2;
 
     bool public allowErc20OwnerClaim = true;
 
@@ -49,6 +49,14 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         _addAdmin(initAdmin);
         _forwardTo = upgradePtr(_fwdTo);
         owner = initAdmin;
+    }
+
+    function isProxyContract() external pure returns (bool) {
+        return true;
+    }
+
+    function proxyVersion() external pure returns (uint256) {
+        return PROXY_VERSION;
     }
 
 
@@ -130,11 +138,11 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         bool canDoCommunityBallots = communityBallotsEnabled || !ix.accountInGoodStanding(democHash);
         require(canDoCommunityBallots, "!comm-b-enabled");
 
+        uint256 packed = BPackedUtils.setSB(uint256(packedTimes), (USE_ETH | USE_NO_ENC));
+        id = ix.dDeployBallot(democHash, specHash, extraData, packed);
+
         // should we set owner to 0 so admins can't interfere with community ballots?
         BallotBoxIface(ix.getDBallotAddr(democHash, id)).setOwner(address(0));
-        uint256 packed = (USE_ETH | USE_NO_ENC) << 128 | uint256(packedTimes);
-
-        id = ix.dDeployBallot(democHash, specHash, extraData, packed);
     }
 
     // admin management

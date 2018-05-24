@@ -26,7 +26,7 @@ import { IxIface } from "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
-import { BPackedUtils } from "../libs/BPackedUtils.sol";
+import { BPackedUtils } from "./BPackedUtils.sol";
 
 
 contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
@@ -110,22 +110,25 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     // Constructor function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    constructor(bytes32 _specHash, uint256 packed, IxIface ix) public {
+    constructor(bytes32 _specHash, uint256 packed, IxIface ix, address newOwner) public {
         index = ix;
+        owner = newOwner == address(0) ? msg.sender : newOwner;
 
         uint64 _startTs;
         (submissionBits, _startTs, endTime) = BPackedUtils.unpackAll(packed);
 
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
-        // check by converting bools to 0 or 1 and summing, making sure the result
-        // is 1.
-        bool validSubmissionBits = (isEthNoEnc() ? 1 : 0) + (isEthWithEnc() ? 1 : 0) == 1;
-        require(validSubmissionBits, "submission bits not valid");
+        require(submissionBits & USE_ETH != 0, "!eth-ballot");
+        // we need at least one of these
+        require(submissionBits & (USE_ENC | USE_NO_ENC) != 0, "bad-enc-settings");
+        // but we can't have both
+        require(submissionBits & USE_ENC == 0 || submissionBits & USE_NO_ENC == 0, "multi-enc-settings");
+
         // 0x1ff2 is 0001111111110010 in binary
         // by ANDing with subBits we make sure that only bits in positions 0,2,3,13,14,15
         // can be used. these correspond to the option flags at the top, and ETH ballots
         // that are enc'd or plaintext.
-        require(submissionBits & 0x1ff2 == 0, "banned sub bits");
+        require(submissionBits & 0x1ff2 == 0, "bad-sb");
 
         bool _testing = isTesting();
         if (_testing) {
@@ -136,7 +139,7 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
         // take the max of the start time provided and the blocks timestamp to avoid a DoS against recent token holders
         // (which someone might be able to do if they could set the timestamp in the past)
-        startTime = _testing ? _startTs : maxU64(_startTs, uint64(now));
+        startTime = _testing || _startTs > now ? _startTs : uint64(now);
 
         emit CreatedBallot(specHash, startTime, endTime, submissionBits);
     }

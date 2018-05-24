@@ -299,6 +299,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
 
     const [s,e] = genStartEndTimes()
     const packed = toBigNumber(mkPacked(s, e, USE_ETH | USE_NO_ENC))
+    const packedTimes = toBigNumber(mkPackedTime(s, e));
 
     await doLog('getting cBallot price')
     const commBPrice = await svIx.getCommunityBallotWeiPrice()
@@ -307,7 +308,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
 
     const user = accounts[3];
     const balPre = await getBalance(user)
-    const dcbTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
+    const dcbTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
     const balPost = await getBalance(user)
     await doLog(`deployed community ballot!`)
 
@@ -320,19 +321,14 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
     await doLog('set community ballot to false')
 
     // this should still work because the democ is not in good standing
-    await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
+    await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
     await assertRevert(
-        adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed, {value: commBPrice.minus(1), gasPrice: 0, from: user}),
+        adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes, {value: commBPrice.minus(1), gasPrice: 0, from: user}),
         "should not allow a community ballot with fee below the right amount"
     )
 
     assert.equal(await svIx.accountInGoodStanding(democHash), false, "account should not be in good standing")
     await doLog('confirmed democ is not in good standing')
-
-    await assertRevert(
-        adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, toBigNumber(mkPacked(s, e, IS_OFFICIAL | USE_ETH | USE_NO_ENC)), {from: user, value: commBPrice.plus(100000000000)}),
-        "should revert because it doesn't qualify as a community ballot"
-    )
 
     // after this tx the account should be in good standing and this should fail
     await adminPx.sendTransaction({from: user, value: web3.toWei(1, 'ether')})
@@ -342,7 +338,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
     await doLog('paid 1 ether to democ & confirmed in good standing')
 
     await assertRevert(
-        adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packed, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user}),
+        adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user}),
         "should revert because the democ is now in good standing"
     );
 }
