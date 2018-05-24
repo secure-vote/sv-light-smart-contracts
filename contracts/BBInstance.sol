@@ -49,10 +49,9 @@ contract BBInstance is BallotBoxIface, OwnedWLib {
 
     /* Constructor */
 
-    constructor(bytes32 specHash, uint256 packed, IxIface ix, address admin) public {
+    constructor(bytes32 specHash, uint256 packed, IxIface ix) public {
         // we need to call the init functions on our libraries
         db.init(specHash, packed, ix);
-        o.owner = admin;
     }
 
     /* Fallback - Sponsorship */
