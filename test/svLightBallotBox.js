@@ -450,63 +450,61 @@ const testOwner = async ({accounts, BB, bbaux}) => {
 }
 
 
-// const testGetVotes = async ({accounts, BB}) => {
-//     const [s, e] = genStartEndTimes();
+const testGetVotes = async ({accounts, BB, bbaux}) => {
+    const [s, e] = genStartEndTimes();
 
-//     const zeroSig = [bytes32zero, bytes32zero]
-//     const testSig1 = [genRandomBytes32(), genRandomBytes32()];
-//     const testSig2 = [genRandomBytes32(), genRandomBytes32()];
+    const zeroSig = [bytes32zero, bytes32zero]
+    const testSig1 = [genRandomBytes32(), genRandomBytes32()];
+    const testSig2 = [genRandomBytes32(), genRandomBytes32()];
 
-//     const _ballot1 = genRandomBytes32();
-//     const _ballot2 = genRandomBytes32();
+    const _ballot1 = genRandomBytes32();
+    const _ballot2 = genRandomBytes32();
 
-//     const _pk1 = genRandomBytes32();
-//     const _pk2 = genRandomBytes32();
+    const _pk1 = genRandomBytes32();
+    const _pk2 = genRandomBytes32();
 
+    const bbNoEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
+    const bbEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
 
-//     const bbSigned = await BB.new(specHash, mkPacked(s, e, (USE_SIGNED | USE_NO_ENC)), zeroAddr);
-//     const bbEth = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
+    const getBallotsTest = async (bb, useEnc) => {
+        const aux = mkBBPx(bb, bbaux);
 
-//     // test getBallotsEthFrom
-//     await assertRevert(bbEth.getBallotsSignedFrom(bytes32zero), "cannot get signed ballots from eth bb");
+        // test getBallotsEthFrom
+        assert.deepEqual(await aux.getBallotsFrom(accounts[0]), [[], [], []], "getBallotsFrom should be empty before any votes");
+        assert.deepEqual(await aux.getBallots(), [[], []], "getBallots should be empty before any votes");
 
-//     const getVotesEthPre = await bbEth.getBallotsEthFrom(accounts[0]);
-//     assert.deepEqual(getVotesEthPre, [true, [], [], [], [], []], "getBallotsEthFrom should be empty before any votes (with auth=true)");
+        if (useEnc) {
+            await bb.submitBallotWithPk(_ballot1, _pk1, {from: accounts[0]});
+            await bb.submitBallotWithPk(_ballot2, _pk2, {from: accounts[1]});
+        } else {
+            await bb.submitBallotNoPk(_ballot1, {from: accounts[0]});
+            await bb.submitBallotNoPk(_ballot2, {from: accounts[1]});
+        }
 
-//     await bbEth.submitBallotNoPk(_ballot1, {from: accounts[0]});
-//     const {number: b1EPreBlockN} = await getBlock('latest');
-//     await bbEth.submitBallotNoPk(_ballot2, {from: accounts[1]});
+        const getVotesA1Post = await aux.getBallotsFrom(accounts[0]);
+        const getVotesPost = await aux.getBallots();
 
-//     const getVotesEthPost = await bbEth.getBallotsEthFrom(accounts[0]);
-//     assert.deepEqual(getVotesEthPost,
-//             [ true
-//             , [toBigNumber(0)]
-//             , [_ballot1]
-//             , [toBigNumber(b1EPreBlockN)]
-//             , [bytes32zero]
-//             , [zeroSig]
-//         ], "getBallotsEthFrom should match expected");
+        assert.deepEqual(getVotesA1Post,
+                [ [toBigNumber(0)]
+                , [_ballot1]
+                , useEnc ? [_pk1] : [bytes32zero]
+            ], "getBallotsFrom (a0) should match expected");
 
-//     // test getBallotsSignedFrom
-//     await assertRevert(bbSigned.getBallotsEthFrom(accounts[0]), "cannot get eth ballots from signed bb");
+        assert.deepEqual(await aux.getBallotsFrom(accounts[1]),
+                [ [toBigNumber(1)]
+                , [_ballot2]
+                , useEnc ? [_pk2] : [bytes32zero]
+            ], "getBallotsFrom (a0) should match expected");
 
-//     const bSignedPre = await bbSigned.getBallotsSignedFrom(bytes32zero);
-//     assert.deepEqual(bSignedPre, [false, [], [], [], [], []], "getBallotsSignedFrom should be empty before any votes (with auth=false)");
+        assert.deepEqual(getVotesPost,
+            [ [_ballot1, _ballot2]
+            , useEnc ? [_pk1, _pk2] : [bytes32zero, bytes32zero]
+            ], "getBallots should match")
+    }
 
-//     await bbSigned.submitBallotSignedNoEnc(_ballot1, _pk1, testSig1);
-//     const {number: b2SPreBlockN} = await getBlock('latest');
-//     await bbSigned.submitBallotSignedNoEnc(_ballot2, _pk2, testSig2);
-
-//     const bSignedPost = await bbSigned.getBallotsSignedFrom(_pk1);
-//     assert.deepEqual(bSignedPost,
-//             [ false
-//             , [toBigNumber(0)]
-//             , [_ballot1]
-//             , [toBigNumber(b2SPreBlockN)]
-//             , [bytes32zero]
-//             , [testSig1]
-//         ], "getBallotsEthFrom should match expected");
-// }
+    await getBallotsTest(bbNoEnc, false);
+    await getBallotsTest(bbEnc, true);
+}
 
 
 const initGasComparison = async ({accounts}) => {
@@ -565,7 +563,7 @@ contract("BallotBox", function(accounts) {
         ["should have correct version", testVersion],
         ["test sponsorship", testSponsorship],
         ["test bad submission bits", testBadSubmissionBits],
-        // ["test getBallots*From", testGetVotes],
+        ["test getBallots*From", testGetVotes],
         ["test community status", testCommStatus],
         ["test owner", testOwner],
     ]

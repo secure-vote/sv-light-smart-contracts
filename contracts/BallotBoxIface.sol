@@ -52,6 +52,7 @@ interface BBAuxIface {
                 , bytes32[] memory pks);
 
     function getBallotsFrom(BallotBoxIface bb, address voter) external view
-        returns ( bytes32[] memory ballots
+        returns ( uint256[] memory ids
+                , bytes32[] memory ballots
                 , bytes32[] memory pks);
 }

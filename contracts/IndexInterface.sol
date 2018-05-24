@@ -124,7 +124,7 @@ interface IxBackendIface {
 
     /* democ admin */
     function dInit(address defaultErc20) external returns (bytes32);
-    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb) external returns (uint ballotId);
+    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed) external returns (uint ballotId);
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
     function setDAdmin(bytes32 democHash, address newAdmin) external;
