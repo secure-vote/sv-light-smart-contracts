@@ -142,7 +142,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         id = ix.dDeployBallot(democHash, specHash, extraData, packed);
 
         // should we set owner to 0 so admins can't interfere with community ballots?
-        BallotBoxIface(ix.getDBallotAddr(democHash, id)).setOwner(address(0));
+        ix.getDBallotBox(democHash, id).setOwner(address(0));
     }
 
     // admin management

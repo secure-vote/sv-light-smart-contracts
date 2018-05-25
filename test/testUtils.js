@@ -47,6 +47,11 @@ module.exports = function () {
         return sb.shln(64).add(s).shln(64).add(e);
     }
 
+    this.mkStdPacked = () => {
+        const [s,e] = this.genStartEndTimes()
+        return mkPacked(s, e, this.USE_NO_ENC | this.USE_ETH)
+    }
+
     this.wrapTest = (accounts, f) => {
         return async () => {
             return await f({accounts});

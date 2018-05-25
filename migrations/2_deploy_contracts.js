@@ -9,18 +9,25 @@ var ownedLib = artifacts.require("ownedLib")
 var BBLib = artifacts.require("BBLib")
 var BBInstance = artifacts.require("BBInstance")
 
+var SVBBoxFactory = artifacts.require("SVBBoxFactory")
+
 module.exports = function(deployer) {
     deployer.deploy(StringLib);
-    deployer.link(StringLib, SVIndex);
-
+    deployer.deploy(BBLib)
     deployer.deploy(BPackedUtils);
+    deployer.deploy(ownedLib);
+
+    deployer.link(StringLib, SVIndex);
     deployer.link(BPackedUtils, SVIndex);
+    deployer.link(BBLib, SVIndex)
+
     deployer.link(BPackedUtils, SVBB);
 
-    deployer.deploy(ownedLib);
     deployer.link(ownedLib, OwnedWLib);
 
-    deployer.deploy(BBLib)
     deployer.link(BBLib, BBInstance)
     deployer.link(ownedLib, BBInstance)
+
+    deployer.link(BBLib, SVBBoxFactory)
+    deployer.link(ownedLib, SVBBoxFactory)
 };

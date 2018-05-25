@@ -50,9 +50,8 @@ interface IxIface {
 
     /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
-    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime);
+    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 extraData, BallotBoxIface bb);
     function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface);
-    function getDBallotAddr(bytes32 democHash, uint n) external view returns (address);
 }
 
 
@@ -139,12 +138,11 @@ interface IxBackendIface {
 
     /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
-    function getDBallot(bytes32 democHash, uint n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime);
-    function getDBallotCreationTs(bytes32 democHash, uint n) external view returns (uint256);
+    function getDBallot(bytes32 democHash, uint n) external view returns (bytes32 extraData, BallotBoxIface bb);
+    function getDBallotCreationTs(bytes32 democHash, uint n) external view returns (uint);
     function getDOfficialBallotsN(bytes32 democHash) external view returns (uint256);
     function getDOfficialBallotID(bytes32 democHash, uint256 officialN) external returns (uint256);
     function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface);
-    function getDBallotAddr(bytes32 democHash, uint n) external view returns (address);
 
     /* just for prefix stuff */
     function getDHash(bytes13 prefix) external view returns (bytes32);

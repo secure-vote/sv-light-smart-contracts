@@ -3,8 +3,7 @@ pragma solidity ^0.4.24;
 interface BallotBoxIface {
     function getVersion() external pure returns (uint256);
 
-    function getBallotEth(uint256) external view returns (bytes32 ballotData, address sender);
-    function getPubkey(uint256) external view returns (bytes32);
+    function getVote(uint256) external view returns (bytes32 ballotData, address sender, bytes32 encPK);
 
     function getDetails(address voter) external view returns (
         bool hasVoted,
@@ -14,12 +13,12 @@ interface BallotBoxIface {
         uint64 startTime,
         uint64 endTime,
         bytes32 specHash,
-        bool deprecated);
+        bool deprecated,
+        address ballotOwner);
 
     function getTotalSponsorship() external view returns (uint);
 
-    function submitBallotNoPk(bytes32 ballot) external;
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) external;
+    function submitVote(bytes32 ballot, bytes32 encPK) external;
 
     function revealSeckey(bytes32 sk) external;
     function setEndTime(uint64 newEndTime) external;

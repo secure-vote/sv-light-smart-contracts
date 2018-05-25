@@ -25,23 +25,6 @@ contract BBInstance is BallotBoxIface, OwnedWLib {
         _;
     }
 
-    modifier ballotOpen() {
-        db.requireBallotOpen();
-        _;
-    }
-
-    modifier ballotIsEthNoEnc() {
-        require(BBLib.isEthNoEnc(db.getSubmissionBits()), "!Eth-NoEnc");
-        db.requireBallotOpen();
-        _;
-    }
-
-    modifier ballotIsEthWithEnc() {
-        require(BBLib.isEthWithEnc(db.getSubmissionBits()), "!Eth-Enc");
-        db.requireBallotOpen();
-        _;
-    }
-
     modifier onlyTesting() {
         require(BBLib.isTesting(db.getSubmissionBits()), "!testing");
         _;
@@ -51,39 +34,46 @@ contract BBInstance is BallotBoxIface, OwnedWLib {
 
     constructor(bytes32 specHash, uint256 packed, IxIface ix) public {
         // we need to call the init functions on our libraries
-        db.init(specHash, packed, ix);
+        db.init(specHash, packed, ix, msg.sender);
     }
 
     /* Fallback - Sponsorship */
 
     function() external payable {
-        db.handleSponsorship(msg.value);
+        db.logSponsorship(msg.value);
         require(db.index.getPayTo().call.value(msg.value)(), "tx-fail");
     }
 
     /* Voting */
 
-    function submitBallotNoPk(bytes32 ballot) external ballotIsEthNoEnc() {
-        db.submitBallotNoPk(ballot);
-    }
-
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) external ballotIsEthWithEnc() {
-        db.submitBallotWithPk(ballot, encPK);
+    function submitVote(bytes32 ballot, bytes32 encPK) external {
+        db.requireBallotOpen();
+        db.submitVote(ballot, encPK);
     }
 
     /* Getters */
 
-    function getDetails(address voter) external view returns (bool hasVoted, uint nVotesCast, bytes32 secKey, uint16 submissionBits, uint64 startTime, uint64 endTime, bytes32 specHash, bool deprecated) {
+    function getDetails(address voter) external view returns
+            ( bool hasVoted
+            , uint nVotesCast
+            , bytes32 secKey
+            , uint16 submissionBits
+            , uint64 startTime
+            , uint64 endTime
+            , bytes32 specHash
+            , bool deprecated
+            , address ballotOwner) {
         uint packed = db.packed;
         return (
-            db.hasVotedMap[voter],
+            db.voterLog[voter].length > 0,
             db.nVotesCast,
             db.ballotEncryptionSeckey,
             BPackedUtils.packedToSubmissionBits(packed),
             BPackedUtils.packedToStartTime(packed),
             BPackedUtils.packedToEndTime(packed),
             db.specHash,
-            db.deprecated
+            db.deprecated,
+            o.owner
         );
     }
 
@@ -91,14 +81,9 @@ contract BBInstance is BallotBoxIface, OwnedWLib {
         return BBLib.getVersion();
     }
 
-    function getBallotEth(uint id) external view returns (bytes32 ballotData, address sender) {
-        BBLib.BallotEth storage b = db.ballotsEth[id];
-        return (b.ballotData, b.sender);
-    }
-
-    function getPubkey(uint256 id) external view returns (bytes32) {
-        // NOTE: These are the curve25519 pks associated with encryption
-        return db.curve25519Pubkeys[id];
+    function getVote(uint id) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
+        BBLib.Vote storage v = db.votes[id];
+        return (v.voteData, v.sender, v.encPK);
     }
 
     function getTotalSponsorship() external view returns (uint) {

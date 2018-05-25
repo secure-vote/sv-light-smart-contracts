@@ -33,49 +33,52 @@ contract BallotAux is BBAuxIface {
     }
 
     function isDeprecated(BallotBoxIface bb) external view returns (bool deprecated) {
-        (,,,,,,, deprecated) = bb.getDetails(zeroAddr);
+        (,,,,,,, deprecated,) = bb.getDetails(zeroAddr);
     }
 
     function getEncSeckey(BallotBoxIface bb) external view returns (bytes32 secKey) {
-        (,, secKey,,,,,) = bb.getDetails(zeroAddr);
+        (,, secKey,,,,,,) = bb.getDetails(zeroAddr);
     }
 
     function getSpecHash(BallotBoxIface bb) external view returns (bytes32 specHash) {
-        (,,,,,, specHash,) = bb.getDetails(zeroAddr);
+        (,,,,,, specHash,,) = bb.getDetails(zeroAddr);
     }
 
     function getSubmissionBits(BallotBoxIface bb) public view returns (uint16 submissionBits) {
-        (,,, submissionBits,,,,) = bb.getDetails(zeroAddr);
+        (,,, submissionBits,,,,,) = bb.getDetails(zeroAddr);
     }
 
     function getStartTime(BallotBoxIface bb) external view returns (uint64 startTime) {
-        (,,,, startTime,,,) = bb.getDetails(zeroAddr);
+        (,,,, startTime,,,,) = bb.getDetails(zeroAddr);
     }
 
     function getEndTime(BallotBoxIface bb) external view returns (uint64 endTime) {
-        (,,,,, endTime,,) = bb.getDetails(zeroAddr);
+        (,,,,, endTime,,,) = bb.getDetails(zeroAddr);
     }
 
     function getNVotesCast(BallotBoxIface bb) public view returns (uint256 nVotesCast) {
-        (, nVotesCast,,,,,,) = bb.getDetails(zeroAddr);
+        (, nVotesCast,,,,,,,) = bb.getDetails(zeroAddr);
     }
 
     function hasVoted(BallotBoxIface bb, address voter) external view returns (bool hv) {
-        ( hv,,,,,,,) = bb.getDetails(voter);
+        ( hv,,,,,,,,) = bb.getDetails(voter);
+    }
+
+    function getBallotOwner(BallotBoxIface bb) external view returns (address ballotOwner) {
+        (,,,,,,,,, ballotOwner) = bb.getDetails(zeroAddr);
     }
 
     function getBallots(BallotBoxIface bb) external view
         returns ( bytes32[] memory ballots
                 , bytes32[] memory pks) {
 
-        require(BBLib.unsafeIsEth(getSubmissionBits(bb)), "must have USE_ETH setting");
-
         address sender;
         bytes32 ballotData;
+        bytes32 encPK;
         for (uint i = 0; i < getNVotesCast(bb); i++) {
-            (ballotData, sender) = bb.getBallotEth(i);
+            (ballotData, sender, encPK) = bb.getVote(i);
             ballots = MemArrApp.appendBytes32(ballots, ballotData);
-            pks = MemArrApp.appendBytes32(pks, bb.getPubkey(i));
+            pks = MemArrApp.appendBytes32(pks, encPK);
         }
     }
 
@@ -84,16 +87,15 @@ contract BallotAux is BBAuxIface {
                 , bytes32[] memory ballots
                 , bytes32[] memory pks) {
 
-        require(BBLib.unsafeIsEth(getSubmissionBits(bb)), "must have USE_ETH setting");
-
         address sender;
         bytes32 ballotData;
+        bytes32 encPK;
         for (uint i = 0; i < getNVotesCast(bb); i++) {
-            (ballotData, sender) = bb.getBallotEth(i);
+            (ballotData, sender, encPK) = bb.getVote(i);
             if (sender == voter) {
                 ids = MemArrApp.appendUint256(ids, i);
                 ballots = MemArrApp.appendBytes32(ballots, ballotData);
-                pks = MemArrApp.appendBytes32(pks, bb.getPubkey(i));
+                pks = MemArrApp.appendBytes32(pks, encPK);
             }
         }
     }

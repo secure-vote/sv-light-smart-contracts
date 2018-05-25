@@ -1,12 +1,12 @@
 pragma solidity ^0.4.24;
 
 /**
- * This contract should be the minimum required to use BBLib to replicate
- * the functionality of SVLightBallotBox.
+ * BBFarm is a contract to use BBLib to replicate the functionality of
+ * SVLightBallotBox within a centralised container (like the Index).
  */
 
 import { BBLib } from "./BBLib.sol";
-import { hasAdmins } from "./SVCommon.sol";
+import { permissioned } from "./SVCommon.sol";
 import { OwnedWLib } from "./SVLibs.sol";
 import { IxIface } from "./IndexInterface.sol";
 import { OwnedIface } from "./CommonIfaces.sol";
@@ -14,77 +14,66 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./BPackedUtils.sol";
 import "../libs/MemArrApp.sol";
 
-contract BBFarm is BallotBoxIface, hasAdmins {
+contract BBFarm is BallotBoxIface, permissioned {
 
     using BBLib for BBLib.DB;
 
-    BBLib.DB db;
-
-    modifier ballotEnded() {
-        db.requireBallotEnded();
-        _;
-    }
-
-    modifier ballotOpen() {
-        db.requireBallotOpen();
-        _;
-    }
-
-    modifier ballotIsEthNoEnc() {
-        require(BBLib.isEthNoEnc(db.getSubmissionBits()), "!Eth-NoEnc");
-        db.requireBallotOpen();
-        _;
-    }
-
-    modifier ballotIsEthWithEnc() {
-        require(BBLib.isEthWithEnc(db.getSubmissionBits()), "!Eth-Enc");
-        db.requireBallotOpen();
-        _;
-    }
-
-    modifier onlyTesting() {
-        require(BBLib.isTesting(db.getSubmissionBits()), "!testing");
-        _;
-    }
+    mapping (uint => BBLib.DB) dbs;
+    uint nBallots = 0;
 
     /* Constructor */
 
-    constructor(bytes32 specHash, uint256 packed, IxIface ix, address bbAdmin) public {
+    constructor() public {
+
+    }
+
+    function initBallot(bytes32 specHash, uint256 packed, IxIface ix, address bbAdmin) only_editors() external returns (uint ballotId) {
         // we need to call the init functions on our libraries
-        db.init(specHash, packed, ix);
-        owner = bbAdmin;
+        ballotId = nBallots;
+        dbs[ballotId].init(specHash, packed, ix, bbAdmin);
+        nBallots = ballotId + 1;
     }
 
     /* Fallback - Sponsorship */
 
-    function() external payable {
-        db.handleSponsorship(msg.value);
+    function sponsor(uint ballotId) external payable {
+        BBLib.DB storage db = dbs[ballotId];
+        db.logSponsorship(msg.value);
         require(db.index.getPayTo().call.value(msg.value)(), "tx-fail");
     }
 
     /* Voting */
 
-    function submitBallotNoPk(bytes32 ballot) external ballotIsEthNoEnc() {
-        db.submitBallotNoPk(ballot);
-    }
-
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) external ballotIsEthWithEnc() {
-        db.submitBallotWithPk(ballot, encPK);
+    function submitVote(uint ballotId, bytes32 vote, bytes32 encPK) external {
+        BBLib.DB storage db = dbs[ballotId];
+        db.requireBallotOpen();
+        db.submitVote(vote, encPK);
     }
 
     /* Getters */
 
-    function getDetails(address voter) external view returns (bool hasVoted, uint nVotesCast, bytes32 secKey, uint16 submissionBits, uint64 startTime, uint64 endTime, bytes32 specHash, bool deprecated) {
+    function getDetails(uint ballotId, address voter) external view returns
+            ( bool hasVoted
+            , uint nVotesCast
+            , bytes32 secKey
+            , uint16 submissionBits
+            , uint64 startTime
+            , uint64 endTime
+            , bytes32 specHash
+            , bool deprecated
+            , address ballotOwner) {
         uint packed = db.packed;
+        BBLib.DB storage db = dbs[ballotId];
         return (
-            db.hasVotedMap[voter],
+            db.voterLog[voter].length > 0,
             db.nVotesCast,
             db.ballotEncryptionSeckey,
             BPackedUtils.packedToSubmissionBits(packed),
             BPackedUtils.packedToStartTime(packed),
             BPackedUtils.packedToEndTime(packed),
             db.specHash,
-            db.deprecated
+            db.deprecated,
+            db.ballotOwner
         );
     }
 
@@ -92,32 +81,34 @@ contract BBFarm is BallotBoxIface, hasAdmins {
         return BBLib.getVersion();
     }
 
-    function getBallotEth(uint id) external view returns (bytes32 ballotData, address sender) {
-        BBLib.BallotEth storage b = db.ballotsEth[id];
-        return (b.ballotData, b.sender);
+    function getBallot(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
+        BBLib.Vote storage b = dbs[ballotId].votes[voteId];
+        return (b.voteData, b.sender, b.encPK);
     }
 
-    function getPubkey(uint256 id) external view returns (bytes32) {
-        // NOTE: These are the curve25519 pks associated with encryption
-        return db.curve25519Pubkeys[id];
-    }
-
-    function getTotalSponsorship() external view returns (uint) {
-        return db.getTotalSponsorship();
+    function getTotalSponsorship(uint ballotId) external view returns (uint) {
+        return dbs[ballotId].getTotalSponsorship();
     }
 
     /* ADMIN */
 
     // Allow the owner to reveal the secret key after ballot conclusion
-    function revealSeckey(bytes32 sk) only_owner() ballotEnded() external {
-        db.revealSeckey(sk);
+    function revealSeckey(uint ballotId, bytes32 sk) external {
+        // owner, ballot ended
+        dbs[ballotId].revealSeckey(sk);
     }
 
-    function setEndTime(uint64 newEndTime) only_owner() onlyTesting() external {
+    function setEndTime(uint ballotId, uint64 newEndTime) external {
+        // only_owner() onlyTesting()
+        BBLib.DB storage db = dbs[ballotId];
+        db.requireBallotOwner();
+        db.requireTesting();
         db.setEndTime(newEndTime);
     }
 
-    function setDeprecated() only_owner() external {
+    function setDeprecated(uint ballotId) external {
+        BBLib.DB storage db = dbs[ballotId];
+        db.requireBallotOwner();
         db.deprecated = true;
     }
 }

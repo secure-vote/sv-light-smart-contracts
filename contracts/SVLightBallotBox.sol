@@ -35,16 +35,15 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
     //// ** Storage Variables
 
     // struct for ballot
-    struct BallotEth {
+    struct Vote {
         bytes32 ballotData;
         address sender;
-        uint32 blockN;
+        bytes32 encPK;
     }
 
     // Maps to store ballots, along with corresponding log of voters.
     // Should only be modified through `addBallotAndVoter` internal function
-    mapping (uint256 => BallotEth) public ballotsEth;
-    mapping (uint256 => bytes32) public curve25519Pubkeys;
+    mapping (uint256 => Vote) public votes;
     uint256 public nVotesCast = 0;
 
     mapping (address => bool) hasVotedMap;
@@ -75,7 +74,7 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     //// ** Events
     event CreatedBallot(bytes32 _specHash, uint64 startTs, uint64 endTs, uint16 submissionBits);
-    event SuccessfulVote(bytes32 indexed voter, uint ballotId);
+    event SuccessfulVote(address indexed voter, uint ballotId);
     event SeckeyRevealed(bytes32 secretKey);
     event TestingEnabled();
     event DeprecatedContract();
@@ -91,18 +90,6 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     modifier onlyTesting() {
         require(isTesting(), "ballot is not in testing mode");
-        _;
-    }
-
-    modifier ballotIsEthNoEnc() {
-        require(isEthNoEnc(), "ballot is not of type Eth-NoEnc");
-        _reqBallotOpen();
-        _;
-    }
-
-    modifier ballotIsEthWithEnc() {
-        require(isEthWithEnc(), "ballot is not of type Eth-Enc");
-        _reqBallotOpen();
         _;
     }
 
@@ -151,7 +138,7 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     // getters and constants
 
-    function getDetails(address voter) external view returns (bool hasVoted, uint, bytes32 secKey, uint16, uint64, uint64, bytes32, bool) {
+    function getDetails(address voter) external view returns (bool hasVoted, uint, bytes32 secKey, uint16, uint64, uint64, bytes32, bool, address) {
         hasVoted = hasVotedMap[voter];
         secKey = ballotEncryptionSeckey;
         return (
@@ -162,7 +149,8 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
             startTime,
             endTime,
             specHash,
-            deprecated
+            deprecated,
+            owner
         );
     }
 
@@ -170,42 +158,9 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         return BB_VERSION;
     }
 
-    function getNVotesCast() external view returns (uint) {
-        return nVotesCast;
-    }
-
-    function hasVotedEth(address v) external view returns (bool) {
-        return hasVotedMap[v];
-    }
-
-
-    function getBallotEth(uint id) external view returns (bytes32 ballotData, address sender) {
-        return (ballotsEth[id].ballotData, ballotsEth[id].sender);
-    }
-
-    function getPubkey(uint256 id) external view returns (bytes32) {
-        // NOTE: These are the curve25519 pks associated with encryption
-        return curve25519Pubkeys[id];
-    }
-
-    function getStartTime() external view returns (uint64) {
-        return startTime;
-    }
-
-    function getEndTime() external view returns (uint64) {
-        return endTime;
-    }
-
-    function getSubmissionBits() external view returns (uint16) {
-        return submissionBits;
-    }
-
-    function getCreationBlock() external view returns (uint64) {
-        return creationBlock;
-    }
-
-    function getSpecHash() external view returns (bytes32) {
-        return specHash;
+    function getVote(uint id) external view returns (bytes32 ballotData, address sender, bytes32 encPK) {
+        Vote storage v;
+        return (v.voteData, v.sender, v.encPK);
     }
 
     function getTotalSponsorship() external view returns (uint) {
@@ -215,21 +170,18 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
     /* ETH BALLOTS */
 
     // Ballot submission
-    function submitBallotNoPk(bytes32 ballot) ballotIsEthNoEnc() external {
-        _addBallotEth(ballot, msg.sender);
-    }
-
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotWithPk(bytes32 ballot, bytes32 encPK) ballotIsEthWithEnc() external {
-        curve25519Pubkeys[_addBallotEth(ballot, msg.sender)] = encPK;
+    function submitVote(bytes32 ballot, bytes32 encPK) external {
+        _reqBallotOpen();
+        _addVote(ballot, msg.sender, encPK);
     }
 
-    function _addBallotEth(bytes32 ballot, address sender) internal returns (uint256 id) {
+    function _addVote(bytes32 ballot, address sender, bytes32 encPK) internal returns (uint256 id) {
         id = nVotesCast;
-        ballotsEth[id] = BallotEth(ballot, sender, uint32(block.number));
+        votes[id] = Vote(ballot, sender, encPK);
         nVotesCast += 1;
         hasVotedMap[sender] = true;
-        emit SuccessfulVote(bytes32(msg.sender), id);
+        emit SuccessfulVote(msg.sender, id);
     }
 
     /* ADMIN STUFF */
@@ -239,10 +191,6 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         require(now > endTime, "secret key cannot be released early");
         ballotEncryptionSeckey = _secKey;
         emit SeckeyRevealed(_secKey);
-    }
-
-    function getEncSeckey() external view returns (bytes32) {
-        return ballotEncryptionSeckey;
     }
 
     // Test functions
@@ -256,33 +204,11 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         emit DeprecatedContract();
     }
 
-    function isDeprecated() external view returns (bool) {
-        return deprecated;
-    }
-
-    // utils
-    function maxU64(uint64 a, uint64 b) pure internal returns(uint64) {
-        if (a > b) {
-            return a;
-        }
-        return b;
-    }
-
     // submission bits stuff
     // submission bits are structured as follows:
 
     // do (bits & SETTINGS_MASK) to get just operational bits (as opposed to testing or official flag)
     uint16 constant SETTINGS_MASK = 0xFFFF ^ USE_TESTING ^ IS_OFFICIAL ^ IS_BINDING;
-
-    function unsafeIsEth() view internal returns (bool) {
-        // this is unsafe becuase it's not a valid configuration
-        return USE_ETH & submissionBits == USE_ETH;
-    }
-
-    function unsafeIsSigned() view internal returns (bool) {
-        // unsafe bc it's not a valid configuration
-        return USE_SIGNED & submissionBits == USE_SIGNED;
-    }
 
     // function unsafeIsEncrypted() view internal returns (bool) {
     //     return USE_ENC & submissionBits != 0;
@@ -296,31 +222,8 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         return checkFlags(USE_ETH | USE_ENC);
     }
 
-    function isSignedNoEnc() view internal returns (bool) {
-        return checkFlags(USE_SIGNED | USE_NO_ENC);
-    }
-
-    function isSignedWithEnc() view internal returns (bool) {
-        return checkFlags(USE_SIGNED | USE_ENC);
-    }
-
-    function isOfficial() view public returns (bool) {
-        return (submissionBits & IS_OFFICIAL) == IS_OFFICIAL;
-    }
-
-    function isBinding() view public returns (bool) {
-        return (submissionBits & IS_BINDING) == IS_BINDING;
-    }
-
     function isTesting() view public returns (bool) {
         return (submissionBits & USE_TESTING) == USE_TESTING;
-    }
-
-    function qualifiesAsCommunityBallot() view external returns (bool) {
-        // if submissionBits AND any of the bits that make this _not_ a community
-        // ballot is equal to zero that means none of those bits were active, so
-        // it could be a community ballot
-        return (submissionBits & (IS_BINDING | IS_OFFICIAL | USE_ENC)) == 0;
     }
 
     function checkFlags(uint16 expected) view internal returns (bool) {
@@ -328,14 +231,5 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         uint16 sBitsNoSettings = submissionBits & SETTINGS_MASK;
         // then we want ONLY expected
         return sBitsNoSettings == expected;
-    }
-
-    function countTrue(bool[] memory bools) pure internal returns (uint n) {
-        n = 0;
-        for (uint256 i = 0; i < bools.length; i++) {
-            if (bools[i]) {
-                n += 1;
-            }
-        }
     }
 }
