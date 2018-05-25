@@ -32,14 +32,10 @@ library BBLib {
     //// ** Storage Variables
 
     // struct for ballot
-    struct BallotSigned {
-        bytes32 ballotData;
-        bytes32 sender;
-    }
-
-    struct BallotEth {
+    struct Vote {
         bytes32 ballotData;
         address sender;
+        bytes32 encPK;
     }
 
     struct Sponsor {
@@ -49,7 +45,7 @@ library BBLib {
 
     //// ** Events
     event CreatedBallot(bytes32 _specHash, uint64 startTs, uint64 endTs, uint16 submissionBits);
-    event SuccessfulVote(bytes32 indexed voter, uint ballotId);
+    event SuccessfulVote(address indexed voter, uint voteId);
     event SeckeyRevealed(bytes32 secretKey);
     event TestingEnabled();
     event DeprecatedContract();
@@ -60,14 +56,11 @@ library BBLib {
 
     struct DB {
         // Maps to store ballots, along with corresponding log of voters.
-        // Should only be modified through `addBallotAndVoter` internal function
-        mapping (uint256 => BallotSigned) ballotsSigned;
-        mapping (uint256 => BallotEth) ballotsEth;
-        mapping (uint256 => bytes32) curve25519Pubkeys;
-        mapping (uint256 => bytes32[2]) ed25519Signatures;
+        // Should only be modified through internal functions
+        mapping (uint256 => Vote) votes;
         uint256 nVotesCast;
 
-        mapping (address => bool) hasVotedMap;
+        mapping (address => uint256[]) voterLog;
 
         // NOTE - We don't actually want to include the encryption PublicKey because _it's included in the ballotSpec_.
         // It's better to ensure ppl actually have the ballot spec by not including it in the contract.
@@ -90,6 +83,8 @@ library BBLib {
 
         // deprecation flag - doesn't actually do anything besides signal that this contract is deprecated;
         bool deprecated;
+
+        address ballotOwner;
     }
 
 
@@ -108,12 +103,17 @@ library BBLib {
         require(db.deprecated == false, "b-deprecated");
     }
 
+    function requireBallotOwner(DB storage db) external view {
+        require(msg.sender == db.ballotOwner, "!b-owner");
+    }
+
     /* Functions */
 
     // "Constructor" function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix) external {
+    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner) external {
         db.index = ix;
+        db.ballotOwner = ballotOwner;
 
         uint64 startTs;
         uint64 endTs;
@@ -145,7 +145,7 @@ library BBLib {
     //     index.getPayTo().transfer(msg.value);
     // }
 
-    function handleSponsorship(DB storage db, uint value) internal {
+    function logSponsorship(DB storage db, uint value) internal {
         db.sponsors.push(Sponsor(msg.sender, value));
     }
 
@@ -156,25 +156,11 @@ library BBLib {
     }
 
     function hasVotedEth(DB storage db, address v) external view returns (bool) {
-        return db.hasVotedMap[v];
+        return db.voterLog[v].length > 0;
     }
 
-    function getBallotSigned(DB storage db, uint id) external view returns (bytes32 ballotData, bytes32 sender) {
-        return (db.ballotsSigned[id].ballotData, db.ballotsSigned[id].sender);
-    }
-
-    function getBallotEth(DB storage db, uint id) external view returns (bytes32 ballotData, address sender) {
-        return (db.ballotsEth[id].ballotData, db.ballotsEth[id].sender);
-    }
-
-    function getPubkey(DB storage db, uint256 id) external view returns (bytes32) {
-        // NOTE: These are the curve25519 pks associated with encryption
-        return db.curve25519Pubkeys[id];
-    }
-
-    function getSignature(DB storage db, uint256 id) external view returns (bytes32[2]) {
-        // NOTE: these are ed25519 signatures associated with signed ballots
-        return db.ed25519Signatures[id];
+    function getVote(DB storage db, uint id) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
+        return (db.votes[id].ballotData, db.votes[id].sender, db.votes[id].encPK);
     }
 
     function getStartTime(DB storage db) public view returns (uint64) {
@@ -207,22 +193,17 @@ library BBLib {
     /* ETH BALLOTS */
 
     // Ballot submission
-    function submitBallotNoPk(DB storage db, bytes32 ballot) external {
-        _addBallotEth(db, ballot, msg.sender);
-    }
-
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitBallotWithPk(DB storage db, bytes32 ballot, bytes32 encPK) external {
-        uint id = _addBallotEth(db, ballot, msg.sender);
-        db.curve25519Pubkeys[id] = encPK;
+    function submitVote(DB storage db, bytes32 ballot, bytes32 encPK) external {
+        _addVote(db, ballot, msg.sender, encPK);
     }
 
-    function _addBallotEth(DB storage db, bytes32 ballot, address sender) internal returns (uint256 id) {
+    function _addVote(DB storage db, bytes32 ballot, address sender, bytes32 encPK) internal returns (uint256 id) {
         id = db.nVotesCast;
-        db.ballotsEth[id] = BallotEth(ballot, sender);
+        db.votes[id] = Vote(ballot, sender, encPK);
         db.nVotesCast += 1;
-        db.hasVotedMap[sender] = true;
-        emit SuccessfulVote(bytes32(msg.sender), id);
+        db.voterLog[sender].push(id);
+        emit SuccessfulVote(sender, id);
     }
 
     /* Admin */

@@ -21,6 +21,7 @@ import "./SVPayments.sol";
 import "./EnsOwnerProxy.sol";
 import { BPackedUtils } from "./BPackedUtils.sol";
 import "./BBLib.sol";
+import "./BBInstance.sol";
 
 
 contract SVAdminPxFactory {
@@ -35,6 +36,10 @@ contract SVBBoxFactory {
         bb = new SVLightBallotBox(_specHash, packed, ix);
         bb.setOwner(admin);
     }
+    function spawn2(bytes32 _specHash, uint256 packed, IxIface ix, address admin) external returns (BallotBoxIface bb) {
+        bb = new BBInstance(_specHash, packed, ix);
+        bb.setOwner(admin);
+    }
 }
 
 
@@ -43,11 +48,8 @@ contract SVIndexBackend is IxBackendIface, permissioned {
     event LowLevelNewDemoc(bytes32 democHash);
 
     struct Ballot {
-        bytes32 specHash;
         bytes32 extraData;
         BallotBoxIface bb;
-        uint64 startTs;
-        uint64 endTs;
         uint256 creationTs;
     }
 
@@ -164,12 +166,12 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         return democs[democHash].ballots.length;
     }
 
-    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime) {
+    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 extraData, BallotBoxIface bb) {
         Ballot memory b = democs[democHash].ballots[n];
-        return (b.specHash, b.extraData, b.bb, b.startTs, b.endTs);
+        return (b.extraData, b.bb);
     }
 
-    function getDBallotCreationTs(bytes32 democHash, uint n) external view returns (uint256) {
+    function getDBallotCreationTs(bytes32 democHash, uint n) external view returns (uint) {
         return democs[democHash].ballots[n].creationTs;
     }
 
@@ -179,10 +181,6 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     function getDOfficialBallotID(bytes32 democHash, uint256 officialN) external returns (uint256) {
         return democs[democHash].officialBallots[officialN];
-    }
-
-    function getDBallotAddr(bytes32 democHash, uint n) external view returns (address) {
-        return address(democs[democHash].ballots[n].bb);
     }
 
     function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface bb) {
@@ -202,9 +200,14 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     //* ADD BALLOT TO RECORD */
 
-    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint16 subBits, uint64 startTs, uint64 endTs) internal returns (uint ballotId) {
+    function _commitBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint256 packed) internal returns (uint ballotId) {
+        uint64 startTs;
+        uint64 endTs;
+        uint16 subBits;
+        (subBits, startTs, endTs) = BPackedUtils.unpackAll(packed);
+
         ballotId = democs[democHash].ballots.length;
-        democs[democHash].ballots.push(Ballot(specHash, extraData, bb, startTs, endTs, now));
+        democs[democHash].ballots.push(Ballot(extraData, bb, now));
 
         if (BBLib.isOfficial(subBits)) {
             democs[democHash].officialBallots.push(ballotId);
@@ -215,11 +218,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
     }
 
     function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed) only_editors() external returns (uint ballotId) {
-        uint64 startTs;
-        uint64 endTs;
-        uint16 subBits;
-        (subBits, startTs, endTs) = BPackedUtils.unpackAll(packed);
-        ballotId = _commitBallot(democHash, specHash, extraData, bb, subBits, startTs, endTs);
+        ballotId = _commitBallot(democHash, specHash, extraData, bb, packed);
     }
 }
 
@@ -242,7 +241,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
     event DemocAdded(bytes32 democHash, address admin);
     event BallotAdded(bytes32 democHash, uint id);
     // for debug
-    // event Log(string message);
+    event Log(string message);
     // event LogB32(bytes32 b32);
 
     //* MODIFIERS /
@@ -404,7 +403,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         return backend.getDBallotsN(democHash);
     }
 
-    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 specHash, bytes32 extraData, BallotBoxIface bb, uint64 startTime, uint64 endTime) {
+    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 extraData, BallotBoxIface bb) {
         return backend.getDBallot(democHash, n);
     }
 
@@ -414,10 +413,6 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
 
     function getDErc20(bytes32 democHash) external view returns (address erc20) {
         return backend.getDErc20(democHash);
-    }
-
-    function getDBallotAddr(bytes32 democHash, uint n) external view returns (address) {
-        return backend.getDBallotAddr(democHash, n);
     }
 
     function getDBallotBox(bytes32 democHash, uint n) external view returns (BallotBoxIface) {
@@ -458,7 +453,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         // must be positive due to ending in future check
         uint256 secsToEndTime = endTime - now;
         // require ballots end no more than twice the time left on the democracy
-        require(secsLeft * 2 > secsToEndTime, "democracy not paid up enough for ballot");
+        require(secsLeft * 2 > secsToEndTime, "unpaid");
     }
 
     function _basicBallotLimitOperations(bytes32 democHash) internal {
@@ -493,7 +488,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
             // where the Nth most recent ballot was created within the last 30 days.)
             // We should now check for payment
             uint extraBallotFee = payments.getBasicExtraBallotFeeWei();
-            require(msg.value >= extraBallotFee, "extra ballots at the basic tier require payment");
+            require(msg.value >= extraBallotFee, "!extra-b-fee");
 
             // now that we know they've paid the fee, we should send Eth to `payTo`
             // and return the remainder.
@@ -511,6 +506,32 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
                           external payable
                           returns (uint) {
 
+        // // we need to end in the future
+        // uint64 endTime = BPackedUtils.packedToEndTime(packed);
+        // require(endTime > uint64(now), "b-end-time");
+
+        // uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
+        // require(BBLib.isTesting(submissionBits) == false, "b-testing");
+
+        // if (BBLib.isOfficial(submissionBits)) {
+        //     _basicBallotLimitOperations(democHash);
+        //     _deployBallotChecks(democHash, endTime);
+        // }
+
+        // BallotBoxIface bb = bbFactory.spawn(
+        //     specHash,
+        //     packed,
+        //     this,
+        //     msg.sender);
+
+        // return _addBallot(democHash, extraData, bb, specHash, packed);
+    }
+    function dDeployBallotTest(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed, uint option)
+                          onlyDemocAdmin(democHash)
+                          // todo: handling payments here
+                          external payable
+                          returns (uint) {
+
         // we need to end in the future
         uint64 endTime = BPackedUtils.packedToEndTime(packed);
         require(endTime > uint64(now), "ballot must end in future");
@@ -523,14 +544,57 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
             _deployBallotChecks(democHash, endTime);
         }
 
-        BallotBoxIface bb = bbFactory.spawn(
-            specHash,
-            packed,
-            this,
-            msg.sender);
+        BallotBoxIface bb;
+        if (option == 1) {
+            bb = bbFactory.spawn(
+                specHash,
+                packed,
+                this,
+                msg.sender);
+        } else if (option == 2) {
+            bb = bbFactory.spawn2(
+                specHash,
+                packed,
+                this,
+                msg.sender);
+        } else if (option == 3) {
+            bb = BallotBoxIface(msg.sender);
+        } else {
+            bb = BallotBoxIface(address(0));
+            Log(">>> bad option in dDeployBallotTest <<<");
+        }
 
         return _addBallot(democHash, extraData, bb, specHash, packed);
     }
+
+    /* adding this function seems to mean we can't deploy for some reason.... */
+
+    // function dDeployBallotNoSC(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed)
+    //                       onlyDemocAdmin(democHash)
+    //                       // todo: handling payments here
+    //                       external payable
+    //                       returns (uint) {
+
+    //     // we need to end in the future
+    //     uint64 endTime = BPackedUtils.packedToEndTime(packed);
+    //     require(endTime > uint64(now), "ballot must end in future");
+
+    //     uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
+    //     require(BBLib.isTesting(submissionBits) == false, "ballot cannot be in testing mode");
+
+    //     if (BBLib.isOfficial(submissionBits)) {
+    //         _basicBallotLimitOperations(democHash);
+    //         _deployBallotChecks(democHash, endTime);
+    //     }
+
+    //     // BallotBoxIface bb = bbFactory.spawn2(
+    //     //     specHash,
+    //     //     packed,
+    //     //     this,
+    //     //     msg.sender);
+
+    //     return _addBallot(democHash, extraData, BallotBoxIface(address(msg.sender)), specHash, packed);
+    // }
 
 
     // sv ens domains
@@ -544,34 +608,6 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
     }
 
     // utils
-    function maxU64(uint64 a, uint64 b) pure internal returns(uint64) {
-        if (a > b) {
-            return a;
-        }
-        return b;
-    }
-
-
-    function b32ToStr(bytes32 b32) pure internal returns(string) {
-        uint i;
-        // lets check the length first
-        for (i = 0; i < 32; i++) {
-            // the output from StringLib is a bytes32 and anything unfilled will be \x00
-            if (b32[i] == byte(0)) {
-                // if we hit a 0 byte we're done, so let's break
-                break;
-            }
-        }
-
-        bytes memory bs = new bytes(i);
-        for(uint j = 0; j < i; j++) {
-            bs[j] = b32[j];
-        }
-
-        return string(bs);
-    }
-
-
     function b13ToBytes(bytes13 b13) pure internal returns(bytes) {
         bytes memory bs = new bytes(13);
         for (uint i = 0; i < 13; i++) {

@@ -31,7 +31,7 @@ const wrapTestIx = ({accounts}, f) => {
         const scLog = await EmitterTesting.new();
 
         // use this doLog function in the wrapper to easily turn on and off this logging
-        let loggingActive = false;
+        let loggingActive = true;
         const doLog = async msg => {
             if (loggingActive)
                 return await scLog.log(msg, {gasPrice: 0});
@@ -105,6 +105,8 @@ const wrapTestIx = ({accounts}, f) => {
         const erc20 = await FaucetErc20.new();
         await doLog(`Created erc20 w faucet at ${erc20.address}`)
 
+        await doLog('>>> FINISHED SETUP <<<')
+
         loggingActive = true;
         return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, doLog, owner, backupOwner, ixEnsPx, erc20, accounts}, accounts);
     };
@@ -117,8 +119,9 @@ const mkDemoc = async ({svIx, txOpts, erc20}) => {
     const createTx = await svIx.dInit(erc20.address, txOpts);
     const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocAdded", createTx);
     const adminPx = SVAdminPx.at(pxAddr);
+    const ixPx = SVIndex.at(pxAddr);
 
-    return {democHash, adminPx};
+    return {democHash, adminPx, ixPx};
 }
 
 
@@ -419,6 +422,41 @@ const testBasicExtraBallots = async () => {
 }
 
 
+const testGasOfBallots = async ({svIx, owner, erc20}) => {
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, txOpts: {from: owner, value: 1}, erc20});
+    const packed = toBigNumber(mkStdPacked());
+
+    const b1 = await getBalance(owner)
+
+    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 1)
+
+    const b2 = await getBalance(owner)
+
+    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 2)
+
+    const b3 = await getBalance(owner)
+
+    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 3)
+
+    const b4 = await getBalance(owner)
+
+    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 4)
+
+    const b5 = await getBalance(owner)
+
+
+
+    console.log(`Deploy Ballot Gas Costs:
+    Std:  ${b1.minus(b2).toFixed()}
+    Lib:  ${b2.minus(b3).toFixed()}
+    Farm: ${b4.minus(b5).toFixed()}
+    NoSC: ${b3.minus(b4).toFixed()}
+    `)
+
+    assert.equal(b2.minus(b1).lt(b1.minus(b2)), true, "lib deploy should be cheaper");
+}
+
+
 contract("SVLightIndex", function (accounts) {
     tests = [
         ["test upgrade", testUpgrade],
@@ -441,6 +479,7 @@ contract("SVLightIndex", function (accounts) {
         // ["test index ens self-management", testIxEnsSelfManagement],
         // ["test nfp tier", testNFPTierAndPayments],
         // ["test payments backup admin", testPaymentsBackupAdmin],
+        ["test gas ballots", testGasOfBallots],
     ];
     S.map(([desc, f]) => it(desc, wrapTestIx({accounts}, f)), tests);
 });
