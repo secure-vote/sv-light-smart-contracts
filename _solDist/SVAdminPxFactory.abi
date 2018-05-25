@@ -1,0 +1,1 @@
+[{"constant":false,"inputs":[{"name":"democHash","type":"bytes32"},{"name":"initAdmin","type":"address"},{"name":"fwdTo","type":"address"}],"name":"spawn","outputs":[{"name":"px","type":"address"}],"payable":false,"stateMutability":"nonpayable","type":"function"}]
