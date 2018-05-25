@@ -27,6 +27,7 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { BPackedUtils } from "./BPackedUtils.sol";
+import "./BBLib.sol";
 
 
 contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
@@ -34,16 +35,9 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     //// ** Storage Variables
 
-    // struct for ballot
-    struct Vote {
-        bytes32 ballotData;
-        address sender;
-        bytes32 encPK;
-    }
-
     // Maps to store ballots, along with corresponding log of voters.
     // Should only be modified through `addBallotAndVoter` internal function
-    mapping (uint256 => Vote) public votes;
+    mapping (uint256 => BBLib.Vote) public votes;
     uint256 public nVotesCast = 0;
 
     mapping (address => bool) hasVotedMap;
@@ -74,7 +68,7 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     //// ** Events
     event CreatedBallot(bytes32 _specHash, uint64 startTs, uint64 endTs, uint16 submissionBits);
-    event SuccessfulVote(address indexed voter, uint ballotId);
+    event SuccessfulVote(address indexed voter, uint voteId);
     event SeckeyRevealed(bytes32 secretKey);
     event TestingEnabled();
     event DeprecatedContract();
@@ -158,8 +152,8 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
         return BB_VERSION;
     }
 
-    function getVote(uint id) external view returns (bytes32 ballotData, address sender, bytes32 encPK) {
-        Vote storage v;
+    function getVote(uint id) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
+        BBLib.Vote storage v = votes[id];
         return (v.voteData, v.sender, v.encPK);
     }
 
@@ -171,17 +165,21 @@ contract SVLightBallotBox is BallotBoxIface, SVBallotConsts, owned {
 
     // Ballot submission
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitVote(bytes32 ballot, bytes32 encPK) external {
+    function submitVote(bytes32 voteData, bytes32 encPK) external {
         _reqBallotOpen();
-        _addVote(ballot, msg.sender, encPK);
+        _addVote(voteData, msg.sender, encPK);
     }
 
-    function _addVote(bytes32 ballot, address sender, bytes32 encPK) internal returns (uint256 id) {
+    function _addVote(bytes32 voteData, address sender, bytes32 encPK) internal returns (uint256 id) {
         id = nVotesCast;
-        votes[id] = Vote(ballot, sender, encPK);
+        votes[id].voteData = voteData;
+        votes[id].sender = sender;
+        if (encPK != bytes32(0)) {
+            votes[id].encPK = encPK;
+        }
         nVotesCast += 1;
         hasVotedMap[sender] = true;
-        emit SuccessfulVote(msg.sender, id);
+        emit SuccessfulVote(sender, id);
     }
 
     /* ADMIN STUFF */

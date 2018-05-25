@@ -14,12 +14,14 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./BPackedUtils.sol";
 import "../libs/MemArrApp.sol";
 
-contract BBFarm is BallotBoxIface, permissioned {
+contract BBFarm is permissioned {
 
     using BBLib for BBLib.DB;
 
     mapping (uint => BBLib.DB) dbs;
     uint nBallots = 0;
+
+    event BallotCreatedWithID(uint ballotId);
 
     /* Constructor */
 
@@ -27,14 +29,17 @@ contract BBFarm is BallotBoxIface, permissioned {
 
     }
 
+    /* Init ballot */
+
     function initBallot(bytes32 specHash, uint256 packed, IxIface ix, address bbAdmin) only_editors() external returns (uint ballotId) {
         // we need to call the init functions on our libraries
         ballotId = nBallots;
         dbs[ballotId].init(specHash, packed, ix, bbAdmin);
         nBallots = ballotId + 1;
+        emit BallotCreatedWithID(ballotId);
     }
 
-    /* Fallback - Sponsorship */
+    /* Sponsorship */
 
     function sponsor(uint ballotId) external payable {
         BBLib.DB storage db = dbs[ballotId];
@@ -62,8 +67,8 @@ contract BBFarm is BallotBoxIface, permissioned {
             , bytes32 specHash
             , bool deprecated
             , address ballotOwner) {
-        uint packed = db.packed;
         BBLib.DB storage db = dbs[ballotId];
+        uint packed = db.packed;
         return (
             db.voterLog[voter].length > 0,
             db.nVotesCast,
@@ -81,7 +86,7 @@ contract BBFarm is BallotBoxIface, permissioned {
         return BBLib.getVersion();
     }
 
-    function getBallot(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
+    function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
         BBLib.Vote storage b = dbs[ballotId].votes[voteId];
         return (b.voteData, b.sender, b.encPK);
     }
@@ -94,8 +99,10 @@ contract BBFarm is BallotBoxIface, permissioned {
 
     // Allow the owner to reveal the secret key after ballot conclusion
     function revealSeckey(uint ballotId, bytes32 sk) external {
-        // owner, ballot ended
-        dbs[ballotId].revealSeckey(sk);
+        BBLib.DB storage db = dbs[ballotId];
+        db.requireBallotOwner();
+        db.requireBallotClosed();
+        db.revealSeckey(sk);
     }
 
     function setEndTime(uint ballotId, uint64 newEndTime) external {
@@ -110,5 +117,11 @@ contract BBFarm is BallotBoxIface, permissioned {
         BBLib.DB storage db = dbs[ballotId];
         db.requireBallotOwner();
         db.deprecated = true;
+    }
+
+    function setBallotOwner(uint ballotId, address newOwner) external {
+        BBLib.DB storage db = dbs[ballotId];
+        db.requireBallotOwner();
+        db.ballotOwner = newOwner;
     }
 }

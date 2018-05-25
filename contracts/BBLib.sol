@@ -33,7 +33,7 @@ library BBLib {
 
     // struct for ballot
     struct Vote {
-        bytes32 ballotData;
+        bytes32 voteData;
         address sender;
         bytes32 encPK;
     }
@@ -90,8 +90,8 @@ library BBLib {
 
     // ** Modifiers -- note, these are functions here but allow us to use
     // smaller modifiers in BBInstance
-    function requireBallotEnded(DB storage db) internal view {
-        require(now > BPackedUtils.packedToEndTime(db.packed), "!b-ended");
+    function requireBallotClosed(DB storage db) internal view {
+        require(now > BPackedUtils.packedToEndTime(db.packed), "!b-closed");
     }
 
     function requireBallotOpen(DB storage db) external view {
@@ -105,6 +105,10 @@ library BBLib {
 
     function requireBallotOwner(DB storage db) external view {
         require(msg.sender == db.ballotOwner, "!b-owner");
+    }
+
+    function requireTesting(DB storage db) external view {
+        require(isTesting(BPackedUtils.packedToSubmissionBits(db.packed)), "!testing");
     }
 
     /* Functions */
@@ -122,7 +126,13 @@ library BBLib {
 
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
         bool okaySubmissionBits = 1 == (isEthNoEnc(sb) ? 1 : 0) + (isEthWithEnc(sb) ? 1 : 0);
-        require(okaySubmissionBits, "invalid-sb");
+        require(okaySubmissionBits, "!valid-sb");
+
+        // 0x1ff2 is 0001111111110010 in binary
+        // by ANDing with subBits we make sure that only bits in positions 0,2,3,13,14,15
+        // can be used. these correspond to the option flags at the top, and ETH ballots
+        // that are enc'd or plaintext.
+        require(sb & 0x1ff2 == 0, "bad-sb");
 
         bool _testing = isTesting(sb);
         if (_testing) {
@@ -160,7 +170,7 @@ library BBLib {
     }
 
     function getVote(DB storage db, uint id) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
-        return (db.votes[id].ballotData, db.votes[id].sender, db.votes[id].encPK);
+        return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].encPK);
     }
 
     function getStartTime(DB storage db) public view returns (uint64) {
@@ -194,13 +204,17 @@ library BBLib {
 
     // Ballot submission
     // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitVote(DB storage db, bytes32 ballot, bytes32 encPK) external {
-        _addVote(db, ballot, msg.sender, encPK);
+    function submitVote(DB storage db, bytes32 voteData, bytes32 encPK) external {
+        _addVote(db, voteData, msg.sender, encPK);
     }
 
-    function _addVote(DB storage db, bytes32 ballot, address sender, bytes32 encPK) internal returns (uint256 id) {
+    function _addVote(DB storage db, bytes32 voteData, address sender, bytes32 encPK) internal returns (uint256 id) {
         id = db.nVotesCast;
-        db.votes[id] = Vote(ballot, sender, encPK);
+        db.votes[id].voteData = voteData;
+        db.votes[id].sender = sender;
+        if (encPK != bytes32(0)) {
+            db.votes[id].encPK = encPK;
+        }
         db.nVotesCast += 1;
         db.voterLog[sender].push(id);
         emit SuccessfulVote(sender, id);
