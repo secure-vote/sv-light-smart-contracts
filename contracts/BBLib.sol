@@ -123,6 +123,7 @@ library BBLib {
         uint64 endTs;
         uint16 sb;
         (sb, startTs, endTs) = BPackedUtils.unpackAll(_packed);
+        require(endTs > now, "bad-end-time");
 
         // if we give bad submission bits (e.g. all 0s) then refuse to deploy ballot
         bool okaySubmissionBits = 1 == (isEthNoEnc(sb) ? 1 : 0) + (isEthWithEnc(sb) ? 1 : 0);
