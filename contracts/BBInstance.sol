@@ -20,8 +20,8 @@ contract BBInstance is BallotBoxIface, OwnedWLib {
 
     BBLib.DB db;
 
-    modifier ballotEnded() {
-        db.requireBallotEnded();
+    modifier ballotClosed() {
+        db.requireBallotClosed();
         _;
     }
 
@@ -93,7 +93,7 @@ contract BBInstance is BallotBoxIface, OwnedWLib {
     /* ADMIN */
 
     // Allow the owner to reveal the secret key after ballot conclusion
-    function revealSeckey(bytes32 sk) only_owner() ballotEnded() external {
+    function revealSeckey(bytes32 sk) only_owner() ballotClosed() external {
         db.revealSeckey(sk);
     }
 

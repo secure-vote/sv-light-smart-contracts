@@ -37,14 +37,14 @@ module.exports = function () {
     this.mkPackedTime = (start, end) => {
         const s = new BN(start)
         const e = new BN(end)
-        return s.shln(64).add(e)
+        return this.toBigNumber(s.shln(64).add(e))
     }
 
     this.mkPacked = (start, end, submissionBits) => {
         const s = new BN(start)
         const e = new BN(end)
         const sb = new BN(submissionBits)
-        return sb.shln(64).add(s).shln(64).add(e);
+        return this.toBigNumber(sb.shln(64).add(s).shln(64).add(e));
     }
 
     this.mkStdPacked = () => {
@@ -187,6 +187,10 @@ module.exports = function () {
             i++;
         }
         return toRet;
+    }
+
+    this.isTxOpts = function(o) {
+        return o && (o.from || o.to || o.gas || o.gasPrice || o.data);
     }
 
     this.bytes32AddrToAddr = (bytes32Addr) => {

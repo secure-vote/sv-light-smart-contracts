@@ -559,9 +559,11 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
                 msg.sender);
         } else if (option == 3) {
             bb = BallotBoxIface(msg.sender);
+        } else if (option == 4) {
+
         } else {
             bb = BallotBoxIface(address(0));
-            Log(">>> bad option in dDeployBallotTest <<<");
+            emit Log(">>> bad option in dDeployBallotTest <<<");
         }
 
         return _addBallot(democHash, extraData, bb, specHash, packed);

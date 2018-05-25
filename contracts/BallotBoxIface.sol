@@ -3,7 +3,7 @@ pragma solidity ^0.4.24;
 interface BallotBoxIface {
     function getVersion() external pure returns (uint256);
 
-    function getVote(uint256) external view returns (bytes32 ballotData, address sender, bytes32 encPK);
+    function getVote(uint256) external view returns (bytes32 voteData, address sender, bytes32 encPK);
 
     function getDetails(address voter) external view returns (
         bool hasVoted,
@@ -18,7 +18,7 @@ interface BallotBoxIface {
 
     function getTotalSponsorship() external view returns (uint);
 
-    function submitVote(bytes32 ballot, bytes32 encPK) external;
+    function submitVote(bytes32 voteData, bytes32 encPK) external;
 
     function revealSeckey(bytes32 sk) external;
     function setEndTime(uint64 newEndTime) external;
@@ -26,6 +26,10 @@ interface BallotBoxIface {
 
     function setOwner(address) external;
     function getOwner() external view returns (address);
+
+    event CreatedBallot(bytes32 specHash, uint64 startTs, uint64 endTs, uint16 submissionBits);
+    event SuccessfulVote(address indexed voter, uint voteId);
+    event SeckeyRevealed(bytes32 secretKey);
 }
 
 
@@ -46,11 +50,11 @@ interface BBAuxIface {
 
     function hasVoted(BallotBoxIface bb, address voter) external view returns (bool hv);
 
-    function getBallots(BallotBoxIface bb) external view
+    function getVotes(BallotBoxIface bb) external view
         returns ( bytes32[] memory ballots
                 , bytes32[] memory pks);
 
-    function getBallotsFrom(BallotBoxIface bb, address voter) external view
+    function getVotesFrom(BallotBoxIface bb, address voter) external view
         returns ( uint256[] memory ids
                 , bytes32[] memory ballots
                 , bytes32[] memory pks);

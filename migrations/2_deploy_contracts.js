@@ -8,6 +8,7 @@ var ownedLib = artifacts.require("ownedLib")
 
 var BBLib = artifacts.require("BBLib")
 var BBInstance = artifacts.require("BBInstance")
+var BBFarm = artifacts.require("BBFarm")
 
 var SVBBoxFactory = artifacts.require("SVBBoxFactory")
 
@@ -30,4 +31,6 @@ module.exports = function(deployer) {
 
     deployer.link(BBLib, SVBBoxFactory)
     deployer.link(ownedLib, SVBBoxFactory)
+
+    deployer.link(BBLib, BBFarm)
 };

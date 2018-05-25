@@ -10,10 +10,10 @@ pragma solidity 0.4.24;
 import "./BallotBoxIface.sol";
 import "./BBLib.sol";
 import "./BPackedUtils.sol";
+import "./BBFarm.sol";
 
 
 contract BallotAux is BBAuxIface {
-
     address constant zeroAddr = address(0);
 
     function isTesting(BallotBoxIface bb) external view returns (bool) {
@@ -65,38 +65,66 @@ contract BallotAux is BBAuxIface {
     }
 
     function getBallotOwner(BallotBoxIface bb) external view returns (address ballotOwner) {
-        (,,,,,,,,, ballotOwner) = bb.getDetails(zeroAddr);
+        (,,,,,,,, ballotOwner) = bb.getDetails(zeroAddr);
     }
 
-    function getBallots(BallotBoxIface bb) external view
+    function getVotes(BallotBoxIface bb) external view
         returns ( bytes32[] memory ballots
                 , bytes32[] memory pks) {
 
         address sender;
-        bytes32 ballotData;
+        bytes32 voteData;
         bytes32 encPK;
         for (uint i = 0; i < getNVotesCast(bb); i++) {
-            (ballotData, sender, encPK) = bb.getVote(i);
-            ballots = MemArrApp.appendBytes32(ballots, ballotData);
+            (voteData, sender, encPK) = bb.getVote(i);
+            ballots = MemArrApp.appendBytes32(ballots, voteData);
             pks = MemArrApp.appendBytes32(pks, encPK);
         }
     }
 
-    function getBallotsFrom(BallotBoxIface bb, address voter) external view
+    function getVotesFrom(BallotBoxIface bb, address voter) external view
         returns ( uint256[] memory ids
                 , bytes32[] memory ballots
                 , bytes32[] memory pks) {
 
         address sender;
-        bytes32 ballotData;
+        bytes32 voteData;
         bytes32 encPK;
         for (uint i = 0; i < getNVotesCast(bb); i++) {
-            (ballotData, sender, encPK) = bb.getVote(i);
+            (voteData, sender, encPK) = bb.getVote(i);
             if (sender == voter) {
                 ids = MemArrApp.appendUint256(ids, i);
-                ballots = MemArrApp.appendBytes32(ballots, ballotData);
+                ballots = MemArrApp.appendBytes32(ballots, voteData);
                 pks = MemArrApp.appendBytes32(pks, encPK);
             }
         }
+    }
+}
+
+
+contract BBFarmProxy {
+    uint ballotId;
+    BBFarm farm;
+
+    constructor(BBFarm _farm, uint _ballotId) public {
+        farm = _farm;
+        ballotId = _ballotId;
+    }
+
+    function getVote(uint voteId) external view returns (bytes32, address, bytes32) {
+        return farm.getVote(ballotId, voteId);
+    }
+
+    function getDetails(address voter) external view returns
+            ( bool hasVoted
+            , uint nVotesCast
+            , bytes32 secKey
+            , uint16 submissionBits
+            , uint64 startTime
+            , uint64 endTime
+            , bytes32 specHash
+            , bool deprecated
+            , address ballotOwner) {
+        return farm.getDetails(ballotId, voter);
     }
 }
