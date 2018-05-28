@@ -6,6 +6,7 @@ var SvPayments = artifacts.require("./SVPayments");
 var BallotAux = artifacts.require("./BallotAux");
 var BBFarm = artifacts.require("./BBFarm")
 var BBFarmPx = artifacts.require("./BBFarmProxy")
+var TestHelper = artifacts.require("./TestHelper")
 
 require("./testUtils")();
 
@@ -271,68 +272,6 @@ const _genSigned = () => {
 }
 
 
-// async function testSignedBallotNoEnc({accounts, log, BB}){
-//     const [startTime, endTime] = genStartEndTimes();
-//     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_NO_ENC | USE_TESTING), zeroAddr);
-
-//     assert.equal((await bb.getStartTime()).toNumber(), startTime, "start times match");
-
-//     b1 = _genSigned();
-
-//     const tx1o1 = await bb.submitBallotSignedNoEnc(b1.ballot, b1.edPk, b1.sig);
-//     assertNoErr(tx1o1);
-//     const {args: _v1o1} = getEventFromTxR("SuccessfulVote", tx1o1);
-//     assert.equal(_v1o1.voter, b1.edPk, "voter pk should match");
-
-//     await log("voter matches 1")
-
-//     const _r1o1 = {};
-//     _r1o1.ballot = await bb.getBallotSigned(_v1o1.voteId).then(([b]) => b);
-//     assert.deepEqual(_r1o1.ballot, b1.ballot, "ballots should match");
-//     await log("ballot matches 1")
-
-//     _r1o1.sig = await bb.getSignature(_v1o1.voteId);
-//     assert.deepEqual(_r1o1.sig, b1.sig, "sigs should match");
-//     await log("edSig matches 1")
-
-
-//     await assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, bb.submitVote(b1.ballot, zeroHash));
-//     await assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, bb.submitVote(b1.ballot, b1.edPk));
-//     await assertErrStatus(ERR_NOT_BALLOT_SIGNED_WITH_ENC, bb.submitBallotSignedWithEnc(b1.ballot, b1.curvePk, b1.edPk, b1.sig));
-// }
-
-
-// async function testSignedBallotWithEnc({accounts, log, BB}){
-//     const [startTime, endTime] = genStartEndTimes();
-//     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_SIGNED | USE_ENC | USE_TESTING), zeroAddr);
-
-//     assert.equal((await bb.getStartTime()).toNumber(), startTime, "start times match");
-
-//     b1 = _genSigned();
-
-//     const tx1o1 = await bb.submitBallotSignedWithEnc(b1.ballot, b1.curvePk, b1.edPk, b1.sig);
-//     assertNoErr(tx1o1);
-//     const {args: _v1o1} = getEventFromTxR("SuccessfulVote", tx1o1);
-//     assert.equal(_v1o1.voter, b1.edPk, "voter pk should match");
-
-//     await log("voter matches 1")
-
-//     const _r1o1 = {};
-//     _r1o1.sig = await bb.getSignature(_v1o1.voteId);
-//     assert.deepEqual(_r1o1.sig, b1.sig, "sigs should match");
-//     await log('edsig match 1')
-
-//     [_r1o1.ballot, _r1o1.sender, _r1o1.curvePk] = await bb.getVote(_v1o1.voteId);
-//     assert.deepEqual(_r1o1.ballot, b1.ballot, "ballots should match");
-//     await log('ballot match 1')
-//     assert.equal(_r1o1.curvePk, b1.curvePk, "curvePks should match");
-
-//     await assertErrStatus(ERR_NOT_BALLOT_ETH_NO_ENC, bb.submitVote(b1.ballot, zeroHash));
-//     await assertErrStatus(ERR_NOT_BALLOT_ETH_WITH_ENC, bb.submitVote(b1.ballot, b1.edPk));
-//     await assertErrStatus(ERR_NOT_BALLOT_SIGNED_NO_ENC, bb.submitBallotSignedNoEnc(b1.ballot, b1.edPk, b1.sig));
-// }
-
-
 async function testDeprecation({accounts, BB, bbaux}) {
     const [startTime, endTime] = genStartEndTimes();
     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
@@ -370,6 +309,16 @@ const testSponsorship = async ({accounts, BB, bbaux}) => {
     assert.deepEqual(balPost, toBigNumber(oneEth).plus(balPre), "sponsorship balance (payTo) should match expected");
 
     assert.deepEqual(await bb.getTotalSponsorship(), toBigNumber(oneEth), "getTotalSponsorship should match expected");
+
+    // make sponsorship fail via the tx failing
+
+    const testHelper = await TestHelper.new()
+    await payments.setPayTo(testHelper.address);
+
+    await assertRevert(bb.sendTransaction({
+        from: accounts[1],
+        value: 1999  // special value that will cause testHelper to throw
+    }), 'should throw if payTo tx fails');
 }
 
 

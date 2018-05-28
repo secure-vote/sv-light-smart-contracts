@@ -28,10 +28,6 @@ contract owned {
         owner = newOwner;
         emit OwnerChanged(newOwner);
     }
-
-    function getOwner() external view returns (address) {
-        return owner;
-    }
 }
 
 

@@ -175,29 +175,29 @@ library BBLib {
         return BB_VERSION;
     }
 
-    function hasVotedEth(DB storage db, address v) external view returns (bool) {
-        return db.voterLog[v].length > 0;
-    }
+    // function hasVotedEth(DB storage db, address v) external view returns (bool) {
+    //     return db.voterLog[v].length > 0;
+    // }
 
-    function getVote(DB storage db, uint id) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
-        return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].encPK);
-    }
+    // function getVote(DB storage db, uint id) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
+    //     return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].encPK);
+    // }
 
-    function getStartTime(DB storage db) public view returns (uint64) {
-        return BPackedUtils.packedToStartTime(db.packed);
-    }
+    // function getStartTime(DB storage db) public view returns (uint64) {
+    //     return BPackedUtils.packedToStartTime(db.packed);
+    // }
 
-    function getEndTime(DB storage db) public view returns (uint64) {
-        return BPackedUtils.packedToEndTime(db.packed);
-    }
+    // function getEndTime(DB storage db) public view returns (uint64) {
+    //     return BPackedUtils.packedToEndTime(db.packed);
+    // }
 
-    function getSubmissionBits(DB storage db) public view returns (uint16) {
-        return BPackedUtils.packedToSubmissionBits(db.packed);
-    }
+    // function getSubmissionBits(DB storage db) public view returns (uint16) {
+    //     return BPackedUtils.packedToSubmissionBits(db.packed);
+    // }
 
-    function getSpecHash(DB storage db) external view returns (bytes32) {
-        return db.specHash;
-    }
+    // function getSpecHash(DB storage db) external view returns (bytes32) {
+    //     return db.specHash;
+    // }
 
     function getTotalSponsorship(DB storage db) internal view returns (uint total) {
         for (uint i = 0; i < db.sponsors.length; i++) {
@@ -205,10 +205,10 @@ library BBLib {
         }
     }
 
-    function getSponsor(DB storage db, uint i) external view returns (address sender, uint amount) {
-        sender = db.sponsors[i].sender;
-        amount = db.sponsors[i].amount;
-    }
+    // function getSponsor(DB storage db, uint i) external view returns (address sender, uint amount) {
+    //     sender = db.sponsors[i].sender;
+    //     amount = db.sponsors[i].amount;
+    // }
 
     /* ETH BALLOTS */
 
@@ -249,15 +249,15 @@ library BBLib {
     // do (bits & SETTINGS_MASK) to get just operational bits (as opposed to testing or official flag)
     uint16 constant SETTINGS_MASK = 0xFFFF ^ USE_TESTING ^ IS_OFFICIAL ^ IS_BINDING;
 
-    function unsafeIsEth(uint16 submissionBits) pure internal returns (bool) {
-        // this is unsafe becuase it's not a valid configuration
-        return USE_ETH & submissionBits != 0;
-    }
+    // function unsafeIsEth(uint16 submissionBits) pure internal returns (bool) {
+    //     // this is unsafe becuase it's not a valid configuration
+    //     return USE_ETH & submissionBits != 0;
+    // }
 
-    function unsafeIsSigned(uint16 submissionBits) pure internal returns (bool) {
-        // unsafe bc it's not a valid configuration
-        return USE_SIGNED & submissionBits != 0;
-    }
+    // function unsafeIsSigned(uint16 submissionBits) pure internal returns (bool) {
+    //     // unsafe bc it's not a valid configuration
+    //     return USE_SIGNED & submissionBits != 0;
+    // }
 
     // function unsafeIsEncrypted() view internal returns (bool) {
     //     return USE_ENC & submissionBits != 0;
@@ -271,13 +271,13 @@ library BBLib {
         return checkFlags(submissionBits, USE_ETH | USE_ENC);
     }
 
-    function isSignedNoEnc(uint16 submissionBits) pure internal returns (bool) {
-        return checkFlags(submissionBits, USE_SIGNED | USE_NO_ENC);
-    }
+    // function isSignedNoEnc(uint16 submissionBits) pure internal returns (bool) {
+    //     return checkFlags(submissionBits, USE_SIGNED | USE_NO_ENC);
+    // }
 
-    function isSignedWithEnc(uint16 submissionBits) pure internal returns (bool) {
-        return checkFlags(submissionBits, USE_SIGNED | USE_ENC);
-    }
+    // function isSignedWithEnc(uint16 submissionBits) pure internal returns (bool) {
+    //     return checkFlags(submissionBits, USE_SIGNED | USE_ENC);
+    // }
 
     function isOfficial(uint16 submissionBits) pure internal returns (bool) {
         return (submissionBits & IS_OFFICIAL) == IS_OFFICIAL;

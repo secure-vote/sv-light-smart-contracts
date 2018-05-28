@@ -7,10 +7,7 @@ pragma solidity ^0.4.24;
 
 import { BBLib } from "./BBLib.sol";
 import { permissioned } from "./SVCommon.sol";
-import { OwnedWLib } from "./SVLibs.sol";
 import { IxIface } from "./IndexInterface.sol";
-import { OwnedIface } from "./CommonIfaces.sol";
-import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./BPackedUtils.sol";
 import "../libs/MemArrApp.sol";
 
