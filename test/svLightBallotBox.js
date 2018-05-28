@@ -231,7 +231,8 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
 
 
 async function testTestMode({accounts, BB, bbaux}) {
-    var vc = await BB.new(specHash, mkPacked(0, 1, USE_ETH | USE_NO_ENC), zeroAddr);
+    const [s, e] = genStartEndTimes();
+    var vc = await BB.new(specHash, mkPacked(s, e, USE_ETH | USE_NO_ENC), zeroAddr);
     await assertErrStatus(ERR_TESTING_REQ, vc.setEndTime(0), "throws on set end time when not in testing");
 }
 
@@ -507,35 +508,37 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
 }
 
 
-const initGasComparison = async ({accounts}) => {
-    const u = accounts[0];
-    const farm = await BBFarm.new();
-    await farm.setPermissions(u, true);
+/* BBFarm won by a long shot - like 1.1m gas minimum down to 300k-400k minimum */
 
-    const b1 = await getBalance(u);
+// const initGasComparison = async ({accounts}) => {
+//     const u = accounts[0];
+//     const farm = await BBFarm.new();
+//     await farm.setPermissions(u, true);
 
-    await genStdBB(SVBallotBox);
+//     const b1 = await getBalance(u);
 
-    const b2 = await getBalance(u);
+//     await genStdBB(SVBallotBox);
 
-    await genStdBB(BBInstance);
+//     const b2 = await getBalance(u);
 
-    const b3 = await getBalance(u);
+//     await genStdBB(BBInstance);
 
-    await genStdBB({new: async (...args) => await farm.initBallot(...args, u)})
+//     const b3 = await getBalance(u);
 
-    const b4 = await getBalance(u);
+//     await genStdBB({new: async (...args) => await farm.initBallot(...args, u)})
 
-    const g1 = b1.minus(b2);
-    const g2 = b2.minus(b3);
-    const g3 = b3.minus(b4);
+//     const b4 = await getBalance(u);
 
-    console.log(`Gas for SVBallotBox: ${g1.toFixed()}`)
-    console.log(`Gas for  BBInstance: ${g2.toFixed()}`)
-    console.log(`Gas for      BBFarm: ${g3.toFixed()}`)
+//     const g1 = b1.minus(b2);
+//     const g2 = b2.minus(b3);
+//     const g3 = b3.minus(b4);
 
-    assert.equal(g1.gt(g2), true, "gas for SVBallotBox should be greater than for BBInstance (which uses a library)")
-}
+//     console.log(`Gas for SVBallotBox: ${g1.toFixed()}`)
+//     console.log(`Gas for  BBInstance: ${g2.toFixed()}`)
+//     console.log(`Gas for      BBFarm: ${g3.toFixed()}`)
+
+//     assert.equal(g1.gt(g2), true, "gas for SVBallotBox should be greater than for BBInstance (which uses a library)")
+// }
 
 
 function sAssertEq(a, b, msg) {
@@ -560,7 +563,7 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
                 const lastArg = R.last(args);
                 const from = (lastArg && lastArg.from) ? lastArg.from : accounts[0];
                 const txOpts = isTxOpts(lastArg) ? {...lastArg, from: accounts[0]} : {}
-                const _initBBEvent = await farm.initBallot(...args.slice(0,3), from, txOpts)
+                const _initBBEvent = await farm.initBallot(...args.slice(0,3), from, zeroHash, txOpts)
                 const _l = getEventFromTxR("BallotCreatedWithID", _initBBEvent)
                 const {args: {ballotId}} = _l;
 
@@ -636,5 +639,5 @@ contract("BallotBox", function(accounts) {
         it("Farm BB: " + desc, _wrapTest({accounts, bbName: "Farm", mkFarm: true}, f))
     }, tests);
 
-    it("Init gas comparison", async () => await initGasComparison({accounts}));
+    // it("Init gas comparison", async () => await initGasComparison({accounts}));
 });
