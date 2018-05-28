@@ -314,7 +314,8 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
 
     const user = accounts[3];
     const balPre = await getBalance(user)
-    const dcbTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
+    // use extraData as random bytes here for coverage
+    const dcbTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), genRandomBytes32(), packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
     const balPost = await getBalance(user)
     await doLog(`deployed community ballot!`)
 

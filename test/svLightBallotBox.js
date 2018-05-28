@@ -158,6 +158,8 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
     var shortEndTime = 0;
 
     const vc = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr, {from: accounts[3]});
+    const bCreation = await getBlock('latest')
+
     const aux = mkBBPx(vc, bbaux);
 
     assert.equal(await vc.getOwner(), accounts[3], "Owner must be set on launch.");
@@ -181,6 +183,8 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
 
     const _sk = await aux.getEncSeckey();
     assert.equal(_sk, bytes32zero, "ballot enc key should be zeros before reveal");
+
+    assert.equal(await vc.farm.getCreationTs(0), bCreation.timestamp, "creationTs should match expected");
 
     //// ASSERTIONS FOR INSTANTIATION COMPLETE
 
@@ -457,6 +461,13 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
 }
 
 
+const testEndTimeFuture = async ({BB, accounts}) => {
+    const [s, e] = genStartEndTimes();
+    const packed = mkPacked(s, s - 10, USE_ETH | USE_NO_ENC | IS_OFFICIAL | IS_BINDING);
+    await assertRevert(BB.new(genRandomBytes32(), packed, accounts[0]), 'should throw on end time in past')
+}
+
+
 /* BBFarm won by a long shot - like 1.1m gas minimum down to 300k-400k minimum */
 
 // const initGasComparison = async ({accounts}) => {
@@ -529,6 +540,9 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
                         if (method == "px")
                             return bbFarmPx
 
+                        if (method == "farm")
+                            return farm;
+
                         return async (...pxargs) => {
                             pxargs = R.concat([ballotId], pxargs)
 
@@ -581,6 +595,7 @@ contract("BallotBox", function(accounts) {
         ["test getBallots*From", testGetVotes],
         ["test community status", testCommStatus],
         ["test owner", testOwner],
+        ["test end time must be in future", testEndTimeFuture],
     ]
     R.map(([desc, f]) => {
         // it("Std BB:  " + desc, _wrapTest({accounts, BB: SVBallotBox, bbName: "Std", mkFarm: false}, f))
