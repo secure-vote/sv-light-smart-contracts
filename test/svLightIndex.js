@@ -12,6 +12,7 @@ const EnsRegistry = artifacts.require("./SvEnsRegistry");
 const EnsOwnerPx = artifacts.require("./EnsOwnerProxy");
 const EmitterTesting = artifacts.require("./EmitterTesting");
 const FaucetErc20 = artifacts.require("./FaucetErc20");
+const BBFarm = artifacts.require("./BBFarm")
 
 const nh = require('eth-ens-namehash');
 
@@ -39,6 +40,8 @@ const wrapTestIx = ({accounts}, f) => {
         }
 
         await doLog(`Created logger...`);
+
+        const bbfarm = await BBFarm.new();
 
         const be = await IxBackend.new();
         await doLog(`Created backend...`);
@@ -71,7 +74,7 @@ const wrapTestIx = ({accounts}, f) => {
         await ensPx.regNameWOwner("index", zeroAddr, ixEnsPx.address);
         await doLog(`Created index.${tld} owner px at ${ixEnsPx.address}`)
 
-        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, {gasPrice: 0});
+        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, bbfarm.address, {gasPrice: 0});
         await doLog(`Created svIx at ${svIx.address}`)
 
         await ixEnsPx.setAddr(svIx.address);
@@ -82,6 +85,8 @@ const wrapTestIx = ({accounts}, f) => {
 
         await be.setPermissions(svIx.address, true);
         await be.doLockdown();
+
+        await bbfarm.setPermissions(svIx.address, true);
 
         await paySC.setPermissions(svIx.address, true);
         await paySC.doLockdown();
@@ -449,8 +454,8 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
     console.log(`Deploy Ballot Gas Costs:
     Std:  ${b1.minus(b2).toFixed()}
     Lib:  ${b2.minus(b3).toFixed()}
-    Farm: ${b4.minus(b5).toFixed()}
     NoSC: ${b3.minus(b4).toFixed()}
+    Farm: ${b4.minus(b5).toFixed()}
     `)
 
     assert.equal(b2.minus(b1).lt(b1.minus(b2)), true, "lib deploy should be cheaper");

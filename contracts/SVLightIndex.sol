@@ -22,6 +22,7 @@ import "./EnsOwnerProxy.sol";
 import { BPackedUtils } from "./BPackedUtils.sol";
 import "./BBLib.sol";
 import "./BBInstance.sol";
+import "./BBFarm.sol";
 
 
 contract SVAdminPxFactory {
@@ -230,6 +231,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
     SVBBoxFactory public bbFactory;
     SvEnsEverythingPx public ensPx;
     EnsOwnerProxy public ensOwnerPx;
+    BBFarm public bbfarm;
 
     uint256 constant _version = 2;
 
@@ -265,6 +267,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
                , SVBBoxFactory _bbF
                , SvEnsEverythingPx _ensPx
                , EnsOwnerProxy _ensOwnerPx
+               , BBFarm _bbfarm
                ) public {
         backend = _b;
         payments = _pay;
@@ -272,6 +275,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         bbFactory = _bbF;
         ensPx = _ensPx;
         ensOwnerPx = _ensOwnerPx;
+        bbfarm = _bbfarm;
     }
 
     //* UPGRADE STUFF */
@@ -560,7 +564,8 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
         } else if (option == 3) {
             bb = BallotBoxIface(msg.sender);
         } else if (option == 4) {
-
+            bbfarm.initBallot(specHash, packed, this, msg.sender);
+            bb = BallotBoxIface(msg.sender);
         } else {
             bb = BallotBoxIface(address(0));
             emit Log(">>> bad option in dDeployBallotTest <<<");
