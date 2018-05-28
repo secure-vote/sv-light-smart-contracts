@@ -583,25 +583,25 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
                           external payable
                           returns (uint) {
 
-        // // we need to end in the future
-        // uint64 endTime = BPackedUtils.packedToEndTime(packed);
-        // require(endTime > uint64(now), "ballot must end in future");
+        // we need to end in the future
+        uint64 endTime = BPackedUtils.packedToEndTime(packed);
+        require(endTime > uint64(now), "ballot must end in future");
 
-        // uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
-        // require(BBLib.isTesting(submissionBits) == false, "ballot cannot be in testing mode");
+        uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
+        require(BBLib.isTesting(submissionBits) == false, "ballot cannot be in testing mode");
 
-        // if (BBLib.isOfficial(submissionBits)) {
-        //     _basicBallotLimitOperations(democHash);
-        //     _deployBallotChecks(democHash, endTime);
-        // }
+        if (BBLib.isOfficial(submissionBits)) {
+            _basicBallotLimitOperations(democHash);
+            _deployBallotChecks(democHash, endTime);
+        }
 
-        // // BallotBoxIface bb = bbFactory.spawn2(
-        // //     specHash,
-        // //     packed,
-        // //     this,
-        // //     msg.sender);
+        // BallotBoxIface bb = bbFactory.spawn2(
+        //     specHash,
+        //     packed,
+        //     this,
+        //     msg.sender);
 
-        // return _addBallot(democHash, extraData, BallotBoxIface(address(msg.sender)), specHash, packed);
+        return _addBallot(democHash, extraData, BallotBoxIface(address(msg.sender)), specHash, packed);
     }
 
 
