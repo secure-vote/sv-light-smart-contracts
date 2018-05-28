@@ -1,7 +1,5 @@
 const SVIndex = artifacts.require("./SVLightIndex");
 const SVAdminPx = artifacts.require("./SVLightAdminProxy");
-const SVBallotBox = artifacts.require("./SVLightBallotBox");
-const BBFactory = artifacts.require("./SVBBoxFactory");
 const PxFactory = artifacts.require("./SVAdminPxFactory");
 const IxBackend = artifacts.require("./SVIndexBackend");
 const IxPayments = artifacts.require("./SVPayments");
@@ -13,6 +11,7 @@ const EnsOwnerPx = artifacts.require("./EnsOwnerProxy");
 const EmitterTesting = artifacts.require("./EmitterTesting");
 const FaucetErc20 = artifacts.require("./FaucetErc20");
 const TestHelper = artifacts.require("./TestHelper")
+const BBFarm = artifacts.require("./BBFarm")
 
 const nh = require('eth-ens-namehash');
 
@@ -34,7 +33,7 @@ const wrapTest = ({accounts}, f) => {
         const scLog = await EmitterTesting.new();
 
         // use this doLog function in the wrapper to easily turn on and off this logging
-        const loggingActive = false;
+        const loggingActive = true;
         const doLog = async msg => {
             if (loggingActive)
                 return await scLog.log(msg);
@@ -48,10 +47,9 @@ const wrapTest = ({accounts}, f) => {
         await doLog(`Created payments backend...`);
         const pxF = await PxFactory.new();
         await doLog(`Created PxFactory...`);
-        const bbF = await BBFactory.new();
-        await doLog(`Created BBFactory...`);
+        const bbFarm = await BBFarm.new();
 
-        await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${payments.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
+        await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${payments.address}), \npxFactory (${pxF.address})`)
 
         const tld = "test";
         const testLH = web3.sha3(tld);
@@ -73,7 +71,7 @@ const wrapTest = ({accounts}, f) => {
         await ensPx.regNameWOwner("index", zeroAddr, ixEnsPx.address);
         await doLog(`Created index.${tld} owner px at ${ixEnsPx.address}`)
 
-        const svIx = await SVIndex.new(be.address, payments.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, {gasPrice: 0});
+        const svIx = await SVIndex.new(be.address, payments.address, pxF.address, ensPx.address, ixEnsPx.address, bbFarm.address, {gasPrice: 0});
         await doLog(`Created svIx at ${svIx.address}`)
 
         await ixEnsPx.setAddr(svIx.address);
@@ -84,6 +82,8 @@ const wrapTest = ({accounts}, f) => {
 
         await be.setPermissions(svIx.address, true);
         await be.doLockdown();
+
+        await bbFarm.setPermissions(svIx.address, true);
 
         await payments.setPermissions(svIx.address, true);
         await payments.doLockdown();
@@ -112,7 +112,9 @@ const wrapTest = ({accounts}, f) => {
         const adminPx = SVAdminPx.at(adminPxAddr)
         const ixPx = SVIndex.at(adminPxAddr)
 
-        return await f({svIx, democHash, adminPx, ixPx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, payments, scLog, owner, backupOwner, ixEnsPx, erc20, accounts});
+        await doLog ("Done setting up initialization for SVIndex")
+
+        return await f({svIx, democHash, adminPx, ixPx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbFarm, tld, payments, scLog, owner, backupOwner, ixEnsPx, erc20, accounts});
     };
 };
 

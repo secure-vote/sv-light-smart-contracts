@@ -1,7 +1,5 @@
 const SVIndex = artifacts.require("./SVLightIndex");
 const SVAdminPx = artifacts.require("./SVLightAdminProxy");
-const SVBallotBox = artifacts.require("./SVLightBallotBox");
-const BBFactory = artifacts.require("./SVBBoxFactory");
 const PxFactory = artifacts.require("./SVAdminPxFactory");
 const IxBackend = artifacts.require("./SVIndexBackend");
 const IxPayments = artifacts.require("./SVPayments");
@@ -41,7 +39,7 @@ const wrapTestIx = ({accounts}, f) => {
 
         await doLog(`Created logger...`);
 
-        const bbfarm = await BBFarm.new();
+        const bbFarm = await BBFarm.new();
 
         const be = await IxBackend.new();
         await doLog(`Created backend...`);
@@ -50,7 +48,7 @@ const wrapTestIx = ({accounts}, f) => {
         const pxF = await PxFactory.new();
         await doLog(`Created PxFactory...`);
 
-        await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
+        await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address})`)
 
         const tld = "test";
         const testLH = web3.sha3(tld);
@@ -72,7 +70,7 @@ const wrapTestIx = ({accounts}, f) => {
         await ensPx.regNameWOwner("index", zeroAddr, ixEnsPx.address);
         await doLog(`Created index.${tld} owner px at ${ixEnsPx.address}`)
 
-        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, ensPx.address, ixEnsPx.address, bbfarm.address, {gasPrice: 0});
+        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, ensPx.address, ixEnsPx.address, bbFarm.address, {gasPrice: 0});
         await doLog(`Created svIx at ${svIx.address}`)
 
         await ixEnsPx.setAddr(svIx.address);
@@ -84,7 +82,7 @@ const wrapTestIx = ({accounts}, f) => {
         await be.setPermissions(svIx.address, true);
         await be.doLockdown();
 
-        await bbfarm.setPermissions(svIx.address, true);
+        await bbFarm.setPermissions(svIx.address, true);
 
         await paySC.setPermissions(svIx.address, true);
         await paySC.doLockdown();
@@ -111,7 +109,7 @@ const wrapTestIx = ({accounts}, f) => {
         await doLog('>>> FINISHED SETUP <<<')
 
         loggingActive = true;
-        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbF, tld, paySC, scLog, doLog, owner, backupOwner, ixEnsPx, erc20, accounts}, accounts);
+        return await f({svIx, ensRry, ensRrr, ensPR, ensPx, be, pxF, bbFarm, tld, paySC, scLog, doLog, owner, backupOwner, ixEnsPx, erc20, accounts}, accounts);
     };
 };
 
@@ -130,7 +128,7 @@ const mkDemoc = async ({svIx, txOpts, erc20}) => {
 
 /* ACTUAL TESTS */
 
-const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbF, owner, erc20}) => {
+const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbFarm, owner, erc20}) => {
     // test that upgrades to new Indexes work
 
     /**
@@ -150,7 +148,7 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbF, owner, er
     assert.equal(await adminPx._forwardTo(), svIx.address, "adminPx fwdTo matches init")
 
     // upgrade proper
-    const newIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address);
+    const newIx = await SVIndex.new(be.address, paySC.address, pxF.address, ensPx.address, ixEnsPx.address, bbFarm.address);
 
     await svIx.doUpgrade(newIx.address);
 
@@ -158,11 +156,13 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbF, owner, er
 
     assert.equal(await be.hasPermissions(newIx.address), true, "new ix should have BE permissions");
     assert.equal(await paySC.hasPermissions(newIx.address), true, "new ix should have payments permissions");
+    assert.equal(await bbFarm.hasPermissions(newIx.address), true, "new ix should have bbfarm permissions");
     assert.equal(await ensPx.isAdmin(newIx.address), true, "new ix should have ensPx permissions");
     assert.equal(await ixEnsPx.isAdmin(newIx.address), true, "new ix should have ixEnsPx permissions");
 
     assert.equal(await be.hasPermissions(svIx.address), false, "old ix should not have BE permissions");
     assert.equal(await paySC.hasPermissions(svIx.address), false, "old ix should not have payments permissions");
+    assert.equal(await bbFarm.hasPermissions(svIx.address), false, "old ix should not have bbfarm permissions");
     assert.equal(await ensPx.isAdmin(svIx.address), false, "old ix should not have ensPx permissions");
     assert.equal(await ixEnsPx.isAdmin(svIx.address), false, "old ix should not have ixEnsPx permissions");
 
@@ -424,6 +424,12 @@ const testBasicExtraBallots = async () => {
     throw Error("not impl")
 }
 
+/* bb farm won - by a lot
+    Std:  1392871
+    Lib:  1310372
+    NoSC: 155579
+    BBFarm: 274586
+*/
 
 const testGasOfBallots = async ({svIx, owner, erc20}) => {
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, txOpts: {from: owner, value: 1}, erc20});
@@ -431,32 +437,13 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
 
     const b1 = await getBalance(owner)
 
-    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 1)
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, packed)
 
     const b2 = await getBalance(owner)
 
-    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 2)
-
-    const b3 = await getBalance(owner)
-
-    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 3)
-
-    const b4 = await getBalance(owner)
-
-    await ixPx.dDeployBallotTest(democHash, genRandomBytes32(), zeroHash, packed, 4)
-
-    const b5 = await getBalance(owner)
-
-
-
     console.log(`Deploy Ballot Gas Costs:
-    Std:  ${b1.minus(b2).toFixed()}
-    Lib:  ${b2.minus(b3).toFixed()}
-    NoSC: ${b3.minus(b4).toFixed()}
-    Farm: ${b4.minus(b5).toFixed()}
+    BBFarm: ${b1.minus(b2).toFixed()}
     `)
-
-    assert.equal(b2.minus(b1).lt(b1.minus(b2)), true, "lib deploy should be cheaper");
 }
 
 
