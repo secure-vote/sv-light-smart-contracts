@@ -1,5 +1,5 @@
-var SVBallotBox = artifacts.require("./SVLightBallotBox");
-var BBInstance = artifacts.require("./BBInstance")
+// var SVBallotBox = artifacts.require("./SVLightBallotBox");
+// var BBInstance = artifacts.require("./BBInstance")
 var EmitterTesting = artifacts.require("./EmitterTesting");
 var SvIndex = artifacts.require("./SVLightIndex");
 var SvPayments = artifacts.require("./SVPayments");
@@ -631,8 +631,8 @@ contract("BallotBox", function(accounts) {
         ["test owner", testOwner],
     ]
     R.map(([desc, f]) => {
-        it("Std BB:  " + desc, _wrapTest({accounts, BB: SVBallotBox, bbName: "Std", mkFarm: false}, f))
-        it("Lib BB:  " + desc, _wrapTest({accounts, BB: BBInstance, bbName: "Lib", mkFarm: false}, f))
+        // it("Std BB:  " + desc, _wrapTest({accounts, BB: SVBallotBox, bbName: "Std", mkFarm: false}, f))
+        // it("Lib BB:  " + desc, _wrapTest({accounts, BB: BBInstance, bbName: "Lib", mkFarm: false}, f))
         it("Farm BB: " + desc, _wrapTest({accounts, bbName: "Farm", mkFarm: true}, f))
     }, tests);
 

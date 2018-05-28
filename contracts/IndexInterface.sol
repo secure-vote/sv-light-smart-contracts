@@ -6,13 +6,14 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 
 interface IxIface {
     function getVersion() external view returns (uint256);
+    function getBBFarm() external view returns (address);
 
     function doUpgrade(address) external;
     function emergencySetPaymentBackend(IxPaymentsIface) external;
     function emergencySetBackend(IxBackendIface) external;
     function emergencySetAdmin(bytes32 democHash, address newAdmin) external;
     function emergencySetAdminPxFactory(address _pxF) external;
-    function emergencySetBBFactory(address _bbF) external;
+    function emergencySetBBFarm(address _bbFarm) external;
 
     function getPayTo() external view returns (address);
     function getCommunityBallotCentsPrice() external view returns (uint);
@@ -38,7 +39,7 @@ interface IxIface {
 
     function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint);
     // only ix owner - used for adding past ballots
-    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed) external returns (uint);
+    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) external;
 
     /* global democ getters */
     function getDCategoriesN(bytes32 democHash) external view returns (uint);
@@ -50,8 +51,7 @@ interface IxIface {
 
     /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
-    function getDBallot(bytes32 democHash, uint256 n) external view returns (bytes32 extraData, BallotBoxIface bb);
-    function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface);
+    function getDBallotID(bytes32 democHash, uint256 n) external view returns (uint256 ballotId);
 }
 
 
@@ -123,26 +123,24 @@ interface IxBackendIface {
 
     /* democ admin */
     function dInit(address defaultErc20) external returns (bytes32);
-    function dAddBallot(bytes32 democHash, bytes32 extraData, BallotBoxIface bb, bytes32 specHash, uint256 packed) external returns (uint ballotId);
+    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) external;
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
     function setDAdmin(bytes32 democHash, address newAdmin) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
 
     /* global democ getters */
-    function getDCategoriesN(bytes32 democHash) external view returns (uint);
-    function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool deprecated, bytes32 name, bool hasParent, uint parent);
-    function getDAdmin(bytes32 democHash) external view returns (address);
     function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 nBallots);
     function getDErc20(bytes32 democHash) external view returns (address);
+    function getDAdmin(bytes32 democHash) external view returns (address);
 
-    /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
-    function getDBallot(bytes32 democHash, uint n) external view returns (bytes32 extraData, BallotBoxIface bb);
-    function getDBallotCreationTs(bytes32 democHash, uint n) external view returns (uint);
+    function getDBallotID(bytes32 democHash, uint n) external view returns (uint ballotId);
     function getDOfficialBallotsN(bytes32 democHash) external view returns (uint256);
     function getDOfficialBallotID(bytes32 democHash, uint256 officialN) external returns (uint256);
-    function getDBallotBox(bytes32 democHash, uint id) external view returns (BallotBoxIface);
+
+    function getDCategoriesN(bytes32 democHash) external view returns (uint);
+    function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool deprecated, bytes32 name, bool hasParent, uint parent);
 
     /* just for prefix stuff */
     function getDHash(bytes13 prefix) external view returns (bytes32);

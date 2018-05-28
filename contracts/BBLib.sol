@@ -76,6 +76,8 @@ library BBLib {
 
         // specHash by which to validate the ballots integrity
         bytes32 specHash;
+        // extradata if we need it - allows us to upgrade spechash format, etc
+        bytes32 extraData;
 
         // allow tracking of sponsorship for this ballot & connection to index
         Sponsor[] sponsors;
@@ -85,6 +87,7 @@ library BBLib {
         bool deprecated;
 
         address ballotOwner;
+        uint256 creationTs;
     }
 
 
@@ -115,7 +118,7 @@ library BBLib {
 
     // "Constructor" function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner) external {
+    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner, bytes32 extraData) external {
         db.index = ix;
         db.ballotOwner = ballotOwner;
 
@@ -132,7 +135,7 @@ library BBLib {
         // 0x1ff2 is 0001111111110010 in binary
         // by ANDing with subBits we make sure that only bits in positions 0,2,3,13,14,15
         // can be used. these correspond to the option flags at the top, and ETH ballots
-        // that are enc'd or plaintext.
+    // that are enc'd or plaintext.
         require(sb & 0x1ff2 == 0, "bad-sb");
 
         bool _testing = isTesting(sb);
@@ -146,6 +149,11 @@ library BBLib {
         startTs = (_testing || startTs > now) ? startTs : uint64(now);
 
         db.packed = BPackedUtils.pack(sb, startTs, endTs);
+        db.creationTs = now;
+
+        if (extraData != bytes32(0)) {
+            db.extraData = extraData;
+        }
 
         emit CreatedBallot(db.specHash, startTs, endTs, sb);
     }

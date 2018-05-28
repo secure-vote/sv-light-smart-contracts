@@ -8,10 +8,6 @@
       "error",
       "double"
     ],
-    "indentation": [
-      "error",
-      4
-    ],
     "comma-whitespace": 0,
     "operator-whitespace": 0
   }
