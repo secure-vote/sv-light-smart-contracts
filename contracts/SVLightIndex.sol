@@ -575,33 +575,34 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
     }
 
     /* adding this function seems to mean we can't deploy for some reason.... */
+    /* maybe to do with being larger than 29kb? */
 
-    // function dDeployBallotNoSC(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed)
-    //                       onlyDemocAdmin(democHash)
-    //                       // todo: handling payments here
-    //                       external payable
-    //                       returns (uint) {
+    function dDeployBallotNoSC(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed)
+                          onlyDemocAdmin(democHash)
+                          // todo: handling payments here
+                          external payable
+                          returns (uint) {
 
-    //     // we need to end in the future
-    //     uint64 endTime = BPackedUtils.packedToEndTime(packed);
-    //     require(endTime > uint64(now), "ballot must end in future");
+        // // we need to end in the future
+        // uint64 endTime = BPackedUtils.packedToEndTime(packed);
+        // require(endTime > uint64(now), "ballot must end in future");
 
-    //     uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
-    //     require(BBLib.isTesting(submissionBits) == false, "ballot cannot be in testing mode");
+        // uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
+        // require(BBLib.isTesting(submissionBits) == false, "ballot cannot be in testing mode");
 
-    //     if (BBLib.isOfficial(submissionBits)) {
-    //         _basicBallotLimitOperations(democHash);
-    //         _deployBallotChecks(democHash, endTime);
-    //     }
+        // if (BBLib.isOfficial(submissionBits)) {
+        //     _basicBallotLimitOperations(democHash);
+        //     _deployBallotChecks(democHash, endTime);
+        // }
 
-    //     // BallotBoxIface bb = bbFactory.spawn2(
-    //     //     specHash,
-    //     //     packed,
-    //     //     this,
-    //     //     msg.sender);
+        // // BallotBoxIface bb = bbFactory.spawn2(
+        // //     specHash,
+        // //     packed,
+        // //     this,
+        // //     msg.sender);
 
-    //     return _addBallot(democHash, extraData, BallotBoxIface(address(msg.sender)), specHash, packed);
-    // }
+        // return _addBallot(democHash, extraData, BallotBoxIface(address(msg.sender)), specHash, packed);
+    }
 
 
     // sv ens domains
