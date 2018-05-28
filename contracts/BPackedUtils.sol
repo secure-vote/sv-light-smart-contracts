@@ -34,11 +34,11 @@ library BPackedUtils {
         return (packed & sbMask) | uint256(newSB) << 128;
     }
 
-    function setStartTime(uint256 packed, uint64 startTime) internal pure returns (uint256) {
-        return (packed & startTimeMask) | uint256(startTime) << 64;
-    }
+    // function setStartTime(uint256 packed, uint64 startTime) internal pure returns (uint256) {
+    //     return (packed & startTimeMask) | uint256(startTime) << 64;
+    // }
 
-    function setEndTime(uint256 packed, uint64 endTime) internal pure returns (uint256) {
-        return (packed & endTimeMask) | uint256(endTime);
-    }
+    // function setEndTime(uint256 packed, uint64 endTime) internal pure returns (uint256) {
+    //     return (packed & endTimeMask) | uint256(endTime);
+    // }
 }

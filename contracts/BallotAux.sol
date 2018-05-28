@@ -64,9 +64,9 @@ contract BallotAux is BBAuxIface {
         ( hv,,,,,,,,) = bb.getDetails(voter);
     }
 
-    function getBallotOwner(BallotBoxIface bb) external view returns (address ballotOwner) {
-        (,,,,,,,, ballotOwner) = bb.getDetails(zeroAddr);
-    }
+    // function getBallotOwner(BallotBoxIface bb) external view returns (address ballotOwner) {
+    //     (,,,,,,,, ballotOwner) = bb.getDetails(zeroAddr);
+    // }
 
     function getVotes(BallotBoxIface bb) external view
         returns ( bytes32[] memory ballots
