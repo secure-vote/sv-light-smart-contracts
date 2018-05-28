@@ -49,8 +49,6 @@ const wrapTestIx = ({accounts}, f) => {
         await doLog(`Created payments backend...`);
         const pxF = await PxFactory.new();
         await doLog(`Created PxFactory...`);
-        const bbF = await BBFactory.new();
-        await doLog(`Created BBFactory...`);
 
         await doLog(`Set up contracts: \nbackend (${be.address}), \npaymentSettings (${paySC.address}), \npxFactory (${pxF.address}), \nbbFactory (${bbF.address})`)
 
@@ -74,7 +72,7 @@ const wrapTestIx = ({accounts}, f) => {
         await ensPx.regNameWOwner("index", zeroAddr, ixEnsPx.address);
         await doLog(`Created index.${tld} owner px at ${ixEnsPx.address}`)
 
-        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, bbF.address, ensPx.address, ixEnsPx.address, bbfarm.address, {gasPrice: 0});
+        const svIx = await SVIndex.new(be.address, paySC.address, pxF.address, ensPx.address, ixEnsPx.address, bbfarm.address, {gasPrice: 0});
         await doLog(`Created svIx at ${svIx.address}`)
 
         await ixEnsPx.setAddr(svIx.address);

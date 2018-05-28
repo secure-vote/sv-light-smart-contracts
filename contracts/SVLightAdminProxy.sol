@@ -7,12 +7,11 @@ pragma solidity ^0.4.24;
 
 import { owned, upgradePtr } from "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
-import { SVLightBallotBox } from "./SVLightBallotBox.sol";
-import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
 import "./BBLib.sol";
 import "./BPackedUtils.sol";
+import "./BBFarm.sol";
 
 
 contract SVLightAdminProxy is owned, SVBallotConsts {
@@ -142,7 +141,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         id = ix.dDeployBallot(democHash, specHash, extraData, packed);
 
         // should we set owner to 0 so admins can't interfere with community ballots?
-        ix.getDBallotBox(democHash, id).setOwner(address(0));
+        BBFarm(ix.getBBFarm()).setBallotOwner(id, address(0));
     }
 
     // admin management

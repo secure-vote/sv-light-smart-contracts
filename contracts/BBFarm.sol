@@ -31,10 +31,15 @@ contract BBFarm is permissioned {
 
     /* Init ballot */
 
-    function initBallot(bytes32 specHash, uint256 packed, IxIface ix, address bbAdmin) only_editors() external returns (uint ballotId) {
+    function initBallot( bytes32 specHash
+                       , uint256 packed
+                       , IxIface ix
+                       , address bbAdmin
+                       , bytes32 extraData
+                ) only_editors() external returns (uint ballotId) {
         // we need to call the init functions on our libraries
         ballotId = nBallots;
-        dbs[ballotId].init(specHash, packed, ix, bbAdmin);
+        dbs[ballotId].init(specHash, packed, ix, bbAdmin, extraData);
         nBallots = ballotId + 1;
         emit BallotCreatedWithID(ballotId);
     }
@@ -93,6 +98,10 @@ contract BBFarm is permissioned {
 
     function getTotalSponsorship(uint ballotId) external view returns (uint) {
         return dbs[ballotId].getTotalSponsorship();
+    }
+
+    function getCreationTs(uint ballotId) external view returns (uint) {
+        return dbs[ballotId].creationTs;
     }
 
     /* ADMIN */
