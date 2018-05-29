@@ -177,11 +177,10 @@ contract permissioned is owned, hasAdmins {
     }
 
     // always allow SCs to upgrade themselves, even after lockdown
-    function upgradeMe(address newSC) only_editors() external returns (bool) {
+    function upgradeMe(address newSC) only_editors() external {
         editAllowed[msg.sender] = false;
         editAllowed[newSC] = true;
         emit SelfUpgrade(msg.sender, newSC);
-        return true;
     }
 
     function hasPermissions(address a) public view returns (bool) {
