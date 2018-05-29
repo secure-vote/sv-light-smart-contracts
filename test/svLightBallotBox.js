@@ -184,7 +184,8 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
     const _sk = await aux.getEncSeckey();
     assert.equal(_sk, bytes32zero, "ballot enc key should be zeros before reveal");
 
-    assert.equal(await vc.farm.getCreationTs(0), bCreation.timestamp, "creationTs should match expected");
+    // we start counting ballots from 1 - ballotId == 0 is never valid
+    assert.deepEqual(await vc.farm.getCreationTs(1), toBigNumber(bCreation.timestamp), "creationTs should match expected");
 
     //// ASSERTIONS FOR INSTANTIATION COMPLETE
 
