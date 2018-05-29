@@ -387,6 +387,7 @@ const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => 
     const weiPerCent1 = await paySC.getWeiPerCent();
     assert.deepEqual(weiPerCent1, toBigNumber('18975332000000'), 'wei per cent matches init expectations')
     assert.deepEqual(await paySC.getUsdEthExchangeRate(), toBigNumber(52700), 'usd/eth init matches expected')
+    assert.deepEqual(await paySC.weiToCents(weiPerCent1), toBigNumber(1), '1 cent sanity check init')
 
     await testWeiAndPrices();
 
@@ -395,6 +396,7 @@ const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => 
     const weiPerCent2 = await paySC.getWeiPerCent();
     assert.deepEqual(weiPerCent2, toBigNumber('15015015000000'), 'wei per cent matches init expectations')
     assert.deepEqual(await paySC.getUsdEthExchangeRate(), toBigNumber(66600), 'usd/eth init matches expected')
+    assert.deepEqual(await paySC.weiToCents(weiPerCent2), toBigNumber(1), '1 cent sanity check 2')
 
     await testWeiAndPrices();
 
@@ -405,6 +407,9 @@ const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => 
     const weiPerCent3 = await paySC.getWeiPerCent();
     assert.deepEqual(weiPerCent3, toBigNumber('1110987600000'), 'wei per cent matches init expectations')
     assert.deepEqual(await paySC.getUsdEthExchangeRate(), toBigNumber(900100), 'usd/eth init matches expected')
+    assert.deepEqual(await paySC.weiToCents(weiPerCent3), toBigNumber(1), '1 cent sanity check 3')
+    assert.deepEqual(await paySC.weiToCents(weiPerCent3.times(2)), toBigNumber(2), '2 cent sanity check @ 3')
+    assert.deepEqual(await paySC.weiToCents(weiPerCent3.times(1.7)), toBigNumber(1), '1 cent rounding check')
 
     await testWeiAndPrices();
 
@@ -495,9 +500,97 @@ const testPrefix = async ({svIx, owner, doLog, ensPR, tld, erc20}) => {
 }
 
 
-const testPremiumUpgradeDowngrade = async () => {
-    throw Error('not implemented');
+const testCommonRevertCases = async ({svIx, owner, doLog, erc20}) => {
+    await assertRevert(IxPayments.new(zeroAddr), "payments throws on zeroAddr")
 
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1}})
+
+    await assertRevert(svIx.payForDemocracy(democHash, {value: 0}), 'zero payment should revert')
+}
+
+
+const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) => {
+    const premMultiplier = (await paySC.getPremiumMultiplier()).toNumber()
+    const premPrice30Days = await paySC.getPremiumCentsPricePer30Days()
+    const premWeiPer30Days = await paySC.centsToWei(premPrice30Days)
+    const weiPerCent = await paySC.getWeiPerCent();
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1}})
+    const b = await getBlock('latest')
+
+    // test upgrade and downgrade with no time
+    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(0), toBigNumber(0)], 'getAccount matches init expectations')
+    assert.equal(await paySC.getPremiumStatus(democHash), false, 'not premium 1')
+    await ixPx.dUpgradeToPremium(democHash)
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(0), toBigNumber(0)], 'getAccount matches expectations after null upgrade')
+    assert.equal(await paySC.getPremiumStatus(democHash), true, 'is premium 1')
+    await ixPx.dDowngradeToBasic(democHash)
+    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(0), toBigNumber(0)], 'getAccount matches expectations after null downgrade')
+    assert.equal(await paySC.getPremiumStatus(democHash), false, 'not premium 2')
+
+    assert.deepEqual(await paySC.getSecondsRemaining(democHash), toBigNumber(0), 'no seconds remaining')
+
+    // now with payments
+    const centsFor30Days = await paySC.getBasicCentsPricePer30Days();
+    const weiFor30Days = await paySC.centsToWei(centsFor30Days);
+    assert.deepEqual(await paySC.weiToCents(weiFor30Days), toBigNumber(100000), '30 days of wei matches cents expectation')
+    await svIx.payForDemocracy(democHash, {value: weiFor30Days})
+    const b2 = await getBlock('latest')
+    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30)], 'getAccount matches after payment')
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(60 * 60 * 24 * 30), 'should have 30 days left')
+
+    // let's do that upgrade!
+    await ixPx.dUpgradeToPremium(democHash)
+    await assertRevert(ixPx.dUpgradeToPremium(democHash), 'cannot upgrade to premium twice')
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30 / premMultiplier)], 'getAccount matches after upgrade')
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(60 * 60 * 24 * 30 / premMultiplier), 'should have 6 days left')
+
+    await svIx.payForDemocracy(democHash, {value: weiFor30Days})
+    const b3 = await getBlock('latest')
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b3.timestamp), toBigNumber(b2.timestamp + 2 * 60 * 60 * 24 * 30 / premMultiplier)], 'getAccount matches after upgrade')
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(2 * 60 * 60 * 24 * 30 / premMultiplier), 'should have 12 days left')
+
+    assert.deepEqual(premPrice30Days, centsFor30Days.times(premMultiplier), 'prices match according to premium multiplier')
+
+    await svIx.payForDemocracy(democHash, {value: premWeiPer30Days})
+    const b4 = await getBlock('latest')
+    const timeLeft = ((2 + premMultiplier) * 60 * 60 * 24 * 30 / premMultiplier);
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b4.timestamp), toBigNumber(b2.timestamp + timeLeft)], 'getAccount matches after upgrade')
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft), 'should have 42 days left')
+
+
+    // and test downgrades
+    await ixPx.dDowngradeToBasic(democHash)
+    await assertRevert(ixPx.dDowngradeToBasic(democHash), 'cant downgrade twice')
+
+    const timeLeft2 = timeLeft * premMultiplier
+
+    // need to split this up b/c the downgrade can have an error of up to 5s due to rounding (which occurs in the _upgrade_ step)
+    const [isPrem, lastPaid, paidTill] = await paySC.getAccount(democHash);
+    assert.deepEqual([isPrem, lastPaid], [false, toBigNumber(b4.timestamp)], 'getAccount [0:1] matches after downgrade')
+    assert.reallyClose(paidTill, toBigNumber(b2.timestamp + timeLeft2), 'getAccount paidTill matches after downgrade', 5)
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft2), 'should have 42*5 days left', 5)
+
+
+    // check payments log
+    assert.deepEqual(await paySC.getPaymentLogN(), toBigNumber(4), 'payment n log as expected')
+    assert.deepEqual(await paySC.getPaymentLog(0), [false, democHash, toBigNumber(0), toBigNumber(1)], 'payment 0 matches')
+    assert.deepEqual(await paySC.getPaymentLog(1), [false, democHash, toBigNumber(60*60*24*30), weiFor30Days], 'payment 1 matches')
+    assert.deepEqual(await paySC.getPaymentLog(2), [false, democHash, toBigNumber(60*60*24*30 / premMultiplier | 0), weiFor30Days], 'payment 2 matches')
+    assert.deepEqual(await paySC.getPaymentLog(3), [false, democHash, toBigNumber(60*60*24*30), premWeiPer30Days], 'payment 3 matches')
+
+
+    await paySC.giveTimeToDemoc(democHash, 100, "a reference")
+    assert.deepEqual(await paySC.getPaymentLog(4), [true, democHash, toBigNumber(100), toBigNumber(0)], 'payment 3 matches')
+}
+
+
+const testPaymentsSettingValues = async () => {
+    throw Error('')
+}
+
+
+const testPaymentsPayoutAll = async () => {
+    throw Error('')
 }
 
 
@@ -655,24 +748,27 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
 
 contract("SVLightIndex", function (accounts) {
     tests = [
+        ["common revert cases", testCommonRevertCases],
         ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
-        ["test paying for extra ballots (basic)", testBasicExtraBallots],
-        ["test catagories (crud)", testCatagoriesCrud],
-        ["test nfp tier", testNFPTierAndPayments],
-        ["test manually add ballots", testManualBallots],
-        ["test democ prefix stuff", testPrefix],
-        ["test all admin functions", testAllAdminFunctions],
-        ["test currency conversion", testCurrencyConversion],
-        ["test payments backup admin", testPaymentsEmergencySetOwner],
-        ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
-        ["test emergency methods", testEmergencyMethods],
-        ["test community ballots (default)", testCommunityBallots],
-        ["test version", testVersion],
-        ["test upgrade", testUpgrade],
-        ["test instantiation", testInit],
-        ["test creating democ and permissions", testCreateDemoc],
-        ["test payments for democ", testPaymentsForDemoc],
-        ["test gas ballots", testGasOfBallots],
+        // ["test payments setting values", testPaymentsSettingValues],
+        // ["test payments payout all", testPaymentsPayoutAll],
+        // ["test paying for extra ballots (basic)", testBasicExtraBallots],
+        // ["test catagories (crud)", testCatagoriesCrud],
+        // ["test nfp tier", testNFPTierAndPayments],
+        // ["test manually add ballots", testManualBallots],
+        // ["test democ prefix stuff", testPrefix],
+        // ["test all admin functions", testAllAdminFunctions],
+        // ["test currency conversion", testCurrencyConversion],
+        // ["test payments backup admin", testPaymentsEmergencySetOwner],
+        // ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
+        // ["test emergency methods", testEmergencyMethods],
+        // ["test community ballots (default)", testCommunityBallots],
+        // ["test version", testVersion],
+        // ["test upgrade", testUpgrade],
+        // ["test instantiation", testInit],
+        // ["test creating democ and permissions", testCreateDemoc],
+        // ["test payments for democ", testPaymentsForDemoc],
+        // ["test gas ballots", testGasOfBallots],
     ];
     S.map(([desc, f]) => it(desc, wrapTestIx({accounts}, f)), tests);
 });
