@@ -39,3 +39,10 @@ contract SvEnsEverythingPx is hasAdmins {
         registry.setOwner(node, domainOwner);
     }
 }
+
+
+// this is for backwards compatibility before EnsOwnerProxy used `hasAdmins`
+interface SvEnsEverythingPxGen1Iface {
+    function admins(address) external view returns (bool);
+    function addAdmin(address) external;
+}

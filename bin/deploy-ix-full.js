@@ -34,12 +34,15 @@ const exitIf = (cond, msg) => {
 }
 
 
+const logFile = fs.openSync(`deploy-${(new Date()).getTime() / 1000 | 0}.log`, 'w')
+
+
 const log = (msg, offset = 0) => {
-    if (offset > 0) {
-        console.log(" ".repeat(offset - 1), msg)
-    } else {
-        console.log(msg)
-    }
+    let msgStr = R.is(Object, msg) || R.is(Array, msg) ? JSON.stringify(msg, null, 2): msg.toString();
+    msgStr = " ".repeat(offset) + msgStr;
+
+    console.log(msgStr)
+    fs.appendFileSync(logFile, `\n    [${(new Date()).getTime() / 1000 | 0}]    \n${msgStr}\n`)
 }
 
 
@@ -175,14 +178,14 @@ const deployContract = async ({name, deployAcct, arguments = [], srcDir = DEFAUL
 
 
 
-const fullDeploy = async ({dev, deployAcct, index, backend, payments, adminPxF, ballotBoxF, deployOptions, globalConfig, paymentsEmergencyAdmin, ensProxy, ensOwnerProxy, ensIxDomain}) => {
+const fullDeploy = async ({dev, deployAcct, index, backend, payments, adminPxF, bbFarm, deployOptions, globalConfig, paymentsEmergencyAdmin, ensProxy, ensOwnerProxy, ensIxDomain, ensProxyIsGen1, skipPermissions}) => {
     const _load = filename => loadDetails(filename, "_solDist");
 
     if (S.isNothing(deployOptions)) {
         backend = backend || await deployContract({deployAcct, name: 'SVIndexBackend'})
         payments = payments || await deployContract({deployAcct, name: 'SVPayments', arguments: [paymentsEmergencyAdmin]})
         adminPxF = adminPxF || await deployContract({deployAcct, name: 'SVAdminPxFactory'})
-        ballotBoxF = ballotBoxF || await deployContract({deployAcct, name: 'SVBBoxFactory'})
+        bbFarm = bbFarm || await deployContract({deployAcct, name: 'BBFarm'})
 
         if (!index) {
             logInfo('About to deploy Index\n')
@@ -190,7 +193,7 @@ const fullDeploy = async ({dev, deployAcct, index, backend, payments, adminPxF, 
             index = index || await deployContract({
                 deployAcct,
                 name: 'SVLightIndex',
-                arguments: [backend, payments, adminPxF, ballotBoxF, ensProxy, ensOwnerProxy]
+                arguments: [backend, payments, adminPxF, ensProxy, ensOwnerProxy, bbFarm]
             })
 
             logInfo(`Index deployed to ${index}!`)
@@ -198,15 +201,17 @@ const fullDeploy = async ({dev, deployAcct, index, backend, payments, adminPxF, 
             logInfo(`Index provided at ${index}`)
         }
 
-        logInfo(`We need to set index permissions on backend and payments`)
-
-        await setIndexEditorBackendPayments({backend, payments, index, deployAcct})
-
+        if (skipPermissions) {
+            logInfo("Skipping setting permissions on backends")
+        } else {
+            logInfo(`We need to set index permissions on backend and payments`)
+            await setIndexEditorBackendPayments({backend, payments, index, deployAcct, bbFarm})
+        }
         logInfo(`Next we need to configure the ens stuff.`)
 
         logBreak()
 
-        await addIndexToEnsPx({deployAcct, ensIxDomain, ensProxy, index})
+        await addIndexToEnsPx({deployAcct, ensIxDomain, ensProxy, index, ensProxyIsGen1})
 
         logBreak()
 
@@ -216,59 +221,63 @@ const fullDeploy = async ({dev, deployAcct, index, backend, payments, adminPxF, 
 }
 
 
-const setIndexEditorBackendPayments = async ({deployAcct, backend, payments, index}) => {
-
+const setIndexEditorBackendPayments = async ({deployAcct, backend, payments, index, bbFarm}) => {
     const [backendABI] = loadDetails("SVIndexBackend")
     const [paymentsABI] = loadDetails("SVPayments")
+    const [bbFarmABI] = loadDetails("BBFarm")
 
     const cBackend = new web3.eth.Contract(backendABI, backend)
     const cPayments = new web3.eth.Contract(paymentsABI, payments)
+    const cBBFarm = new web3.eth.Contract(bbFarmABI, bbFarm)
 
     logInfo('Setting permissions on backend')
     await sendSCMethod(cBackend, cBackend.methods.setPermissions(index, true), deployAcct, silent = false)
     logInfo('Setting permissions on payments')
     await sendSCMethod(cPayments, cPayments.methods.setPermissions(index, true), deployAcct, silent = false)
+    logInfo('Setting permissions on bbfarm')
+    await sendSCMethod(cBBFarm, cBBFarm.methods.setPermissions(index, true), deployAcct, silent = false)
     logInfo('Done!')
 }
 
 
-const addIndexToEnsPx = async ({deployAcct, ensIxDomain, ensProxy, index}) => {
+const addIndexToEnsPx = async ({deployAcct, ensIxDomain, ensProxy, index, ensProxyIsGen1}) => {
     const [ensProxyABI] = loadDetails("SvEnsEverythingPx")
+    const [ensProxyGen1ABI] = loadDetails("SvEnsEverythingPxGen1Iface")
 
-    // const domainNode = nh.hash(ensIxDomain);
-    // const [domainLabel, rootLabel] = ensIxDomain.split('.', 1);
-    // const rootNode = nh.hash(rootLabel)
+    if (ensProxyIsGen1) {
+        logInfo("Using gen1 EnsEverythingPx")
+    }
 
-    const cEnsPx = new web3.eth.Contract(ensProxyABI, ensProxy);
+    const {cEnsPx, mkAdminCheck, setAdmin} = ensProxyGen1ABI ?
+        {
+            cEnsPx: new web3.eth.Contract(ensProxyGen1ABI, ensProxy),
+            mkAdminCheck: async (cEnsPx, addr) => await cEnsPx.methods.admins(addr).call(),
+            setAdmin: async (cEnsPx, addr) => await sendSCMethod(cEnsPx, cEnsPx.methods.addAdmin(addr), deployAcct)
+        } :
+        {
+            cEnsPx: new web3.eth.Contract(ensProxyABI, ensProxy),
+            mkAdminCheck: async (cEnsPx, addr) => await cEnsPx.methods.isAdmin(addr).call(),
+            setAdmin: async (cEnsPx, addr) => await sendSCMethod(cEnsPx, cEnsPx.methods.setAdmin(addr, true), deployAcct)
+        }
 
-    // const resolver = await cEnsPx.methods.resolver().call();
-    const ens = await cEnsPx.methods.registry().call();
-    // const [resolverABI] = loadDetails("PublicResolver")
-    const [ensABI] = loadDetails("ENSIface")
-
-    // const cResolver = new web3.eth.Contract(resolverABI, resolver);
-    const cEns = new web3.eth.Contract(ensABI, ens);
-
-    // exitIf(SV.utils.ethAddrEq(await cEns.methods.owner(rootNode).call(), ensProxy), `ENS Proxy does not own ${rootLabel}! Cannot register or admin ${ensIxDomain}`)
-
-    if (await cEnsPx.methods.isAdmin(index).call() == true) {
+    if (await mkAdminCheck(cEnsPx, index) === true) {
         logInfo('Index already admin for EnsPx')
         return;
+    } else {
+        logInfo(`Detected index not an admin yet on EnsPx, ${await mkAdminCheck(cEnsPx, index)}`)
     }
-    const method = cEnsPx.methods.setAdmin(index, true);
 
     if (deployAcct) {
-        exitIf((await cEnsPx.methods.isAdmin(deployAcct.address).call()) == false, `Deploy Acct is not an admin with Ens Proxy`)
+        exitIf((await mkAdminCheck(cEnsPx, deployAcct.address)) === false, `Deploy Acct is not an admin with Ens Proxy`)
     }
 
     logInfo(`Adding Index as admin to EnsPx`)
-    const _addAdminR = await sendSCMethod(cEnsPx, method, deployAcct);
+    const _addAdminR = await setAdmin(cEnsPx, index);
     logInfo(`Added Index as admin to EnsPx in ${_addAdminR.transactionHash}`)
 }
 
 
 const configEnsOwnerPx = async ({deployAcct, ensIxDomain, ensOwnerProxy, index}) => {
-
     const domainNode = nh.hash(ensIxDomain);
     const [domainLabel, rootLabel] = ensIxDomain.split('.', 1);
     const rootNode = nh.hash(rootLabel)
@@ -278,19 +287,19 @@ const configEnsOwnerPx = async ({deployAcct, ensIxDomain, ensOwnerProxy, index})
 
     exitIf(await cEnsOwnerPx.methods.ensNode().call() !== domainNode, `Domain node (for ${ensIxDomain}) does not match EnsOwnerProxy node!`)
 
-    const method = cEnsOwnerPx.methods.setAdmin(index, true)
-    const method2 = cEnsOwnerPx.methods.setAddr(index)
+    const mSetAdmin = cEnsOwnerPx.methods.setAdmin(index, true)
+    const mSetAddr = cEnsOwnerPx.methods.setAddr(index)
 
     if (deployAcct) {
         exitIf((await cEnsOwnerPx.methods.isAdmin(deployAcct.address).call()) == false, `Deploy acct is not an admin for EnsOwnerProxy`)
     }
 
     logInfo(`Adding index as admin to ensOwnerPx`)
-    const _addAdminR = await sendSCMethod(cEnsOwnerPx, method, deployAcct)
+    const _addAdminR = await sendSCMethod(cEnsOwnerPx, mSetAdmin, deployAcct)
     logInfo(`Added index as admin to ensOwnerPx in ${_addAdminR.transactionHash}`)
 
     logInfo(`Setting ${ensIxDomain} to resolve to index`)
-    const _setAddrR = await sendSCMethod(cEnsOwnerPx, method2, deployAcct)
+    const _setAddrR = await sendSCMethod(cEnsOwnerPx, mSetAddr, deployAcct)
     logInfo(`Set ${ensIxDomain} to resolve to index at ${index} in ${_setAddrR.transactionHash}`)
 
 }
@@ -351,11 +360,23 @@ const main = async () => {
             describe: 'set this to a privkey to automatically deploy',
             demand: false
         },
+        "ensProxyIsGen1": {
+            type: 'boolean',
+            describe: 'use gen1 of SvEnsEverythingPx',
+            default: false,
+            demand: false
+        },
+        "skipPermissions": {
+            type: 'boolean',
+            describe: 'skip setting permissions on backend stuff',
+            default: false,
+            demand: false
+        },
         ...mkAddrArg("backend"),
         ...mkAddrArg("payments"),
         ...mkAddrArg("paymentsEmergencyAdmin"),
         ...mkAddrArg("adminPxF"),
-        ...mkAddrArg("ballotBoxF"),
+        ...mkAddrArg("bbFarm"),
         ...mkAddrArg("ensProxy", true),
         ...mkAddrArg("ensOwnerProxy", true),
         ...mkAddrArg("index"),

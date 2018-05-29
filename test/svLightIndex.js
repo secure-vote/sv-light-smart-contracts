@@ -204,6 +204,7 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner}
     const expectedDomain = prefixB32 + '.' + tld;
     assert.equal(await ensPR.addr(nh.hash(expectedDomain)), adminPx.address, "adminPx addr resolves via ENS for democ")
     await scLog.log(`Created ENS->admin at ${expectedDomain}`)
+    console.log("Sample domain created and tested at:", expectedDomain)
 
     // test some properties of adminPx
     assert.equal(await adminPx.admins(user1), true, "user1 should be admin to start with");
