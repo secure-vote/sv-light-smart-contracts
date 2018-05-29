@@ -207,21 +207,18 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
     //* EVENTS /
 
     event PaymentMade(uint[2] valAndRemainder);
+    event BallotAdded(bytes32 democHash, uint ballotId);
     event DemocAdded(bytes32 democHash, address admin);
-    event BallotAdded(bytes32 democHash, uint id);
+    event Emergency(bytes32 setWhat);
+    event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
     // for debug
-    event Log(string message);
+    // event Log(string message);
     // event LogB32(bytes32 b32);
 
     //* MODIFIERS /
 
-    modifier onlyBy(address _account) {
-        require(msg.sender == _account, "onlyBy: forbidden");
-        _;
-    }
-
     modifier onlyDemocAdmin(bytes32 democHash) {
-        require(msg.sender == backend.getDAdmin(democHash), "onlyDemocAdmin: forbidden");
+        require(msg.sender == backend.getDAdmin(democHash), "!democ-admin");
         _;
     }
 
@@ -259,22 +256,27 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
 
     function emergencySetPaymentBackend(IxPaymentsIface newSC) only_owner() external {
         payments = newSC;
+        emit Emergency(bytes32("payments"));
     }
 
     function emergencySetBackend(IxBackendIface newSC) only_owner() external {
         backend = newSC;
+        emit Emergency(bytes32("backend"));
     }
 
     function emergencySetAdminPxFactory(address _pxF) only_owner() external {
         adminPxFactory = SVAdminPxFactory(_pxF);
+        emit Emergency(bytes32("adminPxF"));
     }
 
     function emergencySetBBFarm(address _bbFarm) only_owner() external {
         bbfarm = BBFarm(_bbFarm);
+        emit Emergency(bytes32("bbFarm"));
     }
 
-    function emergencySetAdmin(bytes32 democHash, address newAdmin) only_owner() external {
+    function emergencySetDAdmin(bytes32 democHash, address newAdmin) only_owner() external {
         backend.setDAdmin(democHash, newAdmin);
+        emit EmergencyDemocAdmin(democHash, newAdmin);
     }
 
     //* GLOBAL INFO */

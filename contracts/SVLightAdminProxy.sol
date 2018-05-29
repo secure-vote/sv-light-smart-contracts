@@ -36,6 +36,10 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     event RemovedAdmin(address oldAdmin);
     event FailedToFwdCall(uint value, bytes data);
 
+    // from Democ Index
+    event PaymentMade(uint[2] valAndRemainder);
+    event BallotAdded(bytes32 democHash, uint ballotId);
+
     modifier isAdmin() {
         require(admins[msg.sender], "!admin");
         _;
@@ -128,7 +132,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         IxIface ix = IxIface(checkFwdAddressUpgrade());
 
         uint price = ix.getCommunityBallotWeiPrice();
-        require(price <= msg.value, "community ballots require the correct fee");
+        require(msg.value >= price, "!comm-b-fee");
 
         safeSend(ix.getPayTo(), "", price);
         safeSend(msg.sender, "", msg.value - price);

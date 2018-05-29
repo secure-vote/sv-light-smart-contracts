@@ -117,6 +117,7 @@ const wrapTestIx = ({accounts}, f) => {
 /* UTILITY FUNCTIONS */
 
 const mkDemoc = async ({svIx, txOpts, erc20}) => {
+    assert.equal(txOpts.value && txOpts.value > 0, true, "must have value when making democ")
     const createTx = await svIx.dInit(erc20.address, txOpts);
     const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocAdded", createTx);
     const adminPx = SVAdminPx.at(pxAddr);
@@ -273,25 +274,9 @@ const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}
 }
 
 
-const testSVDemocCreation = async () => {
-    // this tests the ability for SecureVote to create democs without payment
-
-    throw Error('not implemented');
-}
-
-
-const testDemocAdminPermissions = async () => {
-    throw Error('not implemented');
-
-}
-
-
 const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
     // test in cases we have a community instance and in cases where
     // they're enabled on a paying democ
-
-    // todo: ensure we're setting the right submission bits on the ballot
-    // when doing community ballots. (i.e. IS_OFFICIAL and IS_BINDING both false)
 
     await doLog('start of testCommunityBallots')
 
@@ -305,7 +290,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
     await doLog('verified comm ballots enabled')
 
     const [s,e] = genStartEndTimes()
-    const packed = toBigNumber(mkPacked(s, e, USE_ETH | USE_NO_ENC))
+    const packed = mkPacked(s, e, USE_ETH | USE_NO_ENC)
     const packedTimes = toBigNumber(mkPackedTime(s, e));
 
     await doLog('getting cBallot price')
@@ -352,27 +337,69 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
 }
 
 
-const testCommunityBallotsNonPayment = async () => {
-    // test community ballots in the case a democ's payment runs out
-    throw Error('not implemented');
-}
-
-
-const testNoCommunityBallots = async () => {
-    // ensure that community ballots don't work when we have an active
-    // democ that disables them
-    throw Error('not implemented');
-}
-
-
-const testCommunityBallotsAllowedSubBits = async () => {
-    throw Error('not implemented')
-}
-
-
-const testCurrencyConversion = async () => {
+const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => {
     // test our payment code around eth/usd stuff
-    throw Error('not implemented');
+
+    const [,minorEdits,u2,u3,u4,u5] = accounts;
+
+    const testWeiAndPrices = async () => {
+        const weiPerCent = await paySC.getWeiPerCent();
+        assert.deepEqual(await paySC.weiBuysHowManySeconds(weiPerCent.times(100000)), toBigNumber(60 * 60 * 24 * 30), '100k x weiPerCent should buy 30 days')
+        assert.deepEqual(await paySC.weiBuysHowManySeconds(weiPerCent.times(50000)), toBigNumber(60 * 60 * 24 * 15), '50k x weiPerCent should buy 15 days')
+        assert.deepEqual(await paySC.weiBuysHowManySeconds(weiPerCent.times(200000)), toBigNumber(60 * 60 * 24 * 60), '200k x weiPerCent should buy 60 days')
+
+        assert.deepEqual(await paySC.getCommunityBallotWeiPrice(), weiPerCent.times(1000), 'community ballot should cost ~$10')
+        assert.deepEqual(await paySC.getBasicCentsPricePer30Days(), toBigNumber(100000), 'basic costs $1000/mo or $100k cents / mo')
+
+        const basicBallotsPerMonth = await paySC.getBasicBallotsPer30Days()
+        assert.deepEqual(basicBallotsPerMonth, toBigNumber(5), 'basic ballots per month is 5 at start')
+        assert.deepEqual(await paySC.getBasicExtraBallotFeeWei(), weiPerCent.times(100000).div(basicBallotsPerMonth), 'extra ballot should cost approx 1/nth of basic price where n is how many ballots pe rmonth they get')
+    }
+
+
+    // test setExchAddr
+    // test set exchange rate
+    // test expected for certain exchange rates
+    // test under different exchange rates
+
+    const weiPerCent1 = await paySC.getWeiPerCent();
+    assert.deepEqual(weiPerCent1, toBigNumber('18975332000000'), 'wei per cent matches init expectations')
+    assert.deepEqual(await paySC.getUsdEthExchangeRate(), toBigNumber(52700), 'usd/eth init matches expected')
+
+    await testWeiAndPrices();
+
+    await doLog('set exchange rate to $666usd/eth')
+    await paySC.setWeiPerCent(toBigNumber('15015015000000'))
+    const weiPerCent2 = await paySC.getWeiPerCent();
+    assert.deepEqual(weiPerCent2, toBigNumber('15015015000000'), 'wei per cent matches init expectations')
+    assert.deepEqual(await paySC.getUsdEthExchangeRate(), toBigNumber(66600), 'usd/eth init matches expected')
+
+    await testWeiAndPrices();
+
+    await paySC.setMinorEditsAddr(minorEdits);
+
+    await doLog('set exchange rate to $9001usd/eth')
+    await paySC.setWeiPerCent(toBigNumber('1110987600000'), {from: minorEdits})
+    const weiPerCent3 = await paySC.getWeiPerCent();
+    assert.deepEqual(weiPerCent3, toBigNumber('1110987600000'), 'wei per cent matches init expectations')
+    assert.deepEqual(await paySC.getUsdEthExchangeRate(), toBigNumber(900100), 'usd/eth init matches expected')
+
+    await testWeiAndPrices();
+
+    await assertRevert(paySC.setWeiPerCent(toBigNumber('111'), {from: u3}), 'cannot set exchange rate from bad acct')
+}
+
+
+const testPaymentsEmergencySetOwner = async ({paySC, owner, backupOwner, accounts}) => {
+    const [,u1,u2,u3,u4,badActor] = accounts;
+    assert.equal(await paySC.emergencyAdmin(), backupOwner, 'emergencyAdmin on paySC init good')
+    assert.equal(await paySC.owner(), owner, 'payments owner init good')
+
+    await assertRevert(paySC.emergencySetOwner(badActor, {from: badActor}), 'cannot emergency set owner from bad acct')
+
+    await assertRevert(paySC.emergencySetOwner(u1, {from: owner}), 'owner cannot emergency set owner')
+    await paySC.emergencySetOwner(u1, {from: backupOwner})
+    assert.equal(await paySC.owner(), u1, 'payment owner changed')
 }
 
 
@@ -388,25 +415,44 @@ const testCatagoriesCrud = async () => {
 }
 
 
-const testSetBackends = async () => {
-    // test ability to set backends dynamically
-    throw Error('not implemented');
-}
+const testSponsorshipOfCommunityBallots = async ({svIx, erc20, accounts, owner, bbFarm, doLog}) => {
+    const [, dAdmin, u2, u3, u4, u5] = accounts
 
+    await doLog('creating democ')
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: dAdmin, value: 1}})
+    const times = genPackedTime();
 
-const testSponsorshipOfCommunityBallots = async () => {
-    throw Error('not implemented');
+    await doLog('getting commb price and verifiying ballotsN === 0')
+    const commBPriceEth = await svIx.getCommunityBallotWeiPrice();
+
+    assert.equal(await svIx.getDBallotsN(democHash), 0, 'no ballots yet')
+
+    await doLog('deploying commb')
+    const commBTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, times, {from: u2, value: commBPriceEth})
+    const {args: {ballotId}} = getEventFromTxR("BallotAdded", commBTxr)
+    await doLog(`got commb deployed with ballotId: ${ballotId} (txr: \n${toJson(commBTxr)})`)
+
+    assert.equal(await svIx.getDBallotsN(democHash), 1, 'one ballot so far')
+
+    const ballotIdCmp = await svIx.getDBallotID(democHash, 0);
+    assert.deepEqual(ballotId, ballotIdCmp, 'ballotIds match')
+    assert.equal(await bbFarm.getTotalSponsorship(ballotId), 0, 'no sponsorship yet')
+
+    await doLog("sponsoring...")
+    await bbFarm.sponsor(ballotId, {from: u3, value: 1001337})
+    await bbFarm.sponsor(ballotId, {from: u4, value:  990000})
+    await doLog('sponsored')
+
+    assert.deepEqual(await bbFarm.getTotalSponsorship(ballotId), toBigNumber(1991337), 'sponsorship amount matches')
+    assert.equal(await bbFarm.getSponsorsN(ballotId), 2, 'should have 2 sponsorships so far')
+
+    assert.deepEqual(await bbFarm.getSponsor(ballotId, 0), [u3, toBigNumber(1001337)], 'sponsor 0 matches')
+    assert.deepEqual(await bbFarm.getSponsor(ballotId, 1), [u4, toBigNumber(990000)], 'sponsor 1 matches')
 }
 
 
 const testVersion = async ({svIx}) => {
     assert.equal(2, await svIx.getVersion(), "expect version to be 2");
-}
-
-
-const testIxEnsSelfManagement = async () => {
-    // test we can set and upgrade ENS via upgrades and permissions work out
-    throw Error("not implemented");
 }
 
 
@@ -416,15 +462,76 @@ const testNFPTierAndPayments = async () => {
 }
 
 
-const testPaymentsBackupAdmin = async () => {
-    // test the emergency backup admin address in payments
-    throw Error("not implemented")
-}
-
-
 const testBasicExtraBallots = async () => {
     throw Error("not impl")
 }
+
+
+const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog, be, paySC, pxF, ensPx, ixEnsPx}) => {
+    const setTo = accounts[2];
+
+    let hasSetEmergency = false;
+
+    const testAddr = async (property, expectedAddr) =>
+        assert.equal(await svIx[property](), expectedAddr, `Address for ${property} (${hasSetEmergency ? 'emergency' : 'init'}) should match expected ${expectedAddr}`)
+
+    const testBadAddr = async (prop) =>
+        await assertRevert(svIx[prop](accounts[4], {from: accounts[4]}), `cannot run ${prop} from non-owner account`)
+
+    /* setDAdmin */
+
+    await doLog(`testing emergencySetDAdmin`)
+    // test emergency set for democ - need to do this BEFORE setting backend to bad addr...
+    const democAdmin = accounts[1];
+    const badActor = accounts[4];
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: democAdmin, value: 1}})
+    await doLog(`democ created.`)
+
+    assert.equal(await svIx.getDAdmin(democHash), adminPx.address, "d admin should match")
+
+    await doLog(`running emergencySetDAdmin`)
+    await svIx.emergencySetDAdmin(democHash, setTo)
+    assert.equal(await svIx.getDAdmin(democHash), setTo, "d admin should match after emergency")
+
+    await assertRevert(svIx.emergencySetDAdmin(democHash, badActor, {from: badActor}), 'cannot emergency set admin for democ from bad acct')
+
+    /* Other emergency methods */
+
+    await doLog(`done. about to test init conditions for emergency methods`)
+
+    await testAddr('backend', be.address)
+    await testAddr('payments', paySC.address)
+    await testAddr('bbfarm', bbFarm.address)
+    await testAddr('adminPxFactory', pxF.address)
+
+    await doLog(`init conditions validated. testing emergency set methods`)
+
+    await svIx.emergencySetPaymentBackend(setTo)
+    await svIx.emergencySetBackend(setTo)
+    await svIx.emergencySetAdminPxFactory(setTo)
+    await svIx.emergencySetBBFarm(setTo)
+    hasSetEmergency = true;
+
+    await doLog(`emergency set methods tested. testing setting from bad addrs`)
+
+    await testBadAddr('emergencySetPaymentBackend')
+    await testBadAddr('emergencySetBackend')
+    await testBadAddr('emergencySetAdminPxFactory')
+    await testBadAddr('emergencySetBBFarm')
+
+    await doLog(`setting from bad addrs tested. validating results`)
+
+    await testAddr('backend', setTo)
+    await testAddr('payments', setTo)
+    await testAddr('bbfarm', setTo)
+    await testAddr('adminPxFactory', setTo)
+
+    await doLog(`results validated.`)
+
+    await doLog(`done`)
+}
+
+
 
 /* bb farm won - by a lot
     Std:  1392871
@@ -451,26 +558,20 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
 
 contract("SVLightIndex", function (accounts) {
     tests = [
-        ["test upgrade", testUpgrade],
-        ["test instantiation", testInit],
-        ["test creating democ", testCreateDemoc],
-        ["test payments for democ", testPaymentsForDemoc],
-        // ["test SV democ creation", testSVDemocCreation],
-        // ["test democ admin permissions", testDemocAdminPermissions],
-        ["test community ballots (default)", testCommunityBallots],
-        // ["test community ballots (nonpayment)", testCommunityBallotsNonPayment],
-        // ["test deny community ballots", testNoCommunityBallots],
-        // ["test allowed submission bits on comm ballots", testCommunityBallotsAllowedSubBits],
-        // ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
-        // ["test currency conversion", testCurrencyConversion],
         // ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
         // ["test paying for extra ballots (basic)", testBasicExtraBallots],
         // ["test catagories (crud)", testCatagoriesCrud],
-        // ["test setting payment + backend", testSetBackends],
-        ["test version", testVersion],
-        // ["test index ens self-management", testIxEnsSelfManagement],
         // ["test nfp tier", testNFPTierAndPayments],
-        // ["test payments backup admin", testPaymentsBackupAdmin],
+        ["test currency conversion", testCurrencyConversion],
+        ["test payments backup admin", testPaymentsEmergencySetOwner],
+        ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
+        ["test emergency methods", testEmergencyMethods],
+        ["test community ballots (default)", testCommunityBallots],
+        ["test version", testVersion],
+        ["test upgrade", testUpgrade],
+        ["test instantiation", testInit],
+        ["test creating democ and permissions", testCreateDemoc],
+        ["test payments for democ", testPaymentsForDemoc],
         ["test gas ballots", testGasOfBallots],
     ];
     S.map(([desc, f]) => it(desc, wrapTestIx({accounts}, f)), tests);
