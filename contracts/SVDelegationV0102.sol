@@ -109,7 +109,7 @@ contract SVDelegationBackend is permissioned {
     // Getter Functions
 
 
-    function resolveRawDelegation(bytes32 voter, uint256 namespace) constant external returns (uint64, bytes32, bytes32, uint256) {
+    function resolveRawDelegation(bytes32 voter, uint256 namespace) view external returns (uint64, bytes32, bytes32, uint256) {
         uint64 id = _getIdIfValid(voter, namespace);
 
         if (id == 0) {
