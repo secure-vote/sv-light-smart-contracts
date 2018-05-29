@@ -82,7 +82,7 @@ interface IxPaymentsIface {
     function setBasicBallotsPer30Days(uint amount) external;
     function setPremiumMultiplier(uint8 amount) external;
     function getPremiumMultiplier() external view returns (uint8);
-    function getPremiumPricePer30Days() external view returns (uint);
+    function getPremiumCentsPricePer30Days() external view returns (uint);
     function setWeiPerCent(uint) external;
     function getWeiPerCent() external view returns (uint weiPerCent);
     function getUsdEthExchangeRate() external view returns (uint centsPerEth);

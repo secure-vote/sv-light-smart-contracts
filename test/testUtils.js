@@ -20,6 +20,15 @@ module.exports = function () {
         return web3.toBigNumber(i.toFixed ? i.toFixed() : i.toString());
     }
 
+    assert.reallyClose = (a, b, msg, threshold = 3) => {
+        // a and b should be within ~2.9999 units of eachother (with default threshold)
+        if (a.isBigNumber && b.isBigNumber && a.isBigNumber() && b.isBigNumber()) {
+            assert.equal(a.minus(b).abs().lt(threshold), true, `assert.reallyClose BigNumbers (${a.toFixed()}) (${b.toFixed()}) :: ` + msg)
+        } else {
+            assert.equal(Math.abs(a - b) < threshold, true, `assert.reallyClose numbers (${a}) (${b}) :: ` + msg)
+        }
+    }
+
     this.toJson = (obj) => {
         return JSON.stringify(obj, null, 2);
     }

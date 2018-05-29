@@ -124,11 +124,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
 
     function getSecondsRemaining(bytes32 democHash) external view returns (uint) {
         uint paidTill = accounts[democHash].paidUpTill;
-
-        if (paidTill < now) {
-            return 0;
-        }
-        return paidTill - now;
+        return paidTill > now ? paidTill - now : 0;
     }
 
     function getPremiumStatus(bytes32 democHash) external view returns (bool) {
@@ -152,7 +148,8 @@ contract SVPayments is IxPaymentsIface, permissioned {
         require(!accounts[democHash].isPremium, "cannot upgrade to premium twice");
         accounts[democHash].isPremium = true;
         // convert basic minutes to premium minutes
-        uint timeRemaining = accounts[democHash].paidUpTill - now;
+        uint paidTill = accounts[democHash].paidUpTill;
+        uint timeRemaining = paidTill > now ? paidTill - now : 0;
         // if we have time remaning then convert it - otherwise don't need to do anything
         if (timeRemaining > 0) {
             timeRemaining /= premiumMultiplier;
@@ -165,7 +162,8 @@ contract SVPayments is IxPaymentsIface, permissioned {
         require(accounts[democHash].isPremium, "must be premium to downgrade");
         accounts[democHash].isPremium = false;
         // convert premium minutes to basic
-        uint timeRemaining = accounts[democHash].paidUpTill - now;
+        uint paidTill = accounts[democHash].paidUpTill;
+        uint timeRemaining = paidTill > now ? paidTill - now : 0;
         // if we have time remaining: convert it
         if (timeRemaining > 0) {
             timeRemaining *= premiumMultiplier;
@@ -247,7 +245,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
         return premiumMultiplier;
     }
 
-    function getPremiumPricePer30Days() external view returns (uint) {
+    function getPremiumCentsPricePer30Days() external view returns (uint) {
         return _premiumPricePer30Days();
     }
 
@@ -282,11 +280,11 @@ contract SVPayments is IxPaymentsIface, permissioned {
 
     /* payment util functions */
 
-    function weiToCents(uint w) internal view returns (uint) {
+    function weiToCents(uint w) public view returns (uint) {
         return w / weiPerCent;
     }
 
-    function centsToWei(uint c) internal view returns (uint) {
+    function centsToWei(uint c) public view returns (uint) {
         return c * weiPerCent;
     }
 }

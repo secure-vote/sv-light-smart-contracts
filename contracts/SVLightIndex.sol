@@ -86,7 +86,8 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         democHash = keccak256(abi.encodePacked(democList.length, blockhash(block.number-1), this, defaultErc20));
         democList.push(democHash);
         democs[democHash].erc20 = defaultErc20;
-        require(democPrefixToHash[bytes13(democHash)] == bytes32(0), "democ prefix exists");
+        // this should never trigger if we have a good security model - entropy ~ 2^(8*13) ~ 10^31
+        assert(democPrefixToHash[bytes13(democHash)] == bytes32(0));
         democPrefixToHash[bytes13(democHash)] = democHash;
         erc20ToDemocs[defaultErc20].push(democHash);
         emit LowLevelNewDemoc(democHash);

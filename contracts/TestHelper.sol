@@ -33,4 +33,8 @@ contract TestHelper is upgradePtr {
     function reentrancyHelper(address to, bytes data, uint value) external payable {
         require(to.call.value(value)(data), "tx should succeed");
     }
+
+    function destroy(address a) external {
+        selfdestruct(a);
+    }
 }
