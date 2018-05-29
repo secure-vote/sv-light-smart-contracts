@@ -205,10 +205,10 @@ library BBLib {
         }
     }
 
-    // function getSponsor(DB storage db, uint i) external view returns (address sender, uint amount) {
-    //     sender = db.sponsors[i].sender;
-    //     amount = db.sponsors[i].amount;
-    // }
+    function getSponsor(DB storage db, uint i) external view returns (address sender, uint amount) {
+        sender = db.sponsors[i].sender;
+        amount = db.sponsors[i].amount;
+    }
 
     /* ETH BALLOTS */
 

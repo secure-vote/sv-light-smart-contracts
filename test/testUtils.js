@@ -40,6 +40,8 @@ module.exports = function () {
         return this.toBigNumber(s.shln(64).add(e))
     }
 
+    this.genPackedTime = () => this.mkPackedTime(...(this.genStartEndTimes()))
+
     this.mkPacked = (start, end, submissionBits) => {
         const s = new BN(start)
         const e = new BN(end)
@@ -176,7 +178,7 @@ module.exports = function () {
                 return l
             }
         }
-        throw Error(`Could not find ${eventName} - logs: \n${toJson(txR.logs)}`);
+        throw Error(`Could not find ${eventName} - txr: \n${toJson(txR)}`);
     }
 
     this.w3IxObjToArr = function(ixObj) {

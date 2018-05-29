@@ -17,7 +17,8 @@ contract BBFarm is permissioned {
     using BBLib for BBLib.DB;
 
     mapping (uint => BBLib.DB) dbs;
-    uint nBallots = 0;
+    // note - start at 1 to avoid any test for if 0 is a valid ballotId
+    uint nBallots = 1;
 
     event BallotCreatedWithID(uint ballotId);
 
@@ -96,6 +97,14 @@ contract BBFarm is permissioned {
 
     function getTotalSponsorship(uint ballotId) external view returns (uint) {
         return dbs[ballotId].getTotalSponsorship();
+    }
+
+    function getSponsorsN(uint ballotId) external view returns (uint) {
+        return dbs[ballotId].sponsors.length;
+    }
+
+    function getSponsor(uint ballotId, uint sponsorN) external view returns (address sender, uint amount) {
+        return dbs[ballotId].getSponsor(sponsorN);
     }
 
     function getCreationTs(uint ballotId) external view returns (uint) {

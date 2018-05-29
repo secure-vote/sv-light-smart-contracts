@@ -11,9 +11,9 @@ interface IxIface {
     function doUpgrade(address) external;
     function emergencySetPaymentBackend(IxPaymentsIface) external;
     function emergencySetBackend(IxBackendIface) external;
-    function emergencySetAdmin(bytes32 democHash, address newAdmin) external;
     function emergencySetAdminPxFactory(address _pxF) external;
     function emergencySetBBFarm(address _bbFarm) external;
+    function emergencySetDAdmin(bytes32 democHash, address newAdmin) external;
 
     function getPayTo() external view returns (address);
     function getCommunityBallotCentsPrice() external view returns (uint);
@@ -52,6 +52,13 @@ interface IxIface {
     /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
     function getDBallotID(bytes32 democHash, uint256 n) external view returns (uint256 ballotId);
+
+    /* events */
+    event PaymentMade(uint[2] valAndRemainder);
+    event BallotAdded(bytes32 democHash, uint ballotId);
+    event DemocAdded(bytes32 democHash, address admin);
+    event Emergency(bytes32 setWhat);
+    event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
 }
 
 

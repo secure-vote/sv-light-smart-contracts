@@ -48,7 +48,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
     uint basicCentsPricePer30Days = 100000; // $1000/mo
     uint basicBallotsPer30Days = 5;
     uint8 premiumMultiplier = 5;
-    uint weiPerCent = 0.00001390434 ether;  // $719.20, 13:00 May 14th AEST
+    uint weiPerCent = 0.000018975332 ether;  // $527, 14:00 May 29th AEST
 
     mapping (bytes32 => Account) accounts;
     PaymentLog[] payments;
@@ -57,7 +57,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
 
 
     modifier owner_or(address addr) {
-        require(msg.sender == addr || msg.sender == owner, "403 when sending from this address");
+        require(msg.sender == addr || msg.sender == owner, "!owner-or");
         _;
     }
 
@@ -65,7 +65,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
     /* BREAK GLASS IN CASE OF EMERGENCY */
     address public emergencyAdmin;
     function emergencySetOwner(address newOwner) external {
-        require(msg.sender == emergencyAdmin, "only callable by emergency backup key");
+        require(msg.sender == emergencyAdmin, "!emergency-owner");
         owner = newOwner;
     }
     /* END BREAK GLASS */
@@ -74,7 +74,7 @@ contract SVPayments is IxPaymentsIface, permissioned {
     constructor(address _emergencyAdmin) permissioned() public {
         payTo = msg.sender;
         emergencyAdmin = _emergencyAdmin;
-        require(_emergencyAdmin != address(0), "cannot have null address as backup admin");
+        require(_emergencyAdmin != address(0), "backup-admin-null");
     }
 
     function() payable public {
