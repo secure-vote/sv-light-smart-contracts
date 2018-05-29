@@ -63,7 +63,7 @@ interface IxIface {
 
 
 interface IxPaymentsIface {
-    function upgradeMe(address) external returns (bool);
+    function upgradeMe(address) external;
 
     function payoutAll() external;
 
@@ -119,13 +119,11 @@ interface IxPaymentsIface {
 
 
 interface IxBackendIface {
-    function upgradeMe(address) external returns (bool);
+    function upgradeMe(address) external;
 
     /* global getters */
     function getGDemocsN() external view returns (uint);
     function getGDemoc(uint id) external view returns (bytes32);
-    function getGBallotsN() external view returns (uint);
-    function getGBallot(uint id) external view returns (bytes32 democHash, uint ballotId);
     function getGErc20ToDemocs(address erc20) external view returns (bytes32[] democHashes);
 
     /* democ admin */

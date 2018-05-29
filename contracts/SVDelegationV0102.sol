@@ -219,7 +219,7 @@ contract SVDelegationV0102 is owned, upgradePtr {
 
     // upgrade handler
     function doUpgrade(address newSC) only_owner() public {
-        require(backend.upgradeMe(newSC));
+        backend.upgradeMe(newSC);
         doUpgradeInternal(newSC);
     }
 

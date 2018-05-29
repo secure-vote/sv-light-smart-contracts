@@ -40,6 +40,7 @@ const wrapTestIx = ({accounts}, f) => {
         await doLog(`Created logger...`);
 
         const bbFarm = await BBFarm.new();
+        await doLog(`created bbfarm`)
 
         const be = await IxBackend.new();
         await doLog(`Created backend...`);
@@ -176,19 +177,39 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbFarm, owner,
 }
 
 
-const testInit = async ({paySC, owner, svIx}) => {
+const testInit = async ({paySC, owner, svIx, erc20, doLog}) => {
     // just test the initialization params and sanity check
 
-    /**
-     * To test:
-     * - payments.payTo
-     * - owner on SCs
-     * - other stuff?
-     */
-
     assert.equal(await paySC.getPayTo(), owner, "payTo should be correct on paymentSC")
+    assert.equal(await svIx.getPayTo(), owner, "payTo should be correct on ix")
     assert.equal(await paySC.owner(), owner, "owner on paymentSC")
     assert.equal(await svIx.owner(), owner, "owner on svIx")
+
+    await doLog('checked payto and owner')
+
+    assert.equal(await svIx.getGDemocsN(), 0, 'no democs yet')
+    // assert.equal(await svIx.getGDemoc(0), zeroHash, 'democ 0 has zero hash')
+
+    await doLog('checked getGDemocs')
+
+    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [], 'empty list for erc20 lookup')
+
+    await doLog('checked getGErc20ToDemocs')
+
+    const {democHash, ixPx, adminPx} = await mkDemoc({svIx, erc20, txOpts: {from: owner, value: 100}})
+    const {democHash: democHash2} = await mkDemoc({svIx, erc20, txOpts: {from: owner, value: 100}})
+
+    await doLog('created 2x democs')
+
+    assert.equal(await svIx.getGDemocsN(), 2, '2 democs now')
+    assert.equal(await svIx.getGDemoc(0), democHash, 'democ 0 has expected hash')
+    assert.equal(await svIx.getGDemoc(1), democHash2, 'democ 1 has expected hash')
+
+    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [democHash, democHash2], 'erc20 lookup gives us our democs')
+
+    assert.deepEqual(await svIx.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(0)], 'getDInfo works as expected (0)')
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkStdPacked())
+    assert.deepEqual(await svIx.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(1)], 'getDInfo works as expected (1)')
 }
 
 
@@ -356,6 +377,7 @@ const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => 
         assert.deepEqual(await paySC.getBasicExtraBallotFeeWei(), weiPerCent.times(100000).div(basicBallotsPerMonth), 'extra ballot should cost approx 1/nth of basic price where n is how many ballots pe rmonth they get')
     }
 
+    assert.deepEqual(await svIx.getCommunityBallotCentsPrice(), toBigNumber(1000), "community cents price should be $10 init")
 
     // test setExchAddr
     // test set exchange rate
@@ -400,6 +422,76 @@ const testPaymentsEmergencySetOwner = async ({paySC, owner, backupOwner, account
     await assertRevert(paySC.emergencySetOwner(u1, {from: owner}), 'owner cannot emergency set owner')
     await paySC.emergencySetOwner(u1, {from: backupOwner})
     assert.equal(await paySC.owner(), u1, 'payment owner changed')
+}
+
+
+const testAllAdminFunctions = async ({owner, accounts, svIx, erc20, doLog}) => {
+    const [, u1, u2, u3, u4, u5, badActor, token1] = accounts;
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1}})
+
+    const testOnlyAdmin = async (m, args) => {
+        await assertRevert(ixPx[m](...args, {from: badActor}), `ixPx.${m}(${args}, {from: badActor}) fails`)
+        await assertRevert(svIx[m](...args, {from: badActor}), `svIx.${m}(${args}, {from: badActor}) fails`)
+        await ixPx[m](...args, {from: owner})
+    }
+
+    // set erc20
+    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [democHash], 'democHash in erc20 lookup init')
+    assert.deepEqual(await svIx.getGErc20ToDemocs(token1), [], 'token1 lookup init []')
+    await testOnlyAdmin('setDErc20', [democHash, token1])
+    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [democHash], 'democHash in erc20 lookup')
+    assert.deepEqual(await svIx.getGErc20ToDemocs(token1), [democHash], 'democHash in token1 lookup')
+
+    // add category
+    assert.equal(await svIx.getDCategoriesN(democHash), 0, 'no cats to start with')
+    await testOnlyAdmin('dAddCategory', [democHash, "cat1", false, 0])
+    await testOnlyAdmin('dAddCategory', [democHash, "cat2", true, 0])
+    await testOnlyAdmin('dAddCategory', [democHash, "cat3", true, 1])
+    assert.equal(await svIx.getDCategoriesN(democHash), 3, 'cats created')
+    assert.deepEqual(await svIx.getDCategory(democHash, 0), [false, "0x6361743100000000000000000000000000000000000000000000000000000000", false, toBigNumber(0)], 'cat0 created')
+    assert.deepEqual(await svIx.getDCategory(democHash, 1), [false, "0x6361743200000000000000000000000000000000000000000000000000000000", true, toBigNumber(0)], 'cat1 created')
+    assert.deepEqual(await svIx.getDCategory(democHash, 2), [false, "0x6361743300000000000000000000000000000000000000000000000000000000", true, toBigNumber(1)], 'cat2 created')
+    // test they worked
+
+    // deprecate cat - note, deprecation is not recursive
+    await testOnlyAdmin('dDeprecateCategory', [democHash, 1])
+    assert.deepEqual(await svIx.getDCategory(democHash, 0), [false, "0x6361743100000000000000000000000000000000000000000000000000000000", false, toBigNumber(0)], 'cat0 matches')
+    assert.deepEqual(await svIx.getDCategory(democHash, 1), [true, "0x6361743200000000000000000000000000000000000000000000000000000000", true, toBigNumber(0)], 'cat1 deprecated')
+    assert.deepEqual(await svIx.getDCategory(democHash, 2), [false, "0x6361743300000000000000000000000000000000000000000000000000000000", true, toBigNumber(1)], 'cat2 matches')
+
+    // upgrade
+    assert.equal(await svIx.accountInGoodStanding(democHash), false, 'democ not in good standing yet')
+    await svIx.payForDemocracy(democHash, {from: u3, value: oneEth});
+    assert.equal(await svIx.accountInGoodStanding(democHash), true, 'democ now in good standing')
+    assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), false, 'democ not premium and in good standing')
+    await testOnlyAdmin('dUpgradeToPremium', [democHash])
+    assert.equal(await svIx.accountInGoodStanding(democHash), true, 'democ now in good standing')
+    assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), true, 'democ now IS premium and in good standing')
+
+    // downgrade
+    await testOnlyAdmin('dDowngradeToBasic', [democHash])
+    assert.equal(await svIx.accountInGoodStanding(democHash), true, 'democ still in good standing')
+    assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), false, 'democ no longer premium and in good standing')
+
+
+    // deploy
+    assert.equal(await svIx.getDBallotsN(democHash), 0, '0 ballots')
+    await testOnlyAdmin('dDeployBallot', [democHash, genRandomBytes32(), zeroHash, mkStdPacked()])
+    assert.equal(await svIx.getDBallotsN(democHash), 1, '1 ballot')
+}
+
+
+const testPrefix = async ({svIx, owner, doLog, ensPR, tld, erc20}) => {
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: owner, value: 1}})
+
+    const prefixHex = democHash.slice(2, 2 + 26)
+    const prefixBase32 = hexToB32(prefixHex)
+
+    assert.equal(await svIx.getDHash("0x" + prefixHex), democHash)
+
+    const prefixNode = nh.hash(prefixBase32 + "." + tld)
+
+    assert.equal(await ensPR.addr(prefixNode), adminPx.address, "prefix.tld lookup for admin SC works")
 }
 
 
@@ -463,6 +555,11 @@ const testNFPTierAndPayments = async () => {
 
 
 const testBasicExtraBallots = async () => {
+    throw Error("not impl")
+}
+
+
+const testManualBallots = async () => {
     throw Error("not impl")
 }
 
@@ -558,10 +655,13 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
 
 contract("SVLightIndex", function (accounts) {
     tests = [
-        // ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
-        // ["test paying for extra ballots (basic)", testBasicExtraBallots],
-        // ["test catagories (crud)", testCatagoriesCrud],
-        // ["test nfp tier", testNFPTierAndPayments],
+        ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
+        ["test paying for extra ballots (basic)", testBasicExtraBallots],
+        ["test catagories (crud)", testCatagoriesCrud],
+        ["test nfp tier", testNFPTierAndPayments],
+        ["test manually add ballots", testManualBallots],
+        ["test democ prefix stuff", testPrefix],
+        ["test all admin functions", testAllAdminFunctions],
         ["test currency conversion", testCurrencyConversion],
         ["test payments backup admin", testPaymentsEmergencySetOwner],
         ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],

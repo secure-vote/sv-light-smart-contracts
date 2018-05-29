@@ -58,13 +58,11 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         mapping(uint => Category) categories;
     }
 
-    BallotRef[] public ballotList;
-
-    mapping (bytes32 => Democ) public democs;
-    mapping (bytes32 => CategoriesIx) public democCategories;
-    mapping (bytes13 => bytes32) public democPrefixToHash;
-    mapping (address => bytes32[]) public erc20ToDemoc;
-    bytes32[] public democList;
+    mapping (bytes32 => Democ) democs;
+    mapping (bytes32 => CategoriesIx) democCategories;
+    mapping (bytes13 => bytes32) democPrefixToHash;
+    mapping (address => bytes32[]) erc20ToDemocs;
+    bytes32[] democList;
 
     //* GLOBAL INFO */
 
@@ -76,16 +74,8 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         return democList[id];
     }
 
-    function getGBallot(uint id) external view returns (bytes32 democHash, uint ballotId) {
-        return (ballotList[id].democHash, ballotList[id].ballotId);
-    }
-
-    function getGBallotsN() external view returns (uint) {
-        return ballotList.length;
-    }
-
     function getGErc20ToDemocs(address erc20) external view returns (bytes32[] democHashes) {
-        return erc20ToDemoc[erc20];
+        return erc20ToDemocs[erc20];
     }
 
     //* DEMOCRACY ADMIN FUNCTIONS */
@@ -98,7 +88,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
         democs[democHash].erc20 = defaultErc20;
         require(democPrefixToHash[bytes13(democHash)] == bytes32(0), "democ prefix exists");
         democPrefixToHash[bytes13(democHash)] = democHash;
-        erc20ToDemoc[defaultErc20].push(democHash);
+        erc20ToDemocs[defaultErc20].push(democHash);
         emit LowLevelNewDemoc(democHash);
     }
 
@@ -108,6 +98,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 
     function setDErc20(bytes32 democHash, address newErc20) only_editors() external {
         democs[democHash].erc20 = newErc20;
+        erc20ToDemocs[newErc20].push(democHash);
     }
 
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) only_editors() external returns (uint) {
@@ -182,7 +173,6 @@ contract SVIndexBackend is IxBackendIface, permissioned {
             democs[democHash].officialBallots.push(ballotId);
         }
 
-        ballotList.push(BallotRef(democHash, ballotId));
         emit LowLevelNewBallot(democHash, ballotId);
     }
 
@@ -244,9 +234,9 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
 
     function doUpgrade(address nextSC) only_owner() not_upgraded() external {
         doUpgradeInternal(nextSC);
-        require(backend.upgradeMe(nextSC));
-        require(payments.upgradeMe(nextSC));
-        require(bbfarm.upgradeMe(nextSC));
+        backend.upgradeMe(nextSC);
+        payments.upgradeMe(nextSC);
+        bbfarm.upgradeMe(nextSC);
         ensPx.upgradeMeAdmin(nextSC);
         ensOwnerPx.setAddr(nextSC);
         ensOwnerPx.upgradeMeAdmin(nextSC);
@@ -405,7 +395,7 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
 
     //* ADD BALLOT TO RECORD */
 
-    function _addBallot(bytes32 democHash, uint256 ballotId, uint256 packed) internal returns (uint id) {
+    function _addBallot(bytes32 democHash, uint256 ballotId, uint256 packed) internal {
         backend.dAddBallot(democHash, ballotId, packed);
         emit BallotAdded(democHash, ballotId);
     }
