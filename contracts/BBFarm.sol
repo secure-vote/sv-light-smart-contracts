@@ -13,6 +13,7 @@ import "../libs/MemArrApp.sol";
 
 contract BBFarm is permissioned {
 
+
     using BBLib for BBLib.DB;
 
     mapping (uint => BBLib.DB) dbs;
