@@ -26,7 +26,6 @@ var hexSk = "0xcd9d715f05a4fce8acf3339fd5ee8549c1899c52e4b32da07cffcd91a29ad976"
 var hexPk = "0xba781ed1006bd7694282a210485265f1c503f4e6721858b4269ae6d745f7bb4b";
 var specHash = "0x418781fb172c2a30c072d58628f5df3f12052a0b785450fb0105f1b98b504561";
 
-const mkStartTime = () => Math.round(Date.now() / 1000)
 const mkFlags = ({useEnc, testing}) => [useEnc === true, testing === true];
 
 const genStdPacked = async () => {
@@ -50,8 +49,7 @@ const mkBBPx = (bb, bbaux) => new Proxy(bbaux, {
 
 
 async function testEarlyBallot({accounts, BB}) {
-    var startTime = mkStartTime() + 2;
-    var endTime = startTime + 600;
+    var [startTime, endTime] = await genStartEndTimes();
 
     const vc = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitVote(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
@@ -60,7 +58,7 @@ async function testEarlyBallot({accounts, BB}) {
 
 async function testSetOwner({accounts, BB}) {
     const acc = accounts;
-    const start = mkStartTime() - 1;
+    const [start] = await genStartEndTimes();
     const vc = await BB.new(specHash, mkPacked(start, start + 60, USE_ETH | USE_NO_ENC), zeroAddr);
     const owner1 = await vc.owner();
     assert.equal(acc[0], owner1, "owner should be acc[0]");
@@ -77,8 +75,7 @@ async function testSetOwner({accounts, BB}) {
 
 
 async function testEncryptionBranching({accounts, BB, bbaux}) {
-    var startTime = Math.floor(Date.now() / 1000) - 1;
-    var endTime = startTime + 600;
+    var [startTime, endTime] = await genStartEndTimes();
     var shortEndTime = 0;
 
 
@@ -153,8 +150,7 @@ async function testEncryptionBranching({accounts, BB, bbaux}) {
 }
 
 async function testInstantiation({accounts, BB, bbaux, log}) {
-    var startTime = Math.floor(Date.now() / 1000) - 1;
-    var endTime = startTime + 600;
+    var [startTime, endTime] = await genStartEndTimes();
     var shortEndTime = 0;
 
     const vc = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr, {from: accounts[3]});
