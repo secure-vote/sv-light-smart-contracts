@@ -9,6 +9,7 @@ const EnsRegistrar = artifacts.require("./SvEnsRegistrar");
 const EnsRegistry = artifacts.require("./SvEnsRegistry");
 const EnsOwnerPx = artifacts.require("./EnsOwnerProxy");
 const EmitterTesting = artifacts.require("./EmitterTesting");
+const TestHelper = artifacts.require("./TestHelper");
 const FaucetErc20 = artifacts.require("./FaucetErc20");
 const BBFarm = artifacts.require("./BBFarm")
 
@@ -255,7 +256,7 @@ const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}
 
     // for simplicity we should set the exchange rate to something simple
     // this means 10^14 wei per 1c => 1 eth per $100
-    await paySC.setWeiPerCent(toBigNumber(oneEth.divn(10000)), {from: owner});
+    await paySC.setWeiPerCent(toBigNumber(oneEth.div(10000)), {from: owner});
     await assertRevert(paySC.setWeiPerCent(1, {from: accounts[2]}), "can't set wei from non-admin account");
     await scLog.log("set exchange rate")
 
@@ -589,8 +590,23 @@ const testPaymentsSettingValues = async () => {
 }
 
 
-const testPaymentsPayoutAll = async () => {
-    throw Error('')
+const testPaymentsPayoutAll = async ({svIx, paySC, owner, doLog, accounts}) => {
+    const [, newPayTo, u2, u3, u4] = accounts;
+
+    await paySC.setPayTo(newPayTo, {from: owner})
+
+    const th = await TestHelper.new();
+
+    await th.sendTransaction({value: oneEth, from: u4})
+
+    const balPre = await getBalance(newPayTo);
+    assert.deepEqual(await getBalance(th.address), oneEth, 'balance of test helper should be 1 ether')
+    assert.equal(await getBalance(paySC.address), 0, 'paySC has no balance yet')
+    await th.destroy(paySC.address)
+    assert.deepEqual(await getBalance(paySC.address), oneEth, 'paySC should have 1 eth')
+    await paySC.payoutAll()
+    assert.equal(await getBalance(paySC.address), 0, 'paySC has sent balance away')
+    assert.deepEqual(await getBalance(newPayTo), balPre.plus(oneEth), 'u1 now has one extra ether due to payoutAll')
 }
 
 
@@ -647,8 +663,23 @@ const testNFPTierAndPayments = async () => {
 }
 
 
-const testBasicExtraBallots = async () => {
-    throw Error("not impl")
+const testBasicExtraBallots = async ({svIx, owner, doLog, erc20}) => {
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: owner, value: oneEth}})
+
+    const nBallotsPerMonth = (await svIx.getBasicBallotsPer30Days()).toNumber()
+    const [s, e] = genStartEndTimes()
+
+    const mkBallot = async () =>
+        await ixPx.dDeployBallot(democHash, genRandoBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_ENC | IS_OFFICIAL | IS_BINDING))
+
+    // fill up our monthly quota
+    for (let i = 0; i < nBallotsPerMonth; i++) {
+        await mkBallot()
+    }
+
+    await assertRevert(mkBallot(), `should not be able to make more than ${nBallotsPerMonth} ballots per month for free`)
+
+    // in progress
 }
 
 
@@ -750,8 +781,8 @@ contract("SVLightIndex", function (accounts) {
         ["common revert cases", testCommonRevertCases],
         ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
         // ["test payments setting values", testPaymentsSettingValues],
-        // ["test payments payout all", testPaymentsPayoutAll],
-        // ["test paying for extra ballots (basic)", testBasicExtraBallots],
+        ["test payments payout all", testPaymentsPayoutAll],
+        ["test paying for extra ballots (basic)", testBasicExtraBallots],
         // ["test catagories (crud)", testCatagoriesCrud],
         // ["test nfp tier", testNFPTierAndPayments],
         // ["test manually add ballots", testManualBallots],

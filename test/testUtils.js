@@ -8,24 +8,24 @@ module.exports = function () {
     //     Injecting LOTS of variables into the global namespace.
     //     You should really read this file if you're reading tests.`)
 
-    const w3 = Web3;
-
-    this.w3 = Web3;
-    this.oneEth = w3.utils.toWei(w3.utils.toBN(1), "ether");
-    this.toBN = i => w3.utils.toBN(i);
-    this.ethToWei = i => w3.utils.toWei(this.toBN(i), "ether");
-
     this.toBigNumber = i => {
         // BigNumber as in Web3 0.20.x
         return web3.toBigNumber(i.toFixed ? i.toFixed() : i.toString());
     }
 
+    const w3 = Web3;
+
+    this.w3 = Web3;
+    this.oneEth = this.toBigNumber(w3.utils.toWei(w3.utils.toBN(1), "ether"));
+    this.toBN = i => w3.utils.toBN(i);
+    this.ethToWei = i => this.toBigNumber(w3.utils.toWei(this.toBN(i), "ether"));
+
     assert.reallyClose = (a, b, msg, threshold = 3) => {
         // a and b should be within ~2.9999 units of eachother (with default threshold)
         if (a.isBigNumber && b.isBigNumber && a.isBigNumber() && b.isBigNumber()) {
-            assert.equal(a.minus(b).abs().lt(threshold), true, `assert.reallyClose BigNumbers (${a.toFixed()}) (${b.toFixed()}) :: ` + msg)
+            assert.equal(a.minus(b).abs().lte(threshold), true, `assert.reallyClose BigNumbers (${a.toFixed()}) (${b.toFixed()}) :: ` + msg)
         } else {
-            assert.equal(Math.abs(a - b) < threshold, true, `assert.reallyClose numbers (${a}) (${b}) :: ` + msg)
+            assert.equal(Math.abs(a - b) <= threshold, true, `assert.reallyClose numbers (${a}) (${b}) :: ` + msg)
         }
     }
 

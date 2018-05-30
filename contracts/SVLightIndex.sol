@@ -291,6 +291,10 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         return payments.getCommunityBallotWeiPrice();
     }
 
+    function getBasicBallotsPer30Days() external view returns (uint) {
+        return payments.getBasicBallotsPer30Days();
+    }
+
     function getGDemocsN() external view returns (uint256) {
         return backend.getGDemocsN();
     }
