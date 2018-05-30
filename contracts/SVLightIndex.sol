@@ -34,6 +34,7 @@ contract ixBackendEvents {
     event NewBallot(bytes32 indexed democHash, uint ballotN);
     event NewDemoc(bytes32 democHash);
     event DemocAdminSet(bytes32 indexed democHash, address admin);
+    event ManuallyAddedDemoc(bytes32 democHash, address erc20);
 }
 
 
@@ -84,17 +85,26 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
 
     //* DEMOCRACY ADMIN FUNCTIONS */
 
-    function dInit(address defaultErc20) only_editors() external returns (bytes32 democHash) {
-        // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
-        // (particularly because `this` and prevBlockHash are part of the hash)
-        democHash = keccak256(abi.encodePacked(democList.length, blockhash(block.number-1), this, defaultErc20));
+    function _addDemoc(bytes32 democHash, address erc20) internal {
         democList.push(democHash);
-        democs[democHash].erc20 = defaultErc20;
+        democs[democHash].erc20 = erc20;
         // this should never trigger if we have a good security model - entropy for 13 bytes ~ 2^(8*13) ~ 10^31
         assert(democPrefixToHash[bytes13(democHash)] == bytes32(0));
         democPrefixToHash[bytes13(democHash)] = democHash;
-        erc20ToDemocs[defaultErc20].push(democHash);
+        erc20ToDemocs[erc20].push(democHash);
         emit NewDemoc(democHash);
+    }
+
+    function dInit(address defaultErc20) only_editors() external returns (bytes32 democHash) {
+        // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
+        // (particularly because prevBlockHash and now are part of the hash)
+        democHash = keccak256(abi.encodePacked(democList.length, blockhash(block.number-1), defaultErc20, now));
+        _addDemoc(democHash, defaultErc20);
+    }
+
+    function dAdd(bytes32 democHash, address erc20) only_owner() external {
+        _addDemoc(democHash, erc20);
+        emit ManuallyAddedDemoc(democHash, erc20);
     }
 
     function setDAdmin(bytes32 democHash, address newAdmin) only_editors() external {
@@ -481,18 +491,18 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
                           external payable
                           returns (uint ballotId) {
 
-        // we need to end in the future
         uint64 endTime = BPackedUtils.packedToEndTime(packed);
-        require(endTime > uint64(now), "b-end-time");
-
         uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
         require(BBLib.isTesting(submissionBits) == false, "b-testing");
 
         // by default we don't record towards the basic limit
         bool recordTowardsBasicLimit = false;
 
-        // anything that isn't a community ballot counts towards the basic limit
-        if (BBLib.qualifiesAsCommunityBallot(submissionBits) == false) {
+        // anything that isn't a community ballot counts towards the basic limit.
+        // we want to check in cases where the ballot qualifies as a community
+        // ballot OR the admins have _disabled_ community ballots.
+        bool requiresCheck = BBLib.qualifiesAsCommunityBallot(submissionBits) == false || _checkEvenIfCommBallot(democHash);
+        if (requiresCheck) {
             recordTowardsBasicLimit = _basicBallotLimitOperations(democHash);
             _deployBallotChecks(democHash, endTime);
         }
@@ -505,6 +515,20 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             extraData);
 
         _addBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
+    }
+
+    // this is a separate function b/c putting this inline in `requiresCheck` definition
+    // will load the storage before it "shortcuts" (though bool use),
+    // so this way we only access storage if we _really_ need to.
+    // --
+    // The point of this function is to count and check ballots even if they qualify
+    // as a community ballot, b/c if the admin has turned off community ballots they
+    // must be counted.
+    // Returns true if community ballots disabled and the account is in good standing.
+    // Returns false if comm bs are enabled, or the account is not in good standing
+    function _checkEvenIfCommBallot(bytes32 democHash) internal view returns (bool) {
+        SVLightAdminProxy admin = SVLightAdminProxy(backend.getDAdmin(democHash));
+        return payments.accountInGoodStanding(democHash) && !admin.getCommunityBallotsEnabled();
     }
 
     // sv ens domains
