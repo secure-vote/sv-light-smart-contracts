@@ -6,12 +6,12 @@ pragma solidity ^0.4.24;
  */
 
 import { BBLib } from "./BBLib.sol";
-import { permissioned, payoutAll } from "./SVCommon.sol";
+import { permissioned, payoutAllC } from "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
 import "./BPackedUtils.sol";
 import "../libs/MemArrApp.sol";
 
-contract BBFarm is permissioned, payoutAll {
+contract BBFarm is permissioned, payoutAllC {
     using BBLib for BBLib.DB;
 
     mapping (uint => BBLib.DB) dbs;

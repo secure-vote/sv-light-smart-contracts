@@ -44,7 +44,7 @@ contract SvEnsRegistry is SvEnsIface {
      * @param owner The address of the new owner.
      */
     function setSubnodeOwner(bytes32 node, bytes32 label, address owner) external only_owner(node) returns (bytes32) {
-        bytes32 subnode = keccak256(node, label);
+        bytes32 subnode = keccak256(abi.encodePacked(node, label));
         emit NewOwner(node, label, owner);
         records[subnode].owner = owner;
         return subnode;

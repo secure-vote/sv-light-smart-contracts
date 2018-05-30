@@ -33,12 +33,14 @@ contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
     bool safeTxMutex = false;
 
     event AddedAdminToPx(address newAdmin);
-    event RemovedAdmin(address oldAdmin);
-    event FailedToFwdCall(uint value, bytes data);
+    event RemovedAdminFromPx(address oldAdmin);
 
     // from Democ Index
     event PaymentMade(uint[2] valAndRemainder);
-    event BallotAdded(bytes32 democHash, uint ballotId);
+    event NewBallot(bytes32 democHash, uint ballotN);
+
+    // from BBLib
+    event BallotCreatedWithID(uint ballotId);
 
     modifier isAdmin() {
         require(admins[msg.sender], "!admin");
@@ -78,7 +80,8 @@ contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
                 require(admins[msg.sender], "!admin");
                 // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
                 // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
-                doSafeSendWData(address(fwdTo), msg.data, msg.value);
+                // note2: we don't use doSafeSend here because we _want_ potential reentrancy for change transactions
+                require(address(fwdTo).call.value(msg.value)(msg.data), "!tx-send");
             } else if (msg.value > 0) {
                 // allow fwding just money to the democracy
                 IxIface ix = IxIface(fwdTo);
@@ -157,7 +160,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
     function removeAdmin(address oldAdmin) isAdmin() public {
         require(msg.sender != oldAdmin, "removeAdmin: you can't remove yourself");
         admins[oldAdmin] = false;
-        emit RemovedAdmin(oldAdmin);
+        emit RemovedAdminFromPx(oldAdmin);
     }
 
     function ercOwnerClaim() external {

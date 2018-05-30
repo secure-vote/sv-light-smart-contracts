@@ -120,7 +120,7 @@ const wrapTestIx = ({accounts}, f) => {
 const mkDemoc = async ({svIx, txOpts, erc20}) => {
     assert.equal(txOpts.value && txOpts.value > 0, true, "must have value when making democ")
     const createTx = await svIx.dInit(erc20.address, txOpts);
-    const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocAdded", createTx);
+    const {args: {democHash, admin: pxAddr}} = getEventFromTxR("DemocAdminSet", createTx);
     const adminPx = SVAdminPx.at(pxAddr);
     const ixPx = SVIndex.at(pxAddr);
 
@@ -144,7 +144,7 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbFarm, owner,
      */
 
     // some prep so we can confirm the adminPx's upgradePtr works
-    const {args: {democHash, admin}} = getEventFromTxR("DemocAdded", await svIx.dInit(erc20.address, {from: owner, value: 1}))
+    const {args: {democHash, admin}} = getEventFromTxR("DemocAdminSet", await svIx.dInit(erc20.address, {from: owner, value: 1}))
     const adminPx = SVAdminPx.at(admin);
     const ixPx = SVIndex.at(admin);
     assert.equal(await adminPx._forwardTo(), svIx.address, "adminPx fwdTo matches init")
@@ -301,7 +301,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
 
     await doLog('start of testCommunityBallots')
 
-    const {args: {democHash, admin}} = getEventFromTxR("DemocAdded", await svIx.dInit(erc20.address, {value: 1}))
+    const {args: {democHash, admin}} = getEventFromTxR("DemocAdminSet", await svIx.dInit(erc20.address, {value: 1}))
     const adminPx = SVAdminPx.at(admin);
     const ixPx = SVIndex.at(admin);
 
@@ -614,7 +614,7 @@ const testSponsorshipOfCommunityBallots = async ({svIx, erc20, accounts, owner, 
 
     await doLog('deploying commb')
     const commBTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, times, {from: u2, value: commBPriceEth})
-    const {args: {ballotId}} = getEventFromTxR("BallotAdded", commBTxr)
+    const {args: {ballotId}} = getEventFromTxR("BallotCreatedWithID", commBTxr)
     await doLog(`got commb deployed with ballotId: ${ballotId} (txr: \n${toJson(commBTxr)})`)
 
     assert.equal(await svIx.getDBallotsN(democHash), 1, 'one ballot so far')
@@ -691,7 +691,7 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 
     await testAddr('backend', be.address)
     await testAddr('payments', paySC.address)
-    await testAddr('bbfarm', bbFarm.address)
+    await testAddr('getBBFarm', bbFarm.address)
     await testAddr('adminPxFactory', pxF.address)
 
     await doLog(`init conditions validated. testing emergency set methods`)
@@ -713,7 +713,7 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 
     await testAddr('backend', setTo)
     await testAddr('payments', setTo)
-    await testAddr('bbfarm', setTo)
+    await testAddr('getBBFarm', setTo)
     await testAddr('adminPxFactory', setTo)
 
     await doLog(`results validated.`)

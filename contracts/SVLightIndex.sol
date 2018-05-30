@@ -10,7 +10,7 @@ pragma solidity ^0.4.24;
 
 
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
-import { permissioned, hasAdmins, owned, upgradePtr, payoutAll } from "./SVCommon.sol";
+import { permissioned, hasAdmins, owned, upgradePtr, payoutAllC } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
 import { Base32Lib } from "../libs/Base32Lib.sol";
 import { SvEnsEverythingPx } from "./SvEnsEverythingPx.sol";
@@ -23,7 +23,7 @@ import "./BBLib.sol";
 import "./BBFarm.sol";
 
 
-contract SVAdminPxFactory is payoutAll {
+contract SVAdminPxFactory is payoutAllC {
     function spawn(bytes32 democHash, address initAdmin, address fwdTo) external returns (SVLightAdminProxy px) {
         px = new SVLightAdminProxy(democHash, initAdmin, fwdTo);
     }
@@ -37,7 +37,7 @@ contract ixBackendEvents {
 }
 
 
-contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payoutAll {
+contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payoutAllC {
     struct Democ {
         address erc20;
         address admin;
@@ -195,7 +195,7 @@ contract ixEvents {
 }
 
 
-contract SVLightIndex is owned, upgradePtr, payoutAll, IxIface, ixBackendEvents, ixEvents {
+contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents, ixEvents {
     IxBackendIface public backend;
     IxPaymentsIface public payments;
     SVAdminPxFactory public adminPxFactory;

@@ -108,7 +108,7 @@ const wrapTest = ({accounts}, f) => {
         await doLog(`Created erc20 w faucet at ${erc20.address}`)
 
         const dInitTxR = await svIx.dInit(erc20.address, {from: owner, value: 1});
-        const {args: {democHash, admin: adminPxAddr}} = getEventFromTxR("DemocAdded", dInitTxR)
+        const {args: {democHash, admin: adminPxAddr}} = getEventFromTxR("DemocAdminSet", dInitTxR)
         const adminPx = SVAdminPx.at(adminPxAddr)
         const ixPx = SVIndex.at(adminPxAddr)
 

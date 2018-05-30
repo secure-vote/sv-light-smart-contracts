@@ -64,7 +64,7 @@ contract SvEnsCompatibleRegistrar {
      */
     function registerName(string subnodeStr, address _owner) req(admins[msg.sender]) external {
         // labelhash
-        bytes32 subnode = keccak256(subnodeStr);
+        bytes32 subnode = keccak256(abi.encodePacked(subnodeStr));
         _setSubnodeOwner(subnode, _owner);
     }
 

@@ -18,7 +18,7 @@ contract safeSend {
         doSafeSendWData(toAddr, "", amount);
     }
 
-    function doSafeSendWData(address, bytes data, uint amount) internal {
+    function doSafeSendWData(address toAddr, bytes data, uint amount) internal {
         require(txMutex3847834 == false, "ss-guard");
         txMutex3847834 = true;
         // we need to use address.call.value(v)() because we want
@@ -31,7 +31,7 @@ contract safeSend {
 
 
 // just provides a payoutAll method that sends to
-contract payoutAll is safeSend {
+contract payoutAllC is safeSend {
     address _payTo;
 
     constructor() public {
