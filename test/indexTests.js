@@ -296,7 +296,7 @@ const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}
 }
 
 
-const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC}) => {
+const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC, be}) => {
     // test in cases we have a community instance and in cases where
     // they're enabled on a paying democ
 
@@ -370,8 +370,27 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC}
 
     // set up to test counting of ballots when it does qualify as a community ballot but
     // community ballots are disabled (and democ in good standing)
-    await svIx.payForDemocracy(democHash, {value: oneEth})
+    const count1 = await be.getDCountedBasicBallotsN(democHash);
+    await adminPx.setCommunityBallotStatus(true);
+    await svIx.payForDemocracy(democHash, {value: oneEth})  // now in good standing
+    await doLog('paid for democ in prep of checking commb count')
 
+    const [s2, e2] = await genStartEndTimes()
+    // this qualifies as a community ballot, but because commballots are enabled it should not increase count
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s2, e2, USE_ETH | USE_NO_ENC))
+    await doLog('deployed normal ballot')
+
+    const count2 = await be.getDCountedBasicBallotsN(democHash);
+    assert.deepEqual(count1, count2, 'ballot deploy did not increase count')
+    await doLog('verified ballot did not increase count')
+
+    // prepped
+    await adminPx.setCommunityBallotStatus(false);
+    await doLog('set commballots disabled')
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s2, e2, USE_ETH | USE_NO_ENC))
+    // now that commballots are disabled, this should increase the count
+    const count3 = await be.getDCountedBasicBallotsN(democHash)
+    assert.deepEqual(count3.minus(1), count2, 'should have incremented count by 1')
 }
 
 

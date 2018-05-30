@@ -528,7 +528,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     // Returns false if comm bs are enabled, or the account is not in good standing
     function _checkEvenIfCommBallot(bytes32 democHash) internal view returns (bool) {
         SVLightAdminProxy admin = SVLightAdminProxy(backend.getDAdmin(democHash));
-        return payments.accountInGoodStanding(democHash) && !admin.getCommunityBallotsEnabled();
+        return payments.accountInGoodStanding(democHash) && admin.getCommunityBallotsEnabled() == false;
     }
 
     // sv ens domains
