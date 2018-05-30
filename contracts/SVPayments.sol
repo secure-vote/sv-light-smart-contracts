@@ -9,11 +9,11 @@ pragma solidity ^0.4.24;
 //
 
 
-import { permissioned, payoutAll } from "./SVCommon.sol";
+import { permissioned, payoutAllC } from "./SVCommon.sol";
 import "./IndexInterface.sol";
 
 
-contract SVPayments is IxPaymentsIface, permissioned, payoutAll {
+contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     event UpgradedToPremium(bytes32 indexed democHash);
     event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
     event AccountPayment(bytes32 indexed democHash, uint additionalSeconds);
@@ -78,7 +78,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAll {
         require(_emergencyAdmin != address(0), "backup-admin-null");
     }
 
-    function payable public {
+    function() payable public {
         _payTo.transfer(msg.value);
     }
 
