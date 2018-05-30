@@ -194,7 +194,7 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
 
     // console.log('about to testABallot')
     // try a single ballot first
-    await testABallot(accounts)(vc, S.Just(accounts[0]), "test ballot single");
+    await testABallot(accounts)(vc, accounts[0], "test ballot single");
     await log("single vote tested")
 
     assert.equal(await aux.hasVoted(accounts[0]), true, "hasVoted method should work.");
@@ -205,7 +205,7 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
     try {
         // now a bunch
         await AsyncPar.map(S.range(0, nVotes), async i => {
-            return await testABallot(accounts)(vc, S.Just(accounts[i]), "test ballot batch: " + i.toString());
+            return await testABallot(accounts)(vc, accounts[i], "test ballot batch: " + i.toString());
         });
         // Woot, tested 98 ballots.
     } catch (err) {
@@ -243,9 +243,8 @@ async function testTestMode({accounts, BB, bbaux}) {
 }
 
 
-const testABallot = accounts => async (vc, account = S.Nothing, msg = "no message provided") => {
-    const myAddr = S.fromMaybe(accounts[0], account);
-
+const testABallot = accounts => async (vc, account, msg = "no message provided") => {
+    const myAddr = account;
     const encBallot = genRandomBytes32();
     const vtrPubkey = genRandomBytes32();
 
