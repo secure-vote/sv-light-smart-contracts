@@ -201,7 +201,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAll, IxIface, ixBackendEvents,
     SVAdminPxFactory public adminPxFactory;
     SvEnsEverythingPx public ensPx;
     EnsOwnerProxy public ensOwnerPx;
-    BBFarm public bbfarm;
+    BBFarm bbfarm;
 
     uint256 constant _version = 2;
 
