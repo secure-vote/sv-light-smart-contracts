@@ -367,6 +367,11 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC}
     assert.equal(await svIx.accountInGoodStanding(democHash), false, "time now expired")
     // commb works again
     await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes2, {value: commBPrice})
+
+    // set up to test counting of ballots when it does qualify as a community ballot but
+    // community ballots are disabled (and democ in good standing)
+    await svIx.payForDemocracy(democHash, {value: oneEth})
+
 }
 
 
@@ -976,14 +981,27 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, txOpts: {from: owner, value: 1}, erc20});
     const packed = toBigNumber(await mkStdPacked());
 
+    // deploy a ballot to start with to make sure anything needed to be set is set
+    const b0 = await getBalance(owner)
+
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, packed, {gasPrice: 1})
+
     const b1 = await getBalance(owner)
 
-    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, packed)
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, packed, {gasPrice: 1})
 
     const b2 = await getBalance(owner)
 
+    await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, mkPackedTime(...(await genStartEndTimes())), {value: oneEth, gasPrice: 1})
+
+    // since owner is the payTo we don't have a net transfer of money
+    const b3 = await getBalance(owner)
+
+
     console.log(`Deploy Ballot Gas Costs:
+    InitBB: ${b0.minus(b1).toFixed()}
     BBFarm: ${b1.minus(b2).toFixed()}
+    CommB:  ${b2.minus(b3).toFixed()}
     `)
 }
 
