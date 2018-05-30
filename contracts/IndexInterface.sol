@@ -6,13 +6,16 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 
 interface IxIface {
     function getVersion() external view returns (uint256);
-    function getBBFarm() external view returns (address);
+    function getBBFarm(uint16 bbFarmId) external view returns (address);
+    function getBBFarmID(uint32 bbNamespace) external view returns (uint16 bbFarmId);
+    function getBBFarmFromBallotID(uint256 ballotId) external view returns (address);
 
     function doUpgrade(address) external;
+    function addBBFarm(address bbFarm) external returns (uint16 bbFarmId);
     function emergencySetPaymentBackend(IxPaymentsIface) external;
     function emergencySetBackend(IxBackendIface) external;
     function emergencySetAdminPxFactory(address _pxF) external;
-    function emergencySetBBFarm(address _bbFarm) external;
+    function emergencySetBBFarm(uint16 bbFarmId, address _bbFarm) external;
     function emergencySetDAdmin(bytes32 democHash, address newAdmin) external;
 
     function getPayTo() external view returns (address);
@@ -36,6 +39,7 @@ interface IxIface {
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
     function dUpgradeToPremium(bytes32 democHash) external;
     function dDowngradeToBasic(bytes32 democHash) external;
+    function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) external;
 
     function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint);
     // only ix owner - used for adding past ballots
@@ -48,6 +52,7 @@ interface IxIface {
     function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 nBallots);
     function getDErc20(bytes32 democHash) external view returns (address);
     function getDHash(bytes13 prefix) external view returns (bytes32);
+    function getDArbitraryData(bytes32 democHash, uint256 key) external view returns (uint256);
 
     /* democ ballot getters */
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
@@ -57,6 +62,8 @@ interface IxIface {
     event PaymentMade(uint[2] valAndRemainder);
     event Emergency(bytes32 setWhat);
     event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
+    event EmergencyBBFarm(uint16 bbFarmId);
+    event AddedBBFarm(uint16 bbFarmId);
     // from backend
     event NewBallot(bytes32 indexed democHash, uint ballotN);
     event NewDemoc(bytes32 democHash);
