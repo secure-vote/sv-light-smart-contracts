@@ -158,7 +158,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     }
 
     function upgradeToPremium(bytes32 democHash) only_editors() external {
-        require(denyPremium[democHash] == false, "cannot-upgrade");
+        require(denyPremium[democHash] == false, "upgrade-denied");
         require(!accounts[democHash].isPremium, "!basic");
         accounts[democHash].isPremium = true;
         // convert basic minutes to premium minutes

@@ -442,7 +442,7 @@ const testPaymentsEmergencySetOwner = async ({paySC, owner, backupOwner, account
 }
 
 
-const testAllAdminFunctions = async ({owner, accounts, svIx, erc20, doLog}) => {
+const testAllAdminFunctionsAndCategories = async ({owner, accounts, svIx, erc20, doLog, paySC, be}) => {
     const [, u1, u2, u3, u4, u5, badActor, token1] = accounts;
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1}})
 
@@ -450,6 +450,16 @@ const testAllAdminFunctions = async ({owner, accounts, svIx, erc20, doLog}) => {
         await assertRevert(ixPx[m](...args, {from: badActor}), `ixPx.${m}(${args}, {from: badActor}) fails`)
         await assertRevert(svIx[m](...args, {from: badActor}), `svIx.${m}(${args}, {from: badActor}) fails`)
         await ixPx[m](...args, {from: owner})
+    }
+
+    const testOnlyAdminPayments = async (m, args) => {
+        await assertRevert(paySC[m](...args, {from: badActor}), `payments.${m}(${args}, {from: badActor}) fails`)
+        await paySC[m](...args, {from: owner})
+    }
+
+    const testOnlyAdminBackend = async (m, args) => {
+        await assertRevert(be[m](...args, {from: badActor}), `backend.${m}(${args}, {from: badActor}) fails`)
+        await be[m](...args, {from: owner})
     }
 
     // set erc20
@@ -496,6 +506,24 @@ const testAllAdminFunctions = async ({owner, accounts, svIx, erc20, doLog}) => {
     assert.equal(await svIx.getDBallotsN(democHash), 0, '0 ballots')
     await testOnlyAdmin('dDeployBallot', [democHash, genRandomBytes32(), zeroHash, await mkStdPacked()])
     assert.equal(await svIx.getDBallotsN(democHash), 1, '1 ballot')
+
+    // payments
+    await Promise.all(R.map(args => testOnlyAdminPayments(args),
+        [ 'giveTimeToDemoc', [zeroHash, 1000, "0x00"]
+        , 'setPayTo', [owner]
+        , 'setCommunityBallotCentsPrice', [toBigNumber(999)]
+        , 'setBasicCentsPricePer30Days', [toBigNumber(999)]
+        , 'setBasicBallotsPer30Days', [toBigNumber(999)]
+        , 'setPremiumMultiplier', [toBigNumber(25)]
+        , 'setWeiPerCent', [toBigNumber(999)]
+        , 'setMinorEditsAddr', [toBigNumber(999)]
+        , 'setDenyPremium', [zeroHash, true]
+        ]));
+
+    // backend
+    await Promise.all(R.map(args => testOnlyAdminBackend(args),
+        [ 'dAdd', [zeroHash, erc20.address]
+        ]))
 }
 
 
@@ -513,7 +541,7 @@ const testPrefix = async ({svIx, owner, doLog, ensPR, tld, erc20}) => {
 }
 
 
-const testCommonRevertCases = async ({svIx, owner, doLog, erc20}) => {
+const testRevertCases = async ({svIx, owner, doLog, erc20, be, paySC}) => {
     await assertRevert(IxPayments.new(zeroAddr), "payments throws on zeroAddr")
 
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1}})
@@ -524,6 +552,9 @@ const testCommonRevertCases = async ({svIx, owner, doLog, erc20}) => {
     const [s,e] = await genStartEndTimes()
     await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_NO_ENC | USE_TESTING)), 'should revert as testing ballots cant be deployed through index')
     await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash,              mkPacked(s, e, USE_ETH | USE_NO_ENC))
+
+    await be.dAdd(toHex("test democ"), erc20.address)
+    await asyncAssertThrow(() => be.dAdd(toHex("test democ"), erc20.address), 'conflict of democHash prefix')
 }
 
 
@@ -606,8 +637,53 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) =
 }
 
 
-const testPaymentsSettingValues = async () => {
-    throw Error('')
+const testPaymentsSettingValues = async ({svIx, owner, doLog, erc20, paySC}) => {
+    const initWeiPerCent = toBigNumber('18975332000000')
+    const initCommBPrice = toBigNumber(1000)
+    const initCentsPer30Days = toBigNumber(100000)
+    const initBallotsPerMonth = toBigNumber(5)
+    const initPremMult = toBigNumber(5)
+    const initExchRate = toBigNumber(52700)
+    const initCommBWeiPrice = initWeiPerCent.times(initCommBPrice)
+    const initExtraBallotWei = initCentsPer30Days.div(initBallotsPerMonth).times(initWeiPerCent)
+
+    // test initial values
+    assert.deepEqual(await paySC.getCommunityBallotCentsPrice(), initCommBPrice, 'commb opening price')
+    assert.deepEqual(await paySC.getCommunityBallotWeiPrice(), initCommBWeiPrice, 'commb init wei price')
+    assert.deepEqual(await paySC.getBasicCentsPricePer30Days(), initCentsPer30Days, 'basic 30 days cents price')
+    assert.deepEqual(await paySC.getBasicExtraBallotFeeWei(), initExtraBallotWei, 'init extra ballot wei')
+    assert.deepEqual(await paySC.getBasicBallotsPer30Days(), initBallotsPerMonth, 'init ballots / mo')
+    assert.deepEqual(await paySC.getPremiumMultiplier(), initPremMult, 'init prem mult')
+    assert.deepEqual(await paySC.getPremiumCentsPricePer30Days(), initCentsPer30Days.times(initPremMult), 'init prem cents / mo')
+    assert.deepEqual(await paySC.getWeiPerCent(), initWeiPerCent, 'init wei per cent')
+    assert.deepEqual(await paySC.getUsdEthExchangeRate(), initExchRate, 'init cents/eth')
+
+
+    const newWeiPerCent = toBigNumber('58976170000000')
+    const newExchRate = toBigNumber('16956')
+    const newCommBPrice = toBigNumber('5000')
+    const newCommBWei = newWeiPerCent.times(newCommBPrice)
+    const newCentsPer30Days = toBigNumber('150000')
+    const newBallotsPerMonth = toBigNumber('10')
+    const newExtraBWei = newCentsPer30Days.div(newBallotsPerMonth).times(newWeiPerCent)
+    const newPremMult = toBigNumber('3')
+    const newPremCents = newCentsPer30Days.times(newPremMult)
+
+    await paySC.setWeiPerCent(newWeiPerCent)
+    await paySC.setCommunityBallotCentsPrice(newCommBPrice)
+    await paySC.setBasicCentsPricePer30Days(newCentsPer30Days)
+    await paySC.setBasicBallotsPer30Days(newBallotsPerMonth)
+    await paySC.setPremiumMultiplier(newPremMult)
+
+    assert.deepEqual(await paySC.getCommunityBallotCentsPrice(), newCommBPrice, 'commb new price')
+    assert.deepEqual(await paySC.getCommunityBallotWeiPrice(), newCommBWei, 'commb new wei price')
+    assert.deepEqual(await paySC.getBasicCentsPricePer30Days(), newCentsPer30Days, 'new basic 30 days cents price')
+    assert.deepEqual(await paySC.getBasicExtraBallotFeeWei(), newExtraBWei, 'new extra ballot wei')
+    assert.deepEqual(await paySC.getBasicBallotsPer30Days(), newBallotsPerMonth, 'new ballots / mo')
+    assert.deepEqual(await paySC.getPremiumMultiplier(), newPremMult, 'new prem mult')
+    assert.deepEqual(await paySC.getPremiumCentsPricePer30Days(), newPremCents, 'new prem cents / mo')
+    assert.deepEqual(await paySC.getWeiPerCent(), newWeiPerCent, 'new wei per cent')
+    assert.deepEqual(await paySC.getUsdEthExchangeRate(), newExchRate, 'new cents/eth')
 }
 
 
@@ -678,9 +754,28 @@ const testVersion = async ({svIx}) => {
 }
 
 
-const testNFPTierAndPayments = async () => {
+const testNFPTierAndPayments = async ({svIx, erc20, owner, accounts, doLog, paySC}) => {
     // test that we can give and remove time on NFP accounts
-    throw Error("not implemented");
+
+    const [, democAdmin, u2, u3, u4, u5] = accounts;
+
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1, from: democAdmin}})
+
+    assert.equal(await paySC.getDenyPremium(democHash), false, 'should not have denyPremium yet')
+
+    await paySC.setDenyPremium(democHash, true, {from: owner})
+    assert.equal(await paySC.getDenyPremium(democHash), true, 'should have denyPremium now')
+
+    await assertRevert(paySC.setDenyPremium(democHash, false, {from: democAdmin}), 'bad acct cant do setDenyPremium')
+    await assertRevert(paySC.giveTimeToDemoc(democHash, 100, zeroHash, {from: democAdmin}), 'bad acct cant do giveTimeToDemoc')
+
+    await paySC.giveTimeToDemoc(democHash, 60 * 60 * 24 * 30 * 2, toHex("nfp - test 1....."))
+
+    await assertRevert(paySC.giveTimeToDemoc(democHash, 100, zeroHash, {from: u5}), 'u5 cant yet do giveTimeToDemoc')
+    await paySC.setMinorEditsAddr(u5);
+    await paySC.giveTimeToDemoc(democHash, 100, toHex("nfp - test 2....."), {from: u5})
+
+    await assertRevert(ixPx.dUpgradeToPremium(democHash, {from: democAdmin}), "can't upgrade to premium because we've set denyPremium=true")
 }
 
 
@@ -895,16 +990,15 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
 
 contract("SVLightIndex", function (accounts) {
     tests = [
-        // ["test payments setting values", testPaymentsSettingValues],
-        // ["test catagories (crud)", testCatagoriesCrud],
-        // ["test nfp tier", testNFPTierAndPayments],
+        ["test payments setting values", testPaymentsSettingValues],
+        ["test nfp tier", testNFPTierAndPayments],
         ["test owner add ballot", testOwnerAddBallot],
         ["test paying for extra ballots (basic)", testBasicExtraBallots],
-        ["common revert cases", testCommonRevertCases],
+        ["test revert cases", testRevertCases],
         ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
         ["test payments payout all", testPaymentsPayoutAll],
         ["test democ prefix stuff", testPrefix],
-        ["test all admin functions", testAllAdminFunctions],
+        ["test all admin functions and categories (crud)", testAllAdminFunctionsAndCategories],
         ["test currency conversion", testCurrencyConversion],
         ["test payments backup admin", testPaymentsEmergencySetOwner],
         ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],

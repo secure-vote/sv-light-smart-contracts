@@ -22,15 +22,13 @@ contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
 
     // storage variables
     bytes32 public democHash;
-    bool public communityBallotsEnabled = true;
+    bool communityBallotsEnabled = true;
     mapping (address => bool) public admins;
     upgradePtr public _forwardTo;
     address[] adminLog;
 
-    bool callActive = false;
-    address caller = address(0);
-
-    bool safeTxMutex = false;
+    bool callActive;  // default false
+    address caller;   // default address(0)
 
     event AddedAdminToPx(address newAdmin);
     event RemovedAdminFromPx(address oldAdmin);

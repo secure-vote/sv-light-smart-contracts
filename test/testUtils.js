@@ -13,6 +13,8 @@ module.exports = function () {
         return web3.toBigNumber(i.toFixed ? i.toFixed() : i.toString());
     }
 
+    this.R = R;
+
     const w3 = Web3;
 
     this.w3 = Web3;
