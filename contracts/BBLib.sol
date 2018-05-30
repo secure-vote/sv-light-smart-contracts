@@ -183,19 +183,19 @@ library BBLib {
         return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].encPK);
     }
 
-    // function getStartTime(DB storage db) public view returns (uint64) {
+    // function getStartTime(DB storage db) internal view returns (uint64) {
     //     return BPackedUtils.packedToStartTime(db.packed);
     // }
 
-    // function getEndTime(DB storage db) public view returns (uint64) {
+    // function getEndTime(DB storage db) internal view returns (uint64) {
     //     return BPackedUtils.packedToEndTime(db.packed);
     // }
 
-    // function getSubmissionBits(DB storage db) public view returns (uint16) {
+    // function getSubmissionBits(DB storage db) internal view returns (uint16) {
     //     return BPackedUtils.packedToSubmissionBits(db.packed);
     // }
 
-    // function getSpecHash(DB storage db) external view returns (bytes32) {
+    // function getSpecHash(DB storage db) internal view returns (bytes32) {
     //     return db.specHash;
     // }
 

@@ -5,7 +5,7 @@ pragma solidity ^0.4.24;
 // Author: Max Kaye <max@secure.vote>
 // Released under MIT licence
 
-import { owned, upgradePtr } from "./SVCommon.sol";
+import { owned, upgradePtr, safeSend } from "./SVCommon.sol";
 import { IxIface } from "./IndexInterface.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
@@ -14,7 +14,7 @@ import "./BPackedUtils.sol";
 import "./BBFarm.sol";
 
 
-contract SVLightAdminProxy is owned, SVBallotConsts {
+contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
 
     uint constant PROXY_VERSION = 2;
 
@@ -67,7 +67,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     function() public payable {
         if (callActive) {
             // allows refunds to addresses
-            safeSend(caller, "", msg.value);
+            doSafeSend(caller, msg.value);
         } else {
             callActive = true;
             caller = msg.sender;
@@ -78,7 +78,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
                 require(admins[msg.sender], "!admin");
                 // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
                 // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
-                require(address(fwdTo).call.value(msg.value)(msg.data), "failed to fwd tx");
+                doSafeSendWData(address(fwdTo), msg.data, msg.value);
             } else if (msg.value > 0) {
                 // allow fwding just money to the democracy
                 IxIface ix = IxIface(fwdTo);
@@ -99,22 +99,15 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     }
 
     function fwdData(address toAddr, bytes data) isAdmin() public {
-        safeSend(toAddr, data, 0);
+        doSafeSendWData(toAddr, data, 0);
     }
 
     function fwdPayment(address toAddr) isAdmin() public payable {
-        safeSend(toAddr, "", msg.value);
+        doSafeSend(toAddr, msg.value);
     }
 
     function fwdPaymentAndData(address toAddr, bytes data) isAdmin() public payable {
-        safeSend(toAddr, data, msg.value);
-    }
-
-    function safeSend(address to, bytes data, uint val) internal {
-        require(safeTxMutex == false, "reentrency locked");
-        safeTxMutex = true;
-        require(to.call.value(val)(data), "send failed");
-        safeTxMutex = false;
+        doSafeSendWData(toAddr, data, msg.value);
     }
 
     // community stuff
@@ -134,8 +127,8 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
         uint price = ix.getCommunityBallotWeiPrice();
         require(msg.value >= price, "!comm-b-fee");
 
-        safeSend(ix.getPayTo(), "", price);
-        safeSend(msg.sender, "", msg.value - price);
+        doSafeSend(ix.getPayTo(), price);
+        doSafeSend(msg.sender, msg.value - price);
 
         // if accounts are not in good standing then we always allow community ballots
         bool canDoCommunityBallots = communityBallotsEnabled || !ix.accountInGoodStanding(democHash);
@@ -185,7 +178,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts {
     }
 
     // simple function to list all admins
-    function listAllAdmins() public constant returns (address[]) {
+    function listAllAdmins() public view returns (address[]) {
         // start a dynamic memory array (note: will be replaced)
         address[] memory allAdmins;
 
