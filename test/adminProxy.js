@@ -125,7 +125,7 @@ const testAdminPxInit = async ({accounts, owner, svIx, democHash, adminPx, ixPx}
     assert.equal((await adminPx.proxyVersion()).toNumber(), 2, "proxyVersion is 2")
     assert.equal(await adminPx.allowErc20OwnerClaim(), true, "allowErc20OwnerClaim is true by default")
     assert.equal(await adminPx.democHash(), democHash, "democHash matches")
-    assert.equal(await adminPx.communityBallotsEnabled(), true, "community ballots on by default")
+    assert.equal(await adminPx.getCommunityBallotsEnabled(), true, "community ballots on by default")
     assert.equal(await adminPx.admins(owner), true, "owner is admin by default")
     assert.equal(await adminPx._forwardTo(), svIx.address, "fwd to is ix addr")
     assert.deepEqual(await adminPx.listAllAdmins(), [owner], "listAllAdmins is just owner to start with")
