@@ -212,7 +212,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     SVAdminPxFactory public adminPxFactory;
     SvEnsEverythingPx public ensPx;
     EnsOwnerProxy public ensOwnerPx;
-    BBFarm bbfarm;
+    BBFarm[] bbFarms;
 
     uint256 constant _version = 2;
 
@@ -231,14 +231,14 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
                , SVAdminPxFactory _pxF
                , SvEnsEverythingPx _ensPx
                , EnsOwnerProxy _ensOwnerPx
-               , BBFarm _bbfarm
+               , BBFarm _bbFarm0
                ) public {
         backend = _b;
         payments = _pay;
         adminPxFactory = _pxF;
         ensPx = _ensPx;
         ensOwnerPx = _ensOwnerPx;
-        bbfarm = _bbfarm;
+        bbFarms.push(_bbFarm0);
     }
 
     //* UPGRADE STUFF */
@@ -247,10 +247,19 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         doUpgradeInternal(nextSC);
         backend.upgradeMe(nextSC);
         payments.upgradeMe(nextSC);
-        bbfarm.upgradeMe(nextSC);
         ensPx.upgradeMeAdmin(nextSC);
         ensOwnerPx.setAddr(nextSC);
         ensOwnerPx.upgradeMeAdmin(nextSC);
+
+        for (uint i = 0; i < bbFarms.length; i++) {
+            bbFarms[i].upgradeMe(nextSC);
+        }
+    }
+
+    // adding a new BBFarm
+    function addBBFarm(BBFarm _bbFarm) only_owner() external returns (uint8 bbFarmId) {
+        bbFarmId = bbFarms.length;
+        bbFarms.push(_bbFarm);
     }
 
     /* FOR EMERGENCIES */
@@ -270,9 +279,9 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         emit Emergency(bytes32("adminPxF"));
     }
 
-    function emergencySetBBFarm(address _bbFarm) only_owner() external {
-        bbfarm = BBFarm(_bbFarm);
-        emit Emergency(bytes32("bbFarm"));
+    function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) only_owner() external {
+        bbFarms[bbFarmId] = BBFarm(_bbFarm);
+        emit EmergencyBBFarm(uint8 bbFarmId, bytes32("bbFarm"));
     }
 
     function emergencySetDAdmin(bytes32 democHash, address newAdmin) only_owner() external {
@@ -286,8 +295,8 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         return _version;
     }
 
-    function getBBFarm() external view returns (address) {
-        return bbfarm;
+    function getBBFarm(uint8 i) external view returns (address) {
+        return bbFarms[i];
     }
 
     function getPayTo() external view returns (address) {
@@ -434,7 +443,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         require(secsLeft * 2 > secsToEndTime, "unpaid");
     }
 
-    function _basicBallotLimitOperations(bytes32 democHash) internal returns (bool recordTowardsBasicLimit) {
+    function _basicBallotLimitOperations(bytes32 democHash, BBFarm _bbFarm) internal returns (bool recordTowardsBasicLimit) {
         // if we're an official ballot and the democ is basic, ensure the democ
         // isn't over the ballots/mo limit
         if (payments.getPremiumStatus(democHash) == false) {
@@ -455,7 +464,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             // nBallotsBasicCounted-X. There would thus be (X-1) ballots that are _more_
             // recent than the one we're looking for.
             uint earlyBallotId = backend.getDCountedBasicBallotID(democHash, nBallotsBasicCounted - nBallotsAllowed);
-            uint earlyBallotTs = bbfarm.getCreationTs(earlyBallotId);
+            uint earlyBallotTs = _bbFarm.getCreationTs(earlyBallotId);
 
             // if the earlyBallot was created more than 30 days in the past we should
             // count the new ballot
@@ -495,19 +504,26 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
         require(BBLib.isTesting(submissionBits) == false, "b-testing");
 
+        // the most significant byte of extraData signals the bbFarm to use.
+        uint8 bbFarmId = uint8(uint256(extraData) >> 248);
+        BBFarm _bbFarm = bbFarms[bbFarmId];
+
         // by default we don't record towards the basic limit
         bool recordTowardsBasicLimit = false;
-
         // anything that isn't a community ballot counts towards the basic limit.
-        // we want to check in cases where the ballot qualifies as a community
-        // ballot OR the admins have _disabled_ community ballots.
+        // we want to check in cases where the ballot doesn't qualify as a community
+        // ballot OR
+        //    the ballot qualifies as a community ballot
+        //    AND the admins have _disabled_ community ballots.
         bool requiresCheck = BBLib.qualifiesAsCommunityBallot(submissionBits) == false || _checkEvenIfCommBallot(democHash);
         if (requiresCheck) {
-            recordTowardsBasicLimit = _basicBallotLimitOperations(democHash);
+            recordTowardsBasicLimit = _basicBallotLimitOperations(democHash, _bbFarm);
             _deployBallotChecks(democHash, endTime);
         }
 
-        ballotId = bbfarm.initBallot(
+        // note: bbFarms are allocated a 40bit namespace for ballot ids (~10^12)
+        // this should be enough to avoid eventual collisions.
+        ballotId = _bbFarm.initBallot(
             specHash,
             packed,
             this,
