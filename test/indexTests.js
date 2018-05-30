@@ -508,21 +508,21 @@ const testAllAdminFunctionsAndCategories = async ({owner, accounts, svIx, erc20,
     assert.equal(await svIx.getDBallotsN(democHash), 1, '1 ballot')
 
     // payments
-    await Promise.all(R.map(args => testOnlyAdminPayments(args),
-        [ 'giveTimeToDemoc', [zeroHash, 1000, "0x00"]
-        , 'setPayTo', [owner]
-        , 'setCommunityBallotCentsPrice', [toBigNumber(999)]
-        , 'setBasicCentsPricePer30Days', [toBigNumber(999)]
-        , 'setBasicBallotsPer30Days', [toBigNumber(999)]
-        , 'setPremiumMultiplier', [toBigNumber(25)]
-        , 'setWeiPerCent', [toBigNumber(999)]
-        , 'setMinorEditsAddr', [toBigNumber(999)]
-        , 'setDenyPremium', [zeroHash, true]
+    await Promise.all(R.map(testArgs => testOnlyAdminPayments(...testArgs),
+        [ [ 'giveTimeToDemoc', [zeroHash, 1000, "0x00"] ]
+        , [ 'setPayTo', [owner] ]
+        , [ 'setCommunityBallotCentsPrice', [toBigNumber(999)] ]
+        , [ 'setBasicCentsPricePer30Days', [toBigNumber(999)] ]
+        , [ 'setBasicBallotsPer30Days', [toBigNumber(999)] ]
+        , [ 'setPremiumMultiplier', [toBigNumber(25)] ]
+        , [ 'setWeiPerCent', [toBigNumber(999)] ]
+        , [ 'setMinorEditsAddr', [zeroAddr] ]
+        , [ 'setDenyPremium', [zeroHash, true] ]
         ]));
 
     // backend
-    await Promise.all(R.map(args => testOnlyAdminBackend(args),
-        [ 'dAdd', [zeroHash, erc20.address]
+    await Promise.all(R.map(testArgs => testOnlyAdminBackend(...testArgs),
+        [ [ 'dAdd', [zeroHash, zeroAddr] ]
         ]))
 }
 
