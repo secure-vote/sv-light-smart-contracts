@@ -30,10 +30,13 @@ contract SVAdminPxFactory {
 }
 
 
-contract SVIndexBackend is IxBackendIface, permissioned {
-    event LowLevelNewBallot(bytes32 democHash, uint id);
+contract ixBackendEvents {
+    event LowLevelNewBallot(bytes32 democHash, uint ballotN);
     event LowLevelNewDemoc(bytes32 democHash);
+}
 
+
+contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents {
     struct Democ {
         address erc20;
         address admin;
@@ -174,7 +177,7 @@ contract SVIndexBackend is IxBackendIface, permissioned {
             democs[democHash].officialBallots.push(ballotId);
         }
 
-        emit LowLevelNewBallot(democHash, ballotId);
+        emit LowLevelNewBallot(democHash, democs[democHash].allBallots.length - 1);
     }
 
     function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) only_editors() external {
@@ -183,7 +186,16 @@ contract SVIndexBackend is IxBackendIface, permissioned {
 }
 
 
-contract SVLightIndex is owned, upgradePtr, IxIface {
+contract ixEvents {
+    event PaymentMade(uint[2] valAndRemainder);
+    event BallotAdded(bytes32 democHash, uint ballotId);
+    event DemocAdded(bytes32 democHash, address admin);
+    event Emergency(bytes32 setWhat);
+    event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
+}
+
+
+contract SVLightIndex is owned, upgradePtr, IxIface, ixBackendEvents, ixEvents {
     IxBackendIface public backend;
     IxPaymentsIface public payments;
     SVAdminPxFactory public adminPxFactory;
@@ -194,17 +206,6 @@ contract SVLightIndex is owned, upgradePtr, IxIface {
     uint256 constant _version = 2;
 
     bool txMutex = false;
-
-    //* EVENTS /
-
-    event PaymentMade(uint[2] valAndRemainder);
-    event BallotAdded(bytes32 democHash, uint ballotId);
-    event DemocAdded(bytes32 democHash, address admin);
-    event Emergency(bytes32 setWhat);
-    event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
-    // for debug
-    // event Log(string message);
-    // event LogB32(bytes32 b32);
 
     //* MODIFIERS /
 

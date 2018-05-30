@@ -59,6 +59,8 @@ interface IxIface {
     event DemocAdded(bytes32 democHash, address admin);
     event Emergency(bytes32 setWhat);
     event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
+    event LowLevelNewBallot(bytes32 democHash, uint ballotN);
+    event LowLevelNewDemoc(bytes32 democHash);
 }
 
 
@@ -151,6 +153,6 @@ interface IxBackendIface {
     function getDHash(bytes13 prefix) external view returns (bytes32);
 
     /* events */
-    event LowLevelNewBallot(bytes32 democHash, uint id);
+    event LowLevelNewBallot(bytes32 democHash, uint ballotN);
     event LowLevelNewDemoc(bytes32 democHash);
 }

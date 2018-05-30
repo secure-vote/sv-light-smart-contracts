@@ -70,7 +70,8 @@ contract BallotAux is BBAuxIface {
 
     function getVotes(BallotBoxIface bb) external view
         returns ( bytes32[] memory ballots
-                , bytes32[] memory pks) {
+                , bytes32[] memory pks
+                , address[] memory senders) {
 
         address sender;
         bytes32 voteData;
@@ -79,6 +80,7 @@ contract BallotAux is BBAuxIface {
             (voteData, sender, encPK) = bb.getVote(i);
             ballots = MemArrApp.appendBytes32(ballots, voteData);
             pks = MemArrApp.appendBytes32(pks, encPK);
+            senders = MemArrApp.appendAddress(senders, sender);
         }
     }
 
