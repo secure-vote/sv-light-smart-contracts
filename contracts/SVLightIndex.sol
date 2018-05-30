@@ -460,8 +460,8 @@ contract SVLightIndex is owned, upgradePtr, payoutAll, IxIface, ixBackendEvents,
             // now that we know they've paid the fee, we should send Eth to `payTo`
             // and return the remainder.
             uint remainder = msg.value - extraBallotFee;
-            safeSend(address(payments), extraBallotFee);
-            safeSend(msg.sender, remainder);
+            doSafeSend(address(payments), extraBallotFee);
+            doSafeSend(msg.sender, remainder);
 
             return;
         }

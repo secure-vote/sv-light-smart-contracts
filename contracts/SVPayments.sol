@@ -78,6 +78,10 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAll {
         require(_emergencyAdmin != address(0), "backup-admin-null");
     }
 
+    function payable public {
+        _payTo.transfer(msg.value);
+    }
+
     function _modAccountBalance(bytes32 democHash, uint additionalSeconds) internal {
         uint prevPaidTill = accounts[democHash].paidUpTill;
         if (prevPaidTill < now) {
@@ -112,7 +116,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAll {
         payments.push(PaymentLog(false, democHash, additionalSeconds, msg.value));
         emit AccountPayment(democHash, additionalSeconds);
 
-        payTo.transfer(msg.value);
+        _payTo.transfer(msg.value);
     }
 
     function accountInGoodStanding(bytes32 democHash) external view returns (bool) {
@@ -172,7 +176,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAll {
     //* PAYMENT AND OWNER FUNCTIONS */
 
     function setPayTo(address newPayTo) only_owner() external {
-        payTo = newPayTo;
+        _payTo = newPayTo;
     }
 
     function setCommunityBallotCentsPrice(uint amount) only_owner() external {
@@ -211,7 +215,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAll {
     /* Getters */
 
     function getPayTo() external view returns (address) {
-        return payTo;
+        return _payTo;
     }
 
     function getCommunityBallotCentsPrice() external view returns (uint) {

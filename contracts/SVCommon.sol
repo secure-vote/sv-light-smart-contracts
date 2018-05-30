@@ -14,13 +14,17 @@ contract safeSend {
 
     // we want to be able to call outside contracts (e.g. the admin proxy contract)
     // but reentrency is bad, so here's a mutex.
-    function safeSend(address toAddr, uint amount) internal {
+    function doSafeSend(address toAddr, uint amount) internal {
+        doSafeSendWData(toAddr, "", amount);
+    }
+
+    function doSafeSendWData(address, bytes data, uint amount) internal {
         require(txMutex3847834 == false, "ss-guard");
         txMutex3847834 = true;
         // we need to use address.call.value(v)() because we want
-        // to be able to send to other contracts (which might use)
-        // more than 2300 gas on their fallback function.
-        require(toAddr.call.value(amount)(), "ss-failed");
+        // to be able to send to other contracts, even with no data,
+        // which might use more than 2300 gas in their fallback function.
+        require(toAddr.call.value(amount)(data), "ss-failed");
         txMutex3847834 = false;
     }
 }
@@ -35,7 +39,7 @@ contract payoutAll is safeSend {
     }
 
     function payoutAll() external {
-        safeSend(_payTo, address(this).balance);
+        doSafeSend(_payTo, address(this).balance);
     }
 }
 

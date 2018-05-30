@@ -46,7 +46,7 @@ contract BBFarm is permissioned, payoutAll {
     function sponsor(uint ballotId) external payable {
         BBLib.DB storage db = dbs[ballotId];
         db.logSponsorship(msg.value);
-        require(db.index.getPayTo().call.value(msg.value)(), "tx-fail");
+        doSafeSend(db.index.getPayTo(), msg.value);
     }
 
     /* Voting */
