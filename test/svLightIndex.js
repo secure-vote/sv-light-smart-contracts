@@ -729,7 +729,6 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
     NoSC: 155579
     BBFarm: 274586
 */
-
 const testGasOfBallots = async ({svIx, owner, erc20}) => {
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, txOpts: {from: owner, value: 1}, erc20});
     const packed = toBigNumber(mkStdPacked());

@@ -9,11 +9,11 @@ pragma solidity ^0.4.24;
 //
 
 
-import { permissioned } from "./SVCommon.sol";
+import { permissioned, payoutAll } from "./SVCommon.sol";
 import "./IndexInterface.sol";
 
 
-contract SVPayments is IxPaymentsIface, permissioned {
+contract SVPayments is IxPaymentsIface, permissioned, payoutAll {
     event UpgradedToPremium(bytes32 indexed democHash);
     event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
     event AccountPayment(bytes32 indexed democHash, uint additionalSeconds);
@@ -43,7 +43,6 @@ contract SVPayments is IxPaymentsIface, permissioned {
     address public minorEditsAddr;
 
     // payment details
-    address public payTo;
     uint communityBallotCentsPrice = 1000;  // $10/ballot
     uint basicCentsPricePer30Days = 100000; // $1000/mo
     uint basicBallotsPer30Days = 5;
@@ -63,6 +62,9 @@ contract SVPayments is IxPaymentsIface, permissioned {
 
 
     /* BREAK GLASS IN CASE OF EMERGENCY */
+    // this is included here because something going wrong with payments is possibly
+    // the absolute worst case. Note: does this have negligable benefit if the other
+    // contracts are compromised? (e.g. by a leaked privkey)
     address public emergencyAdmin;
     function emergencySetOwner(address newOwner) external {
         require(msg.sender == emergencyAdmin, "!emergency-owner");
@@ -71,14 +73,9 @@ contract SVPayments is IxPaymentsIface, permissioned {
     /* END BREAK GLASS */
 
 
-    constructor(address _emergencyAdmin) permissioned() public {
-        payTo = msg.sender;
+    constructor(address _emergencyAdmin) public {
         emergencyAdmin = _emergencyAdmin;
         require(_emergencyAdmin != address(0), "backup-admin-null");
-    }
-
-    function() payable public {
-        payTo.transfer(msg.value);
     }
 
     function _modAccountBalance(bytes32 democHash, uint additionalSeconds) internal {
@@ -170,10 +167,6 @@ contract SVPayments is IxPaymentsIface, permissioned {
             accounts[democHash].paidUpTill = now + timeRemaining;
         }
         emit DowngradeToBasic(democHash);
-    }
-
-    function payoutAll() external {
-        payTo.transfer(address(this).balance);
     }
 
     //* PAYMENT AND OWNER FUNCTIONS */
