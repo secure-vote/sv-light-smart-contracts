@@ -179,9 +179,9 @@ library BBLib {
     //     return db.voterLog[v].length > 0;
     // }
 
-    // function getVote(DB storage db, uint id) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
-    //     return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].encPK);
-    // }
+    function getVote(DB storage db, uint id) internal view returns (bytes32 voteData, address sender, bytes32 encPK) {
+        return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].encPK);
+    }
 
     // function getStartTime(DB storage db) public view returns (uint64) {
     //     return BPackedUtils.packedToStartTime(db.packed);

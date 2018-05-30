@@ -422,12 +422,17 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
     const bbNoEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
     const bbEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
 
-    const getBallotsTest = async (bb, useEnc) => {
-        const aux = mkBBPx(bb, bbaux);
+    const getBallotsTest = async ({bb, useEnc, useAux}) => {
+        let aux;
+        if (useAux) {
+            aux = mkBBPx(bb, bbaux);
+        } else {
+            aux = bb.farm;
+        }
 
         // test getBallotsEthFrom
         assert.deepEqual(await aux.getVotesFrom(accounts[0]), [[], [], []], "getBallotsFrom should be empty before any votes");
-        assert.deepEqual(await aux.getVotes(), [[], []], "getBallots should be empty before any votes");
+        assert.deepEqual(await aux.getVotes(), [[], [], []], "getBallots should be empty before any votes");
 
         if (useEnc) {
             await bb.submitVote(_ballot1, _pk1, {from: accounts[0]});
@@ -436,8 +441,6 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
             await bb.submitVote(_ballot1, zeroHash, {from: accounts[0]});
             await bb.submitVote(_ballot2, zeroHash, {from: accounts[1]});
         }
-
-        const getVotesPost = await aux.getVotes();
 
         assert.deepEqual(await aux.getVotesFrom(accounts[0]),
                 [ [toBigNumber(0)]
@@ -451,14 +454,17 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
                 , useEnc ? [_pk2] : [zeroHash]
             ], "getBallotsFrom (a0) should match expected");
 
-        assert.deepEqual(getVotesPost,
+        assert.deepEqual(await aux.getVotes(),
             [ [_ballot1, _ballot2]
             , useEnc ? [_pk1, _pk2] : [bytes32zero, bytes32zero]
+            , [accounts[0], accounts[1]]
             ], "getBallots should match")
     }
 
-    await getBallotsTest(bbNoEnc, false);
-    await getBallotsTest(bbEnc, true);
+    await getBallotsTest({bb: bbNoEnc, useEnc: false, useAux: true});
+    await getBallotsTest({bb: bbNoEnc, useEnc: true, useAux: true});
+    await getBallotsTest({bb: bbNoEnc, useEnc: false, useAux: false});
+    await getBallotsTest({bb: bbNoEnc, useEnc: true, useAux: false});
 }
 
 
@@ -601,8 +607,9 @@ contract("BallotBox", function(accounts) {
     R.map(([desc, f]) => {
         // it("Std BB:  " + desc, _wrapTest({accounts, BB: SVBallotBox, bbName: "Std", mkFarm: false}, f))
         // it("Lib BB:  " + desc, _wrapTest({accounts, BB: BBInstance, bbName: "Lib", mkFarm: false}, f))
-        it("Farm BB: " + desc, _wrapTest({accounts, bbName: "Farm", mkFarm: true}, f))
+        it("BBFarm: " + desc, _wrapTest({accounts, bbName: "Farm", mkFarm: true}, f))
     }, tests);
 
+    // not used anymore because BBFarm is much better than other options
     // it("Init gas comparison", async () => await initGasComparison({accounts}));
 });

@@ -91,8 +91,7 @@ contract BBFarm is permissioned {
     }
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes32 encPK) {
-        BBLib.Vote storage b = dbs[ballotId].votes[voteId];
-        return (b.voteData, b.sender, b.encPK);
+        return dbs[ballotId].getVote(voteId);
     }
 
     function getTotalSponsorship(uint ballotId) external view returns (uint) {
@@ -139,5 +138,44 @@ contract BBFarm is permissioned {
         BBLib.DB storage db = dbs[ballotId];
         db.requireBallotOwner();
         db.ballotOwner = newOwner;
+    }
+
+    /* util functions - technically don't need to be in this contract (could
+     * be run externally) - but easier to put here for the moment */
+
+    function getVotes(uint ballotId) external view
+        returns ( bytes32[] memory ballots
+                , bytes32[] memory pks
+                , address[] memory senders) {
+
+        address sender;
+        bytes32 voteData;
+        bytes32 encPK;
+        BBLib.DB storage db = dbs[ballotId];
+        for (uint i = 0; i < db.nVotesCast; i++) {
+            (voteData, sender, encPK) = db.getVote(i);
+            ballots = MemArrApp.appendBytes32(ballots, voteData);
+            pks = MemArrApp.appendBytes32(pks, encPK);
+            senders = MemArrApp.appendAddress(senders, sender);
+        }
+    }
+
+    function getVotesFrom(uint ballotId, address voter) external view
+        returns ( uint256[] memory ids
+                , bytes32[] memory ballots
+                , bytes32[] memory pks) {
+
+        address sender;
+        bytes32 voteData;
+        bytes32 encPK;
+        BBLib.DB storage db = dbs[ballotId];
+        for (uint i = 0; i < db.nVotesCast; i++) {
+            (voteData, sender, encPK) = db.getVote(i);
+            if (sender == voter) {
+                ids = MemArrApp.appendUint256(ids, i);
+                ballots = MemArrApp.appendBytes32(ballots, voteData);
+                pks = MemArrApp.appendBytes32(pks, encPK);
+            }
+        }
     }
 }
