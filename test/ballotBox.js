@@ -51,7 +51,7 @@ const mkBBPx = (bb, bbaux) => new Proxy(bbaux, {
 async function testEarlyBallot({accounts, BB}) {
     var [startTime, endTime] = await genStartEndTimes();
 
-    const vc = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
+    const vc = await BB.new(specHash, mkPacked(startTime + 60, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitVote(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
 }
 
