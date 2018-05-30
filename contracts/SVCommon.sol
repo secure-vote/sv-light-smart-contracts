@@ -8,6 +8,37 @@ pragma solidity ^0.4.22;
 // Note: don't break backwards compatibility
 
 
+// safe send contract
+contract safeSend {
+    bool private txMutex3847834;
+
+    // we want to be able to call outside contracts (e.g. the admin proxy contract)
+    // but reentrency is bad, so here's a mutex.
+    function safeSend(address toAddr, uint amount) internal {
+        require(txMutex3847834 == false, "ss-guard");
+        txMutex3847834 = true;
+        // we need to use address.call.value(v)() because we want
+        // to be able to send to other contracts (which might use)
+        // more than 2300 gas on their fallback function.
+        require(toAddr.call.value(amount)(), "ss-failed");
+        txMutex3847834 = false;
+    }
+}
+
+
+// just provides a payoutAll method that sends to
+contract payoutAll is safeSend {
+    address _payTo;
+
+    constructor() public {
+        _payTo = msg.sender;
+    }
+
+    function payoutAll() external {
+        safeSend(_payTo, address(this).balance);
+    }
+}
+
 
 // owned contract - added isOwner modifier (otherwise from solidity examples)
 contract owned {

@@ -55,12 +55,11 @@ interface IxIface {
 
     /* events */
     event PaymentMade(uint[2] valAndRemainder);
-    event BallotAdded(bytes32 democHash, uint ballotId);
-    event DemocAdded(bytes32 democHash, address admin);
     event Emergency(bytes32 setWhat);
     event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
-    event LowLevelNewBallot(bytes32 democHash, uint ballotN);
-    event LowLevelNewDemoc(bytes32 democHash);
+    event NewBallot(bytes32 indexed democHash, uint ballotN);
+    event NewDemoc(bytes32 democHash);
+    event DemocAdminSet(bytes32 indexed democHash, address admin);
 }
 
 

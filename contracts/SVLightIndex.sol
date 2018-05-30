@@ -10,7 +10,7 @@ pragma solidity ^0.4.24;
 
 
 import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
-import { permissioned, hasAdmins, owned, upgradePtr } from "./SVCommon.sol";
+import { permissioned, hasAdmins, owned, upgradePtr, payoutAll } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
 import { Base32Lib } from "../libs/Base32Lib.sol";
 import { SvEnsEverythingPx } from "./SvEnsEverythingPx.sol";
@@ -23,7 +23,7 @@ import "./BBLib.sol";
 import "./BBFarm.sol";
 
 
-contract SVAdminPxFactory {
+contract SVAdminPxFactory is payoutAll {
     function spawn(bytes32 democHash, address initAdmin, address fwdTo) external returns (SVLightAdminProxy px) {
         px = new SVLightAdminProxy(democHash, initAdmin, fwdTo);
     }
@@ -31,12 +31,13 @@ contract SVAdminPxFactory {
 
 
 contract ixBackendEvents {
-    event LowLevelNewBallot(bytes32 democHash, uint ballotN);
-    event LowLevelNewDemoc(bytes32 democHash);
+    event NewBallot(bytes32 indexed democHash, uint ballotN);
+    event NewDemoc(bytes32 democHash);
+    event DemocAdminSet(bytes32 indexed democHash, address admin);
 }
 
 
-contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents {
+contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payoutAll {
     struct Democ {
         address erc20;
         address admin;
@@ -89,15 +90,16 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents {
         democHash = keccak256(abi.encodePacked(democList.length, blockhash(block.number-1), this, defaultErc20));
         democList.push(democHash);
         democs[democHash].erc20 = defaultErc20;
-        // this should never trigger if we have a good security model - entropy ~ 2^(8*13) ~ 10^31
+        // this should never trigger if we have a good security model - entropy for 13 bytes ~ 2^(8*13) ~ 10^31
         assert(democPrefixToHash[bytes13(democHash)] == bytes32(0));
         democPrefixToHash[bytes13(democHash)] = democHash;
         erc20ToDemocs[defaultErc20].push(democHash);
-        emit LowLevelNewDemoc(democHash);
+        emit NewDemoc(democHash);
     }
 
     function setDAdmin(bytes32 democHash, address newAdmin) only_editors() external {
         democs[democHash].admin = newAdmin;
+        emit DemocAdminSet(democHash, newAdmin);
     }
 
     function setDErc20(bytes32 democHash, address newErc20) only_editors() external {
@@ -177,7 +179,7 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents {
             democs[democHash].officialBallots.push(ballotId);
         }
 
-        emit LowLevelNewBallot(democHash, democs[democHash].allBallots.length - 1);
+        emit NewBallot(democHash, democs[democHash].allBallots.length - 1);
     }
 
     function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) only_editors() external {
@@ -188,14 +190,12 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents {
 
 contract ixEvents {
     event PaymentMade(uint[2] valAndRemainder);
-    event BallotAdded(bytes32 democHash, uint ballotId);
-    event DemocAdded(bytes32 democHash, address admin);
     event Emergency(bytes32 setWhat);
     event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
 }
 
 
-contract SVLightIndex is owned, upgradePtr, IxIface, ixBackendEvents, ixEvents {
+contract SVLightIndex is owned, upgradePtr, payoutAll, IxIface, ixBackendEvents, ixEvents {
     IxBackendIface public backend;
     IxPaymentsIface public payments;
     SVAdminPxFactory public adminPxFactory;
@@ -204,8 +204,6 @@ contract SVLightIndex is owned, upgradePtr, IxIface, ixBackendEvents, ixEvents {
     BBFarm public bbfarm;
 
     uint256 constant _version = 2;
-
-    bool txMutex = false;
 
     //* MODIFIERS /
 
@@ -316,8 +314,6 @@ contract SVLightIndex is owned, upgradePtr, IxIface, ixBackendEvents, ixEvents {
         mkDomain(democHash, admin);
 
         payments.payForDemocracy.value(msg.value)(democHash);
-
-        emit DemocAdded(democHash, admin);
         return democHash;
     }
 
@@ -371,6 +367,14 @@ contract SVLightIndex is owned, upgradePtr, IxIface, ixBackendEvents, ixEvents {
         return backend.getDBallotsN(democHash);
     }
 
+    // // we should probs just put this in a separate utils contract
+    // function getDBallotsRange(bytes32 democHash, uint start, uint end) external view returns (uint256[] memory ballotIds) {
+    //     assert(end >= start)
+    //     for (uint i = start; i <= end; i++) {
+    //         ballotIds = MemAppArr.appendUint256(ballotIds, backend.getDBallotID(i));
+    //     }
+    // }
+
     function getDBallotID(bytes32 democHash, uint256 n) external view returns (uint256) {
         return backend.getDBallotID(democHash, n);
     }
@@ -398,8 +402,8 @@ contract SVLightIndex is owned, upgradePtr, IxIface, ixBackendEvents, ixEvents {
     //* ADD BALLOT TO RECORD */
 
     function _addBallot(bytes32 democHash, uint256 ballotId, uint256 packed) internal {
+        // backend handles events
         backend.dAddBallot(democHash, ballotId, packed);
-        emit BallotAdded(democHash, ballotId);
     }
 
     // manually add a ballot - only the owner can call this
@@ -508,15 +512,5 @@ contract SVLightIndex is owned, upgradePtr, IxIface, ixBackendEvents, ixEvents {
             bs[i] = b13[i];
         }
         return bs;
-    }
-
-
-    // we want to be able to call outside contracts (e.g. the admin proxy contract)
-    // but reentrency is bad, so here's a mutex.
-    function safeSend(address toAddr, uint amount) internal {
-        require(txMutex == false, "Guard is active");
-        txMutex = true;
-        require(toAddr.call.value(amount)(), "safeSend failed");
-        txMutex = false;
     }
 }
