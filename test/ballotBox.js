@@ -29,14 +29,14 @@ var specHash = "0x418781fb172c2a30c072d58628f5df3f12052a0b785450fb0105f1b98b5045
 const mkStartTime = () => Math.round(Date.now() / 1000)
 const mkFlags = ({useEnc, testing}) => [useEnc === true, testing === true];
 
-const genStdPacked = () => {
-    const [s,e] = genStartEndTimes();
+const genStdPacked = async () => {
+    const [s,e] = await genStartEndTimes();
     const p = mkPacked(s, e, USE_ETH | USE_NO_ENC);
     return p;
 }
 
 const genStdBB = async BB => {
-    return await BB.new(genRandomBytes32(), genStdPacked(), zeroAddr);
+    return await BB.new(genRandomBytes32(), await genStdPacked(), zeroAddr);
 }
 
 const mkBBPx = (bb, bbaux) => new Proxy(bbaux, {
@@ -237,7 +237,7 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
 
 
 async function testTestMode({accounts, BB, bbaux}) {
-    const [s, e] = genStartEndTimes();
+    const [s, e] = await genStartEndTimes();
     var vc = await BB.new(specHash, mkPacked(s, e, USE_ETH | USE_NO_ENC), zeroAddr);
     await assertErrStatus(ERR_TESTING_REQ, vc.setEndTime(0), "throws on set end time when not in testing");
 }
@@ -278,7 +278,7 @@ const _genSigned = () => {
 
 
 async function testDeprecation({accounts, BB, bbaux}) {
-    const [startTime, endTime] = genStartEndTimes();
+    const [startTime, endTime] = await genStartEndTimes();
     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
     const aux = mkBBPx(bb, bbaux);
 
@@ -291,14 +291,14 @@ async function testDeprecation({accounts, BB, bbaux}) {
 
 
 const testVersion = async ({BB, bbaux}) => {
-    const [startTime, endTime] = genStartEndTimes();
+    const [startTime, endTime] = await genStartEndTimes();
     const bb = await BB.new(specHash, mkPacked(startTime + 10, endTime, USE_ETH | USE_ENC), zeroAddr);
     assert.equal(await bb.getVersion(), 3, "version should be 3");
 }
 
 
 const testSponsorship = async ({accounts, BB, bbaux}) => {
-    const [startTime, endTime] = genStartEndTimes();
+    const [startTime, endTime] = await genStartEndTimes();
     const payments = await SvPayments.new(accounts[9]);
     const ix = await SvIndex.new(zeroAddr, payments.address, zeroAddr, zeroAddr, zeroAddr, zeroAddr);
     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), ix.address);
@@ -328,7 +328,7 @@ const testSponsorship = async ({accounts, BB, bbaux}) => {
 
 
 const testBadSubmissionBits = async ({accounts, BB, bbaux}) => {
-    const [s, e] = genStartEndTimes();
+    const [s, e] = await genStartEndTimes();
 
     const flags = [USE_ENC, USE_NO_ENC];
     // const flagCombos = R.map(f => R.reduce((acc, i) => {
@@ -360,7 +360,7 @@ const testBadSubmissionBits = async ({accounts, BB, bbaux}) => {
 
 
 const testCommStatus = async ({accounts, BB, bbaux, bbName}) => {
-    const [s,e] = genStartEndTimes();
+    const [s,e] = await genStartEndTimes();
 
     const std = USE_ETH | USE_NO_ENC;
     const goodBits = [
@@ -407,7 +407,7 @@ const testOwner = async ({accounts, BB, bbaux}) => {
 
 
 const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
-    const [s, e] = genStartEndTimes();
+    const [s, e] = await genStartEndTimes();
 
     const zeroSig = [bytes32zero, bytes32zero]
     const testSig1 = [genRandomBytes32(), genRandomBytes32()];
@@ -478,7 +478,7 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
 
 
 const testEndTimeFuture = async ({BB, accounts}) => {
-    const [s, e] = genStartEndTimes();
+    const [s, e] = await genStartEndTimes();
     const packed = mkPacked(s, s - 10, USE_ETH | USE_NO_ENC | IS_OFFICIAL | IS_BINDING);
     await assertRevert(BB.new(genRandomBytes32(), packed, accounts[0]), 'should throw on end time in past')
 }

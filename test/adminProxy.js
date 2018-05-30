@@ -158,7 +158,7 @@ const testFwdingFallback = async ({accounts, scLog, owner, payments, svIx, democ
 
     const [_, u1, u2, u3, u4, u5] = accounts;
 
-    const [s, e] = genStartEndTimes()
+    const [s, e] = await genStartEndTimes()
 
     const _packed = mkPacked(s, e, USE_ETH | USE_NO_ENC)
     const packed = toBigNumber(_packed)
