@@ -519,6 +519,10 @@ const testCommonRevertCases = async ({svIx, owner, doLog, erc20}) => {
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1}})
 
     await assertRevert(svIx.payForDemocracy(democHash, {value: 0}), 'zero payment should revert')
+    await svIx.payForDemocracy(democHash, {value: oneEth})
+    const [s,e] = await genStartEndTimes()
+    await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_NO_ENC | IS_TESTING)), 'should revert as testing ballots cant be deployed through index')
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash,              mkPacked(s, e, USE_ETH | USE_NO_ENC))
 }
 
 
