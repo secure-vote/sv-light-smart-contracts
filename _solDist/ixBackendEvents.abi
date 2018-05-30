@@ -1,0 +1,1 @@
+[{"anonymous":false,"inputs":[{"indexed":false,"name":"democHash","type":"bytes32"},{"indexed":false,"name":"ballotN","type":"uint256"}],"name":"LowLevelNewBallot","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"democHash","type":"bytes32"}],"name":"LowLevelNewDemoc","type":"event"}]
