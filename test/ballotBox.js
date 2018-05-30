@@ -406,7 +406,7 @@ const testOwner = async ({accounts, BB, bbaux}) => {
 }
 
 
-const testGetVotes = async ({accounts, BB, bbaux}) => {
+const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
     const [s, e] = genStartEndTimes();
 
     const zeroSig = [bytes32zero, bytes32zero]
@@ -422,18 +422,27 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
     const bbNoEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
     const bbEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
 
+    const bb2NoEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
+    const bb2Enc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
+
     const getBallotsTest = async ({bb, useEnc, useAux}) => {
-        let aux;
+        let aux, getVotesFrom, getVotes;
         if (useAux) {
             aux = mkBBPx(bb, bbaux);
+            getVotesFrom = acct => aux.getVotesFrom(acct)
+            getVotes = () => aux.getVotes()
         } else {
             aux = bb.farm;
+            //
+            getVotesFrom = acct => aux.getVotesFrom(bb.ballotId, acct)
+            getVotes = () => aux.getVotes(bb.ballotId)
         }
 
         // test getBallotsEthFrom
-        assert.deepEqual(await aux.getVotesFrom(accounts[0]), [[], [], []], "getBallotsFrom should be empty before any votes");
-        assert.deepEqual(await aux.getVotes(), [[], [], []], "getBallots should be empty before any votes");
+        assert.deepEqual(await getVotesFrom(accounts[0]), [[], [], []], "getBallotsFrom should be empty before any votes");
+        assert.deepEqual(await getVotes(), [[], [], []], "getBallots should be empty before any votes");
 
+        await doLog(`submitting votes now ${toJson({useEnc, useAux})}`)
         if (useEnc) {
             await bb.submitVote(_ballot1, _pk1, {from: accounts[0]});
             await bb.submitVote(_ballot2, _pk2, {from: accounts[1]});
@@ -442,19 +451,19 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
             await bb.submitVote(_ballot2, zeroHash, {from: accounts[1]});
         }
 
-        assert.deepEqual(await aux.getVotesFrom(accounts[0]),
+        assert.deepEqual(await getVotesFrom(accounts[0]),
                 [ [toBigNumber(0)]
                 , [_ballot1]
                 , useEnc ? [_pk1] : [zeroHash]
             ], "getBallotsFrom (a0) should match expected");
 
-        assert.deepEqual(await aux.getVotesFrom(accounts[1]),
+        assert.deepEqual(await getVotesFrom(accounts[1]),
                 [ [toBigNumber(1)]
                 , [_ballot2]
                 , useEnc ? [_pk2] : [zeroHash]
             ], "getBallotsFrom (a0) should match expected");
 
-        assert.deepEqual(await aux.getVotes(),
+        assert.deepEqual(await getVotes(),
             [ [_ballot1, _ballot2]
             , useEnc ? [_pk1, _pk2] : [bytes32zero, bytes32zero]
             , [accounts[0], accounts[1]]
@@ -462,9 +471,9 @@ const testGetVotes = async ({accounts, BB, bbaux}) => {
     }
 
     await getBallotsTest({bb: bbNoEnc, useEnc: false, useAux: true});
-    await getBallotsTest({bb: bbNoEnc, useEnc: true, useAux: true});
-    await getBallotsTest({bb: bbNoEnc, useEnc: false, useAux: false});
-    await getBallotsTest({bb: bbNoEnc, useEnc: true, useAux: false});
+    await getBallotsTest({bb: bbEnc, useEnc: true, useAux: true});
+    await getBallotsTest({bb: bb2NoEnc, useEnc: false, useAux: false});
+    await getBallotsTest({bb: bb2Enc, useEnc: true, useAux: false});
 }
 
 
@@ -518,6 +527,7 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
         let _BB = BB;
         const Emitter = await EmitterTesting.new();
         const log = m => Emitter.log(m);
+        const doLog = log;
         const bbaux = await BallotAux.new();
 
         if (mkFarm) {
@@ -550,6 +560,9 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
                         if (method == "farm")
                             return farm;
 
+                        if (method == "ballotId")
+                            return ballotId;
+
                         return async (...pxargs) => {
                             pxargs = R.concat([ballotId], pxargs)
 
@@ -578,7 +591,7 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
             }
         }
 
-        return await f({accounts, BB: _BB, log, bbaux, bbName});
+        return await f({accounts, BB: _BB, log, doLog, bbaux, bbName});
     };
 }
 
@@ -590,6 +603,7 @@ contract("BallotBox", function(accounts) {
     // test description to note the differences.
 
     const tests = [
+        ["test getBallots*From", testGetVotes],
         ["should instantiate correctly", testInstantiation],
         ["should allow setting owner", testSetOwner],
         ["should enforce encryption based on PK submitted", testEncryptionBranching],
@@ -599,7 +613,6 @@ contract("BallotBox", function(accounts) {
         ["should have correct version", testVersion],
         ["test sponsorship", testSponsorship],
         ["test bad submission bits", testBadSubmissionBits],
-        ["test getBallots*From", testGetVotes],
         ["test community status", testCommStatus],
         ["test owner", testOwner],
         ["test end time must be in future", testEndTimeFuture],
