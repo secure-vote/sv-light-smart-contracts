@@ -26,6 +26,10 @@ contract BBFarm is permissioned, payoutAllC {
 
     }
 
+    function getNamespace() external view returns (uint32) {
+        return 0;
+    }
+
     /* Init ballot */
 
     function initBallot( bytes32 specHash

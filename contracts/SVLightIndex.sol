@@ -203,6 +203,8 @@ contract ixEvents {
     event PaymentMade(uint[2] valAndRemainder);
     event Emergency(bytes32 setWhat);
     event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
+    event EmergencyBBFarm(uint16 bbFarmId);
+    event AddedBBFarm(uint16 bbFarmId);
 }
 
 
@@ -213,6 +215,13 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     SvEnsEverythingPx public ensPx;
     EnsOwnerProxy public ensOwnerPx;
     BBFarm[] bbFarms;
+    // mapping from bbFarm namespace to bbFarmId
+    mapping (uint32 => uint16) bbFarmIdLookup;
+    // allows democ admins to store arbitrary data
+    // this lets us (for example) set particular keys to signal cerain
+    // things to client apps s.t. the admin can turn them on and off.
+    // arbitraryData[democHash][key]
+    mapping (bytes32 => mapping (uint256 => uint256)) arbitraryData;
 
     uint256 constant _version = 2;
 
@@ -238,7 +247,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         adminPxFactory = _pxF;
         ensPx = _ensPx;
         ensOwnerPx = _ensOwnerPx;
-        bbFarms.push(_bbFarm0);
+        _addBBFarm(0, _bbFarm0);
     }
 
     //* UPGRADE STUFF */
@@ -256,10 +265,22 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         }
     }
 
-    // adding a new BBFarm
-    function addBBFarm(BBFarm _bbFarm) only_owner() external returns (uint8 bbFarmId) {
-        bbFarmId = bbFarms.length;
+    function _addBBFarm(uint32 bbNamespace, BBFarm _bbFarm) internal returns (uint16 bbFarmId) {
+        bbFarmId = uint16(bbFarms.length);
         bbFarms.push(_bbFarm);
+        bbFarmIdLookup[bbNamespace] = bbFarmId;
+        emit AddedBBFarm(bbFarmId);
+    }
+
+    // adding a new BBFarm
+    function addBBFarm(address bbFarm) only_owner() external returns (uint16 bbFarmId) {
+        // what a nonsense line of code below. bah.
+        BBFarm _bbFarm = BBFarm(bbFarm);
+        uint32 bbNamespace = _bbFarm.getNamespace();
+        require(bbNamespace > 0, 'bb-farm-namespace');
+        // the only place where namespace -> 0 is for the init bbFarm, which we can never be atm
+        require(bbFarmIdLookup[bbNamespace] == 0, 'bb-farm-exists');
+        return _addBBFarm(bbNamespace, _bbFarm);
     }
 
     /* FOR EMERGENCIES */
@@ -279,9 +300,9 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         emit Emergency(bytes32("adminPxF"));
     }
 
-    function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) only_owner() external {
+    function emergencySetBBFarm(uint16 bbFarmId, address _bbFarm) only_owner() external {
         bbFarms[bbFarmId] = BBFarm(_bbFarm);
-        emit EmergencyBBFarm(uint8 bbFarmId, bytes32("bbFarm"));
+        emit EmergencyBBFarm(bbFarmId);
     }
 
     function emergencySetDAdmin(bytes32 democHash, address newAdmin) only_owner() external {
@@ -295,8 +316,18 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         return _version;
     }
 
-    function getBBFarm(uint8 i) external view returns (address) {
+    function getBBFarm(uint16 i) external view returns (address) {
         return bbFarms[i];
+    }
+
+    function getBBFarmId(uint32 bbNamespace) external view returns (uint16) {
+        return bbFarmIdLookup[bbNamespace];
+    }
+
+    function getBBFarmFromBallotID(uint256 ballotId) external view returns (address) {
+        uint32 bbNamespace = uint32(ballotId >> 40);
+        uint16 bbFarmId = bbFarmIdLookup[bbNamespace];
+        return address(bbFarms[bbFarmId]);
     }
 
     function getPayTo() external view returns (address) {
@@ -378,6 +409,10 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         payments.downgradeToBasic(democHash);
     }
 
+    function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) onlyDemocAdmin(democHash) external {
+        arbitraryData[democHash][key] = value;
+    }
+
     // getters for democs
     function getDAdmin(bytes32 democHash) external view returns (address) {
         return backend.getDAdmin(democHash);
@@ -417,6 +452,10 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
 
     function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool, bytes32, bool, uint) {
         return backend.getDCategory(democHash, categoryId);
+    }
+
+    function getDArbitraryData(bytes32 democHash, uint256 key) external view returns (uint256) {
+        return arbitraryData[democHash][key];
     }
 
     //* ADD BALLOT TO RECORD */
@@ -504,8 +543,8 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
         require(BBLib.isTesting(submissionBits) == false, "b-testing");
 
-        // the most significant byte of extraData signals the bbFarm to use.
-        uint8 bbFarmId = uint8(uint256(extraData) >> 248);
+        // the most significant 2 bytes of extraData signals the bbFarm to use.
+        uint16 bbFarmId = uint16(uint256(extraData) >> 240);
         BBFarm _bbFarm = bbFarms[bbFarmId];
 
         // by default we don't record towards the basic limit

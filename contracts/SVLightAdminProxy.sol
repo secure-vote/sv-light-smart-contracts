@@ -139,7 +139,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
         id = ix.dDeployBallot(democHash, specHash, extraData, packed);
 
         // should we set owner to 0 so admins can't interfere with community ballots?
-        BBFarm(ix.getBBFarm()).setBallotOwner(id, address(0));
+        BBFarm(ix.getBBFarmFromBallotID(id)).setBallotOwner(id, address(0));
     }
 
     // admin management
