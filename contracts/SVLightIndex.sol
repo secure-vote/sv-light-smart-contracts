@@ -42,7 +42,7 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         address erc20;
         address admin;
         uint256[] allBallots;
-        uint256[] officialBallots;  // the IDs of official ballots
+        uint256[] includedBasicBallots;  // the IDs of official ballots
     }
 
     struct BallotRef {
@@ -148,12 +148,12 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         return democs[democHash].allBallots[n];
     }
 
-    function getDOfficialBallotsN(bytes32 democHash) external view returns (uint256) {
-        return democs[democHash].officialBallots.length;
+    function getDCountedBasicBallotsN(bytes32 democHash) external view returns (uint256) {
+        return democs[democHash].includedBasicBallots.length;
     }
 
-    function getDOfficialBallotID(bytes32 democHash, uint256 officialN) external returns (uint256) {
-        return democs[democHash].officialBallots[officialN];
+    function getDCountedBasicBallotID(bytes32 democHash, uint256 n) external view returns (uint256) {
+        return democs[democHash].includedBasicBallots[n];
     }
 
     function getDCategoriesN(bytes32 democHash) external view returns (uint) {
@@ -169,21 +169,22 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
 
     //* ADD BALLOT TO RECORD */
 
-    function _commitBallot(bytes32 democHash, uint ballotId, uint256 packed) internal {
+    function _commitBallot(bytes32 democHash, uint ballotId, uint256 packed, bool recordTowardsBasicLimit) internal {
         uint16 subBits;
         subBits = BPackedUtils.packedToSubmissionBits(packed);
 
         democs[democHash].allBallots.push(ballotId);
 
-        if (BBLib.isOfficial(subBits)) {
-            democs[democHash].officialBallots.push(ballotId);
+        // do this for anything that doesn't qualify as a community ballot
+        if (recordTowardsBasicLimit) {
+            democs[democHash].includedBasicBallots.push(ballotId);
         }
 
         emit NewBallot(democHash, democs[democHash].allBallots.length - 1);
     }
 
-    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) only_editors() external {
-        _commitBallot(democHash, ballotId, packed);
+    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed, bool recordTowardsBasicLimit) only_editors() external {
+        _commitBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
     }
 }
 
@@ -289,10 +290,6 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
 
     function getCommunityBallotWeiPrice() external view returns (uint) {
         return payments.getCommunityBallotWeiPrice();
-    }
-
-    function getBasicBallotsPer30Days() external view returns (uint) {
-        return payments.getBasicBallotsPer30Days();
     }
 
     function getGDemocsN() external view returns (uint256) {
@@ -405,16 +402,16 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
 
     //* ADD BALLOT TO RECORD */
 
-    function _addBallot(bytes32 democHash, uint256 ballotId, uint256 packed) internal {
+    function _addBallot(bytes32 democHash, uint256 ballotId, uint256 packed, bool recordTowardsBasicLimit) internal {
         // backend handles events
-        backend.dAddBallot(democHash, ballotId, packed);
+        backend.dAddBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
     }
 
     // manually add a ballot - only the owner can call this
     function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed)
                       only_owner()
                       external {
-        _addBallot(democHash, ballotId, packed);
+        _addBallot(democHash, ballotId, packed, false);
     }
 
     function _deployBallotChecks(bytes32 democHash, uint64 endTime) internal view {
@@ -427,31 +424,33 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         require(secsLeft * 2 > secsToEndTime, "unpaid");
     }
 
-    function _basicBallotLimitOperations(bytes32 democHash) internal {
+    function _basicBallotLimitOperations(bytes32 democHash) internal returns (bool recordTowardsBasicLimit) {
         // if we're an official ballot and the democ is basic, ensure the democ
         // isn't over the ballots/mo limit
         if (payments.getPremiumStatus(democHash) == false) {
             uint nBallotsAllowed = payments.getBasicBallotsPer30Days();
-            uint nBallotsOfficial = backend.getDOfficialBallotsN(democHash);
+            uint nBallotsBasicCounted = backend.getDCountedBasicBallotsN(democHash);
 
             // if the democ has less than nBallotsAllowed then it's guarenteed to be okay
-            if (nBallotsAllowed > nBallotsOfficial) {
-                return;
+            if (nBallotsAllowed > nBallotsBasicCounted) {
+                // and we should count this ballot
+                return true;
             }
 
             // we want to check the creation timestamp of the nth most recent ballot
             // where n is the # of ballots allowed per month. Note: there isn't an off
             // by 1 error here because if 1 ballots were allowed per month then we'd want
-            // to look at the most recent ballot, so nBallotsOfficial-1 in this case.
+            // to look at the most recent ballot, so nBallotsBasicCounted-1 in this case.
             // similarly, if X ballots were allowed per month we want to look at
-            // nBallotsOfficial-X. There would thus be (X-1) ballots that are _more_
+            // nBallotsBasicCounted-X. There would thus be (X-1) ballots that are _more_
             // recent than the one we're looking for.
-            uint earlyBallotId = backend.getDOfficialBallotID(democHash, nBallotsOfficial - nBallotsAllowed);
+            uint earlyBallotId = backend.getDCountedBasicBallotID(democHash, nBallotsBasicCounted - nBallotsAllowed);
             uint earlyBallotTs = bbfarm.getCreationTs(earlyBallotId);
 
-            // if the earlyBallot was created more than 30 days in the past we're okay
+            // if the earlyBallot was created more than 30 days in the past we should
+            // count the new ballot
             if (earlyBallotTs < now - 30 days) {
-                return;
+                return true;
             }
 
             // at this point it may be the case that we shouldn't allow the ballot
@@ -466,8 +465,13 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             uint remainder = msg.value - extraBallotFee;
             doSafeSend(address(payments), extraBallotFee);
             doSafeSend(msg.sender, remainder);
+            emit PaymentMade([extraBallotFee, remainder]);
 
-            return;
+            // only in this case do we want to return false - don't count towards the
+            // limit because it's been paid for here.
+            return false;
+        } else {  // if we're premium we don't count ballots
+            return false;
         }
     }
 
@@ -484,8 +488,12 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
         require(BBLib.isTesting(submissionBits) == false, "b-testing");
 
-        if (BBLib.isOfficial(submissionBits)) {
-            _basicBallotLimitOperations(democHash);
+        // by default we don't record towards the basic limit
+        bool recordTowardsBasicLimit = false;
+
+        // anything that isn't a community ballot counts towards the basic limit
+        if (BBLib.qualifiesAsCommunityBallot(submissionBits) == false) {
+            recordTowardsBasicLimit = _basicBallotLimitOperations(democHash);
             _deployBallotChecks(democHash, endTime);
         }
 
@@ -496,7 +504,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             msg.sender,
             extraData);
 
-        _addBallot(democHash, ballotId, packed);
+        _addBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
     }
 
     // sv ens domains

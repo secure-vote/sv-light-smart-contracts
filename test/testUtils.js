@@ -20,6 +20,14 @@ module.exports = function () {
     this.toBN = i => w3.utils.toBN(i);
     this.ethToWei = i => this.toBigNumber(w3.utils.toWei(this.toBN(i), "ether"));
 
+    this.increaseTime = async seconds => new Promise((resolve, reject) => {
+        web3.currentProvider.send({
+            jsonrpc: "2.0",
+            method: "evm_increaseTime",
+            params: [seconds], id: 0
+        }, (err, data) => err ? reject(err) : resolve(data))
+    })
+
     assert.reallyClose = (a, b, msg, threshold = 3) => {
         // a and b should be within ~2.9999 units of eachother (with default threshold)
         if (a.isBigNumber && b.isBigNumber && a.isBigNumber() && b.isBigNumber()) {
@@ -37,8 +45,9 @@ module.exports = function () {
         return "0x" + crypto.randomBytes(32).toString("hex");
     };
 
-    this.genStartEndTimes = () => {
-        var startTime = Math.floor(Date.now() / 1000) - 1;
+    this.genStartEndTimes = async () => {
+        const {timestamp} = await this.getBlock('latest')
+        var startTime = timestamp - 1;
         var endTime = startTime + 600;
         return [startTime, endTime];
     }
@@ -49,7 +58,7 @@ module.exports = function () {
         return this.toBigNumber(s.shln(64).add(e))
     }
 
-    this.genPackedTime = () => this.mkPackedTime(...(this.genStartEndTimes()))
+    this.genPackedTime = async () => this.mkPackedTime(...(await this.genStartEndTimes()))
 
     this.mkPacked = (start, end, submissionBits) => {
         const s = new BN(start)
@@ -58,8 +67,8 @@ module.exports = function () {
         return this.toBigNumber(sb.shln(64).add(s).shln(64).add(e));
     }
 
-    this.mkStdPacked = () => {
-        const [s,e] = this.genStartEndTimes()
+    this.mkStdPacked = async () => {
+        const [s,e] = await this.genStartEndTimes()
         return mkPacked(s, e, this.USE_NO_ENC | this.USE_ETH)
     }
 

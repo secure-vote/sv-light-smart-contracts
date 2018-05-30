@@ -132,7 +132,7 @@ interface IxBackendIface {
 
     /* democ admin */
     function dInit(address defaultErc20) external returns (bytes32);
-    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) external;
+    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed, bool recordTowardsBasicLimit) external;
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
     function setDAdmin(bytes32 democHash, address newAdmin) external;
@@ -145,8 +145,8 @@ interface IxBackendIface {
 
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
     function getDBallotID(bytes32 democHash, uint n) external view returns (uint ballotId);
-    function getDOfficialBallotsN(bytes32 democHash) external view returns (uint256);
-    function getDOfficialBallotID(bytes32 democHash, uint256 officialN) external returns (uint256);
+    function getDCountedBasicBallotsN(bytes32 democHash) external view returns (uint256);
+    function getDCountedBasicBallotID(bytes32 democHash, uint256 n) external view returns (uint256);
 
     function getDCategoriesN(bytes32 democHash) external view returns (uint);
     function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool deprecated, bytes32 name, bool hasParent, uint parent);

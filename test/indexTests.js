@@ -209,7 +209,7 @@ const testInit = async ({paySC, owner, svIx, erc20, doLog}) => {
     assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [democHash, democHash2], 'erc20 lookup gives us our democs')
 
     assert.deepEqual(await svIx.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(0)], 'getDInfo works as expected (0)')
-    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkStdPacked())
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, await mkStdPacked())
     assert.deepEqual(await svIx.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(1)], 'getDInfo works as expected (1)')
 }
 
@@ -296,7 +296,7 @@ const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}
 }
 
 
-const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
+const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC}) => {
     // test in cases we have a community instance and in cases where
     // they're enabled on a paying democ
 
@@ -311,7 +311,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
     assert.equal(await adminPx.getCommunityBallotsEnabled(), true, "comm ballots on by default")
     await doLog('verified comm ballots enabled')
 
-    const [s,e] = genStartEndTimes()
+    const [s,e] = await genStartEndTimes()
     const packed = mkPacked(s, e, USE_ETH | USE_NO_ENC)
     const packedTimes = toBigNumber(mkPackedTime(s, e));
 
@@ -330,7 +330,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
     const balPreStr = web3.fromWei(balPre, 'ether')
     const balPostStr = web3.fromWei(balPost, 'ether')
     await doLog(`\nCBallot: ${commBPriceStr}\nBalPre : ${balPreStr}\nBalPost: ${balPostStr}\n`)
-    assert.deepEqual(balPre.minus(commBPrice), balPost, "balances should match after community ballot fee")
+    assert.deepEqual(balPre.minus(commBPrice), balPost, "balances should match after community ballot fee (includes refund)")
 
     await adminPx.setCommunityBallotStatus(false);
     await doLog('set community ballot to false')
@@ -356,6 +356,17 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog}) => {
         adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user}),
         "should revert because the democ is now in good standing"
     );
+
+    const secsRemaining = (await paySC.getSecondsRemaining(democHash)).toNumber()
+    await increaseTime(secsRemaining + 10)
+    // send a tx so we make sure the last block has the new timestamps
+    await sendTransaction({to: accounts[1], from: accounts[0], value: 1})
+    const b = await getBlock('latest')
+    const packedTimes2 = await genPackedTime()
+
+    assert.equal(await svIx.accountInGoodStanding(democHash), false, "time now expired")
+    // commb works again
+    await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes2, {value: commBPrice})
 }
 
 
@@ -475,6 +486,7 @@ const testAllAdminFunctions = async ({owner, accounts, svIx, erc20, doLog}) => {
     assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), true, 'democ now IS premium and in good standing')
 
     // downgrade
+    await increaseTime(60 * 60 * 24 + 10)  // allow downgrade to work
     await testOnlyAdmin('dDowngradeToBasic', [democHash])
     assert.equal(await svIx.accountInGoodStanding(democHash), true, 'democ still in good standing')
     assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), false, 'democ no longer premium and in good standing')
@@ -482,7 +494,7 @@ const testAllAdminFunctions = async ({owner, accounts, svIx, erc20, doLog}) => {
 
     // deploy
     assert.equal(await svIx.getDBallotsN(democHash), 0, '0 ballots')
-    await testOnlyAdmin('dDeployBallot', [democHash, genRandomBytes32(), zeroHash, mkStdPacked()])
+    await testOnlyAdmin('dDeployBallot', [democHash, genRandomBytes32(), zeroHash, await mkStdPacked()])
     assert.equal(await svIx.getDBallotsN(democHash), 1, '1 ballot')
 }
 
@@ -524,6 +536,7 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) =
     await ixPx.dUpgradeToPremium(democHash)
     assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(0), toBigNumber(0)], 'getAccount matches expectations after null upgrade')
     assert.equal(await paySC.getPremiumStatus(democHash), true, 'is premium 1')
+    // we can downgrade freely if there are 0 seconds left
     await ixPx.dDowngradeToBasic(democHash)
     assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(0), toBigNumber(0)], 'getAccount matches expectations after null downgrade')
     assert.equal(await paySC.getPremiumStatus(democHash), false, 'not premium 2')
@@ -554,23 +567,26 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) =
 
     await svIx.payForDemocracy(democHash, {value: premWeiPer30Days})
     const b4 = await getBlock('latest')
-    const timeLeft = ((2 + premMultiplier) * 60 * 60 * 24 * 30 / premMultiplier);
+    let timeLeft = ((2 + premMultiplier) * 60 * 60 * 24 * 30 / premMultiplier);
     assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b4.timestamp), toBigNumber(b2.timestamp + timeLeft)], 'getAccount matches after upgrade')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft), 'should have 42 days left')
 
 
     // and test downgrades
+    await assertRevert(ixPx.dDowngradeToBasic(democHash), 'should error on downgrade <24hrs after upgrade')
+    const timeOffset = 60 * 60 * 24 + 10
+    await increaseTime(timeOffset)  // move forward so we can downgrade
+    timeLeft -= timeOffset
     await ixPx.dDowngradeToBasic(democHash)
+    timeLeft *= premMultiplier
     await assertRevert(ixPx.dDowngradeToBasic(democHash), 'cant downgrade twice')
-
-    const timeLeft2 = timeLeft * premMultiplier
+    const b5 = await getBlock('latest')
 
     // need to split this up b/c the downgrade can have an error of up to 5s due to rounding (which occurs in the _upgrade_ step)
     const [isPrem, lastPaid, paidTill] = await paySC.getAccount(democHash);
     assert.deepEqual([isPrem, lastPaid], [false, toBigNumber(b4.timestamp)], 'getAccount [0:1] matches after downgrade')
-    assert.reallyClose(paidTill, toBigNumber(b2.timestamp + timeLeft2), 'getAccount paidTill matches after downgrade', 5)
-    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft2), 'should have 42*5 days left', 5)
-
+    assert.reallyClose(paidTill, toBigNumber(b5.timestamp + timeLeft), 'getAccount paidTill matches after downgrade', 5)
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft), 'should have 42*5 days left', 5)
 
     // check payments log
     assert.deepEqual(await paySC.getPaymentLogN(), toBigNumber(4), 'payment n log as expected')
@@ -621,7 +637,7 @@ const testSponsorshipOfCommunityBallots = async ({svIx, erc20, accounts, owner, 
 
     await doLog('creating democ')
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: dAdmin, value: 1}})
-    const times = genPackedTime();
+    const times = await genPackedTime();
 
     await doLog('getting commb price and verifiying ballotsN === 0')
     const commBPriceEth = await svIx.getCommunityBallotWeiPrice();
@@ -663,28 +679,110 @@ const testNFPTierAndPayments = async () => {
 }
 
 
-const testBasicExtraBallots = async ({svIx, owner, doLog, erc20}) => {
-    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: owner, value: oneEth}})
+const testBasicExtraBallots = async ({svIx, owner, doLog, erc20, paySC, accounts, be, bbFarm}) => {
+    const [, u1, u2, u3, u4] = accounts;
 
-    const nBallotsPerMonth = (await svIx.getBasicBallotsPer30Days()).toNumber()
-    const [s, e] = genStartEndTimes()
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: owner, value: oneEth.times(5)}})
 
-    const mkBallot = async () =>
-        await ixPx.dDeployBallot(democHash, genRandoBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_ENC | IS_OFFICIAL | IS_BINDING))
+    let _aBallotsCountedCalledN = 0;
+    const assertBallotsCounted = async (n) => {
+        _aBallotsCountedCalledN++;
+        assert.equal((await be.getDCountedBasicBallotsN(democHash)).toNumber(), n, `ballots counted should be == ${n} (note: this is the ${_aBallotsCountedCalledN}th call to this assert)`)
+    }
+    await assertBallotsCounted(0)
 
-    // fill up our monthly quota
-    for (let i = 0; i < nBallotsPerMonth; i++) {
-        await mkBallot()
+    const nBallotsPerMonth = (await paySC.getBasicBallotsPer30Days()).toNumber()
+    const extraBallotPrice = await paySC.getBasicExtraBallotFeeWei()
+
+    const mkBallot = async (txOpts) => {
+        const [s, e] = await genStartEndTimes()
+        return await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_ENC | IS_OFFICIAL | IS_BINDING), txOpts || {})
     }
 
-    await assertRevert(mkBallot(), `should not be able to make more than ${nBallotsPerMonth} ballots per month for free`)
+    const {timestamp: firstBallotTs} = await getBlock('latest')
+    // fill up our monthly quota
+    for (let i = 0; i < nBallotsPerMonth; i++) {
+        await assertBallotsCounted(i)
+        await mkBallot()
+    }
+    await assertBallotsCounted(nBallotsPerMonth)
 
-    // in progress
-}
+    // test this before anything else to make sure we're really limited
+    await assertRevert(mkBallot(), `should not be able to make more than ${nBallotsPerMonth} official ballots per month for free`)
 
+    await ixPx.dUpgradeToPremium(democHash)
+    // can now add another ballot because we're premium
+    await mkBallot()
+    await assertBallotsCounted(nBallotsPerMonth)
+    await increaseTime(60 * 60 * 24 + 10)  // move forward a bit more than a day
+    await ixPx.dDowngradeToBasic(democHash)
 
-const testManualBallots = async () => {
-    throw Error("not impl")
+    const {timestamp: s} = await getBlock('latest')
+    const e = s + 600
+
+    await assertRevert(mkBallot(), `still can't make more than ${nBallotsPerMonth} official ballots per month for free`)
+    await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_ENC)), 'b w enc')
+    await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_NO_ENC | IS_OFFICIAL)), 'b w official')
+    await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_NO_ENC | IS_BINDING)), 'b w binding')
+    // this is okay as it qualifies as a community ballot
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_NO_ENC))
+    await assertBallotsCounted(nBallotsPerMonth)
+
+    await assertRevert(mkBallot({value: extraBallotPrice.minus(1)}), 'required to pay >= fee')
+    // this works though
+
+    // need to do this to make sure we're not sending the money back to ourselves
+    // derp
+    await paySC.setPayTo(u4);
+
+    const bal1 = await getBalance(owner)
+    const payExtra = 1001337
+    const bTxR = await mkBallot({value: extraBallotPrice.plus(payExtra), gasPrice: 0})
+    const bal2 = await getBalance(owner)
+    await doLog(`Balances around paying for an extra ballot:
+        Pre:  (${bal1.toFixed()})
+        Post: (${bal2.toFixed()})
+        Diff: (${bal1.minus(bal2).toFixed()})
+        Cost: (${extraBallotPrice.toFixed()})
+        Sent: (${extraBallotPrice.plus(payExtra).toFixed()})
+        Extra: (${payExtra})
+        mkBallot TxR: (${toJson({...bTxR, receipt: {...bTxR.receipt, logs: "omitted"}})})
+        mkBallot Tx: (${toJson(await getTransaction(bTxR.tx))})
+        `)
+    assert.deepEqual(bal1.minus(extraBallotPrice), bal2, 'balances should match and include refund (i.e. payextra was returned)')
+
+    await mkBallot({value: extraBallotPrice})
+    await mkBallot({value: extraBallotPrice})
+    await assertBallotsCounted(nBallotsPerMonth)
+    await assertRevert(mkBallot(), `still can't make more than ${nBallotsPerMonth} official ballots per month for free`)
+
+    // let's timewarp to end of month
+    await increaseTime(60 * 60 * 24 * 29 - 1000)
+    await assertRevert(mkBallot(), `ballot and end of month (but before click over) still fails`)
+    await increaseTime(1000 + 60 * 60)
+    // this should now work
+    await sendTransaction({from: accounts[0], to: accounts[1], value: 1})
+    const bEnd = await getBlock('latest')
+    await doLog(`testing ballot that should be in the new month.
+        Started  ${firstBallotTs}
+        Now is   ${bEnd.timestamp}
+        diff as month proportion: ${(bEnd.timestamp - firstBallotTs) / 30 / 24 / 60 / 60}`)
+    const ballotsCounted = (await be.getDCountedBasicBallotsN(democHash)).toNumber()
+    await doLog(`Counted ballots: ${ballotsCounted} (and nBallots: ${nBallotsPerMonth}`)
+    const earlyBallotIdResp = await be.getDCountedBasicBallotID(democHash, ballotsCounted - nBallotsPerMonth)
+    await doLog(`earlyBallotId Raw: ${toJson(earlyBallotIdResp)}`)
+    const earlyBallotId = earlyBallotIdResp.toNumber()
+    await doLog(`earlyBallotId: ${earlyBallotId}`)
+    await doLog(`earlyBallotTs: ${await bbFarm.getCreationTs(earlyBallotId)}`)
+    const secsLeft = (await paySC.getSecondsRemaining(democHash)).toNumber()
+    await doLog(`seconds left on democ: ${secsLeft}`)
+
+    await mkBallot()
+
+    // also ensure that if we try to make a ballot with an end time too far in the future - it fails
+    const [s2] = await genStartEndTimes()
+    await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s2, s2 + (2 * secsLeft) + 100, USE_ETH | USE_NO_ENC | IS_BINDING)), 'cannot create ballot with end time > 2x the seconds remaining')
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s2, s2 + (2 * secsLeft) - 100, USE_ETH | USE_NO_ENC | IS_BINDING))
 }
 
 
@@ -753,6 +851,20 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 }
 
 
+const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog}) => {
+    const [, dAdmin, u2, u3, u4] = accounts;
+
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: dAdmin, value: oneEth}})
+
+    await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroAddr, await mkStdPacked(), {from: owner}), 'svIx owner cant call dDeployBallot')
+    // democ admin can deploy
+    await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroAddr, await mkStdPacked(), {from: dAdmin})
+
+    await svIx.dAddBallot(democHash, 666, await mkStdPacked(), {from: owner})
+    await assertRevert(svIx.dAddBallot(democHash, 666, await mkStdPacked(), {from: dAdmin}), 'democAdmin cant call dAddBallot')
+}
+
+
 
 /* bb farm won - by a lot
     Std:  1392871
@@ -762,7 +874,7 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 */
 const testGasOfBallots = async ({svIx, owner, erc20}) => {
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, txOpts: {from: owner, value: 1}, erc20});
-    const packed = toBigNumber(mkStdPacked());
+    const packed = toBigNumber(await mkStdPacked());
 
     const b1 = await getBalance(owner)
 
@@ -778,14 +890,14 @@ const testGasOfBallots = async ({svIx, owner, erc20}) => {
 
 contract("SVLightIndex", function (accounts) {
     tests = [
-        ["common revert cases", testCommonRevertCases],
-        ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
         // ["test payments setting values", testPaymentsSettingValues],
-        ["test payments payout all", testPaymentsPayoutAll],
-        ["test paying for extra ballots (basic)", testBasicExtraBallots],
         // ["test catagories (crud)", testCatagoriesCrud],
         // ["test nfp tier", testNFPTierAndPayments],
-        // ["test manually add ballots", testManualBallots],
+        ["test owner add ballot", testOwnerAddBallot],
+        ["test paying for extra ballots (basic)", testBasicExtraBallots],
+        ["common revert cases", testCommonRevertCases],
+        ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
+        ["test payments payout all", testPaymentsPayoutAll],
         ["test democ prefix stuff", testPrefix],
         ["test all admin functions", testAllAdminFunctions],
         ["test currency conversion", testCurrencyConversion],

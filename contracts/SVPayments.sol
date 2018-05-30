@@ -13,6 +13,19 @@ import { permissioned, payoutAllC } from "./SVCommon.sol";
 import "./IndexInterface.sol";
 
 
+library SafeMath {
+
+    function subToZero(uint a, uint b) internal pure returns (uint) {
+        if (a < b) {  // then (a - b) would overflow
+            return 0;
+        }
+        return a - b;
+    }
+
+}
+
+
+
 contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     event UpgradedToPremium(bytes32 indexed democHash);
     event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
@@ -29,6 +42,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         bool isPremium;
         uint lastPaymentTs;
         uint paidUpTill;
+        uint lastUpgradeTs;  // timestamp of the last time it was upgraded to premium
     }
 
     struct PaymentLog {
@@ -124,8 +138,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     }
 
     function getSecondsRemaining(bytes32 democHash) external view returns (uint) {
-        uint paidTill = accounts[democHash].paidUpTill;
-        return paidTill > now ? paidTill - now : 0;
+        return SafeMath.subToZero(accounts[democHash].paidUpTill, now);
     }
 
     function getPremiumStatus(bytes32 democHash) external view returns (bool) {
@@ -145,28 +158,32 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     }
 
     function upgradeToPremium(bytes32 democHash) only_editors() external {
-        require(denyPremium[democHash] == false, "this democ is not allowed to upgrade to premium");
-        require(!accounts[democHash].isPremium, "cannot upgrade to premium twice");
+        require(denyPremium[democHash] == false, "cannot-upgrade");
+        require(!accounts[democHash].isPremium, "!basic");
         accounts[democHash].isPremium = true;
         // convert basic minutes to premium minutes
         uint paidTill = accounts[democHash].paidUpTill;
-        uint timeRemaining = paidTill > now ? paidTill - now : 0;
+        uint timeRemaining = SafeMath.subToZero(paidTill, now);
         // if we have time remaning then convert it - otherwise don't need to do anything
         if (timeRemaining > 0) {
             timeRemaining /= premiumMultiplier;
             accounts[democHash].paidUpTill = now + timeRemaining;
         }
+        accounts[democHash].lastUpgradeTs = now;
         emit UpgradedToPremium(democHash);
     }
 
     function downgradeToBasic(bytes32 democHash) only_editors() external {
-        require(accounts[democHash].isPremium, "must be premium to downgrade");
+        require(accounts[democHash].isPremium, "!premium");
         accounts[democHash].isPremium = false;
         // convert premium minutes to basic
         uint paidTill = accounts[democHash].paidUpTill;
-        uint timeRemaining = paidTill > now ? paidTill - now : 0;
+        uint timeRemaining = SafeMath.subToZero(paidTill, now);
         // if we have time remaining: convert it
         if (timeRemaining > 0) {
+            // prevent accounts from downgrading if they have time remaining
+            // and upgraded less than 24hrs ago
+            require(accounts[democHash].lastUpgradeTs < (now - 24 hours), "downgrade-too-soon");
             timeRemaining *= premiumMultiplier;
             accounts[democHash].paidUpTill = now + timeRemaining;
         }
