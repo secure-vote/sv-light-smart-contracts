@@ -126,7 +126,8 @@ contract BBFarmProxy {
             , uint64 endTime
             , bytes32 specHash
             , bool deprecated
-            , address ballotOwner) {
+            , address ballotOwner
+            , bytes24 extraData) {
         return farm.getDetails(ballotId, voter);
     }
 }

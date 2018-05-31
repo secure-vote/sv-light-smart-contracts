@@ -444,10 +444,10 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             packed,
             this,
             msg.sender,
-            // we are certain that the first 8 bytes are for index use
+            // we are certain that the first 8 bytes are for index use only.
             // truncating extraData like this means we can occasionally
             // save on gas.
-            bytes32(bytes24(extraData)));
+            bytes24(extraData));
 
         _addBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
     }
