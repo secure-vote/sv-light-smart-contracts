@@ -103,3 +103,32 @@ contract BallotAux is BBAuxIface {
         }
     }
 }
+
+
+contract BBFarmProxy {
+    uint ballotId;
+    BBFarmIface farm;
+
+    constructor(BBFarmIface _farm, uint _ballotId) public {
+        farm = _farm;
+        ballotId = _ballotId;
+    }
+
+    function getVote(uint voteId) external view returns (bytes32, address, bytes) {
+        return farm.getVote(ballotId, voteId);
+    }
+
+    function getDetails(address voter) external view returns
+            ( bool hasVoted
+            , uint nVotesCast
+            , bytes32 secKey
+            , uint16 submissionBits
+            , uint64 startTime
+            , uint64 endTime
+            , bytes32 specHash
+            , bool deprecated
+            , address ballotOwner
+            , bytes24 extraData) {
+        return farm.getDetails(ballotId, voter);
+    }
+}
