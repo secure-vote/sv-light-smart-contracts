@@ -6,6 +6,7 @@ var SvPayments = artifacts.require("./SVPayments");
 var BallotAux = artifacts.require("./BallotAux");
 var BBFarm = artifacts.require("./BBFarm")
 var BBFarmPx = artifacts.require("./BBFarmProxy")
+var BBFarmAux = artifacts.require("./BBFarmAux")
 var TestHelper = artifacts.require("./TestHelper")
 
 require("./testUtils")();
@@ -113,13 +114,13 @@ async function testEncryptionBranching({accounts, BB, bbaux}) {
     assert.equal(await auxNoEnc.getSubmissionBits(), USE_ETH | USE_NO_ENC | USE_TESTING, "encryption should be disabled");
     // test ballot submissions w no enc
     const _bData = hexSk;
-    const _noEnc = await vcNoEnc.submitVote(_bData, zeroHash);
+    const _noEnc = await vcNoEnc.submitVote(_bData, "");
     assertNoErr(_noEnc);
     assertOnlyEvent("SuccessfulVote", _noEnc);
     const _bReturned = await vcNoEnc.getVote(0);
     assert.equal(_bReturned[0], _bData, "ballot data matches");
     assert.equal(_bReturned[1], accounts[0], "voter acc matches")
-    assert.equal(_bReturned[2], bytes32zero, "pubkey is zero");
+    assert.equal(_bReturned[2], '0x', "pubkey is zero");
 
     assert.equal(await auxNoEnc.getNVotesCast(), 1, "1 vote");
 
@@ -181,7 +182,7 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
     assert.equal(_sk, bytes32zero, "ballot enc key should be zeros before reveal");
 
     // we start counting ballots from 1 - ballotId == 0 is never valid
-    assert.deepEqual(await vc.farm.getCreationTs(1), toBigNumber(bCreation.timestamp), "creationTs should match expected");
+    assert.deepEqual(await vc.farm.getCreationTs(vc.ballotId), toBigNumber(bCreation.timestamp), "creationTs should match expected");
 
     //// ASSERTIONS FOR INSTANTIATION COMPLETE
 
@@ -281,14 +282,15 @@ async function testDeprecation({accounts, BB, bbaux}) {
     await bb.setDeprecated();
     assert.equal(await aux.isDeprecated(), true, "should be deprecated");
 
-    await assertRevert(bb.submitVote(genRandomBytes32(), zeroHash), "submit ballot should throw after deprecation");
+    await assertRevert(bb.submitVote(genRandomBytes32(), ""), "submit ballot should throw after deprecation");
 }
 
 
 const testVersion = async ({BB, bbaux}) => {
     const [startTime, endTime] = await genStartEndTimes();
     const bb = await BB.new(specHash, mkPacked(startTime + 10, endTime, USE_ETH | USE_ENC), zeroAddr);
-    assert.equal(await bb.getVersion(), 3, "version should be 3");
+    assert.deepEqual(await bb.getBBLibVersion(), toBigNumber(4), "version (BBLib) should be 4");
+    assert.deepEqual(await bb.getVersion(), toBigNumber(2), "version (bbfarm) should be 2");
 }
 
 
@@ -427,10 +429,10 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
             getVotesFrom = acct => aux.getVotesFrom(acct)
             getVotes = () => aux.getVotes()
         } else {
-            aux = bb.farm;
+            aux = await BBFarmAux.new();
             //
-            getVotesFrom = acct => aux.getVotesFrom(bb.ballotId, acct)
-            getVotes = () => aux.getVotes(bb.ballotId)
+            getVotesFrom = acct => aux.getVotesFrom(bb.farm.address, bb.ballotId, acct)
+            getVotes = () => aux.getVotes(bb.farm.address, bb.ballotId)
         }
 
         // test getBallotsEthFrom
@@ -442,25 +444,30 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
             await bb.submitVote(_ballot1, _pk1, {from: accounts[0]});
             await bb.submitVote(_ballot2, _pk2, {from: accounts[1]});
         } else {
-            await bb.submitVote(_ballot1, zeroHash, {from: accounts[0]});
-            await bb.submitVote(_ballot2, zeroHash, {from: accounts[1]});
+            await bb.submitVote(_ballot1, "", {from: accounts[0]});
+            await bb.submitVote(_ballot2, "", {from: accounts[1]});
         }
+
+        // we use ABIEncoderV2 here
+        // I suspect there's a problem with web3 v0.20.x decoding these responses correctly
+        const extrasRetWhenEmpty = "0x0000000000000000000000000000000000000000000000000000000000000060"
 
         assert.deepEqual(await getVotesFrom(accounts[0]),
                 [ [toBigNumber(0)]
                 , [_ballot1]
-                , useEnc ? [_pk1] : [zeroHash]
+                , useEnc ? [_pk1] : [extrasRetWhenEmpty]
             ], "getBallotsFrom (a0) should match expected");
 
         assert.deepEqual(await getVotesFrom(accounts[1]),
                 [ [toBigNumber(1)]
                 , [_ballot2]
-                , useEnc ? [_pk2] : [zeroHash]
-            ], "getBallotsFrom (a0) should match expected");
+                // note: note sure why
+                , useEnc ? [_pk2] : [extrasRetWhenEmpty]
+            ], "getBallotsFrom (a1) should match expected");
 
         assert.deepEqual(await getVotes(),
             [ [_ballot1, _ballot2]
-            , useEnc ? [_pk1, _pk2] : [bytes32zero, bytes32zero]
+            , useEnc ? [_pk1, _pk2] : [extrasRetWhenEmpty, extrasRetWhenEmpty]
             , [accounts[0], accounts[1]]
             ], "getBallots should match")
     }
