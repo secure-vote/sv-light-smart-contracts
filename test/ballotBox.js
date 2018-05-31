@@ -5,7 +5,6 @@ var SvIndex = artifacts.require("./SVLightIndex");
 var SvPayments = artifacts.require("./SVPayments");
 var BallotAux = artifacts.require("./BallotAux");
 var BBFarm = artifacts.require("./BBFarm")
-var BBFarmPx = artifacts.require("./BBFarmProxy")
 var BBFarmAux = artifacts.require("./BBFarmAux")
 var TestHelper = artifacts.require("./TestHelper")
 
