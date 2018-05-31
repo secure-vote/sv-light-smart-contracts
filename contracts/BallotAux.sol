@@ -1,6 +1,7 @@
 pragma solidity 0.4.24;
 
 /**
+ * DEPRECATED NOW
  * Auxillary functions for ballots.
  * This hosts code that usually returns a memory array, but isn't stuff that
  * we want to bloat every ballot box with. e.g. `getBallotsEthFrom`
@@ -100,35 +101,5 @@ contract BallotAux is BBAuxIface {
                 pks = MemArrApp.appendBytes32(pks, encPK);
             }
         }
-    }
-}
-
-
-// used for testing with old BallotBox function signature (no ballotId)
-contract BBFarmProxy {
-    uint ballotId;
-    BBFarmIface farm;
-
-    constructor(BBFarmIface _farm, uint _ballotId) public {
-        farm = _farm;
-        ballotId = _ballotId;
-    }
-
-    function getVote(uint voteId) external view returns (bytes32, address, bytes) {
-        return farm.getVote(ballotId, voteId);
-    }
-
-    function getDetails(address voter) external view returns
-            ( bool hasVoted
-            , uint nVotesCast
-            , bytes32 secKey
-            , uint16 submissionBits
-            , uint64 startTime
-            , uint64 endTime
-            , bytes32 specHash
-            , bool deprecated
-            , address ballotOwner
-            , bytes24 extraData) {
-        return farm.getDetails(ballotId, voter);
     }
 }
