@@ -26,7 +26,7 @@ interface IxIface {
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
     function dUpgradeToPremium(bytes32 democHash) external;
     function dDowngradeToBasic(bytes32 democHash) external;
-    function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) external;
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) external;
 
     /* democ getters (that used to be here) should be called on either backend or payments directly */
     /* use IxLib for convenience functions from other SCs */
@@ -124,13 +124,13 @@ interface IxBackendIface {
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
     function setDAdmin(bytes32 democHash, address newAdmin) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
-    function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) external;
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) external;
 
     /* global democ getters */
     function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 nBallots);
     function getDErc20(bytes32 democHash) external view returns (address);
     function getDAdmin(bytes32 democHash) external view returns (address);
-    function getDArbitraryData(bytes32 democHash, uint256 key) external view returns (uint256 value);
+    function getDArbitraryData(bytes32 democHash, bytes key) external view returns (bytes value);
 
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
     function getDBallotID(bytes32 democHash, uint n) external view returns (uint ballotId);

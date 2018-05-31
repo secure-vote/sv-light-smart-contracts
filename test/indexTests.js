@@ -985,6 +985,11 @@ const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog, be}) =>
 }
 
 
+const testIxLib = async ({svIx, accounts, owner, erc20, doLog, be, paySC}) => {
+    throw Error('unimpl')
+}
+
+
 
 /* bb farm won - by a lot
     Std:  1392871
@@ -1023,6 +1028,7 @@ const testGasOfBallots = async ({svIx, owner, erc20, be}) => {
 
 contract("SVLightIndex", function (accounts) {
     tests = [
+        ["test IxLib", testIxLib],
         ["test payments setting values", testPaymentsSettingValues],
         ["test nfp tier", testNFPTierAndPayments],
         ["test owner add ballot", testOwnerAddBallot],
