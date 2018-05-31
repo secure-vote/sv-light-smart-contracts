@@ -49,14 +49,4 @@ interface BBAuxIface {
     function getNVotesCast(BallotBoxIface bb) external view returns (uint256 nVotesCast);
 
     function hasVoted(BallotBoxIface bb, address voter) external view returns (bool hv);
-
-    function getVotes(BallotBoxIface bb) external view
-        returns ( bytes32[] memory ballots
-                , bytes32[] memory pks
-                , address[] memory senders);
-
-    function getVotesFrom(BallotBoxIface bb, address voter) external view
-        returns ( uint256[] memory ids
-                , bytes32[] memory ballots
-                , bytes32[] memory pks);
 }
