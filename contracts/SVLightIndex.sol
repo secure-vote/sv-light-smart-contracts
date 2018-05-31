@@ -287,16 +287,15 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     }
 
     // adding a new BBFarm
-    function addBBFarm(address bbFarm) only_owner() external returns (uint8 bbFarmId) {
+    function addBBFarm(BBFarmIface bbFarm) only_owner() external returns (uint8 bbFarmId) {
         // what a nonsense line of code below. bah.
-        BBFarmIface _bbFarm = BBFarmIface(bbFarm);
-        bytes4 bbNamespace = _bbFarm.getNamespace();
+        bytes4 bbNamespace = bbFarm.getNamespace();
         require(bbNamespace != bytes4(0), "bb-farm-namespace");
         // the only place where namespace -> 0 is for the init bbFarm,
         // which is never the case in this funciton (so this require is okay)
         require(bbFarmIdLookup[bbNamespace] == 0, "bb-farm-exists");
 
-        bbFarmId = _addBBFarm(bbNamespace, _bbFarm);
+        bbFarmId = _addBBFarm(bbNamespace, bbFarm);
     }
 
     /* FOR EMERGENCIES - setting backends */
@@ -334,7 +333,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         return backend;
     }
 
-    function getBBFarm(uint8 bbFarmId) external view returns (address) {
+    function getBBFarm(uint8 bbFarmId) external view returns (BBFarmIface) {
         return bbFarms[bbFarmId];
     }
 

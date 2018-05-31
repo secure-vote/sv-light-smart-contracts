@@ -44,10 +44,10 @@ library IxLib {
 
     /* Global Ix data */
 
-    function getBBFarmFromBallotID(IxIface ix, uint256 ballotId) internal view returns (address) {
+    function getBBFarmFromBallotID(IxIface ix, uint256 ballotId) internal view returns (BBFarmIface) {
         bytes4 bbNamespace = bytes4(ballotId >> 48);
         uint8 bbFarmId = ix.getBBFarmID(bbNamespace);
-        return address(ix.getBBFarm(bbFarmId));
+        return ix.getBBFarm(bbFarmId);
     }
 
     /* Global backend data */

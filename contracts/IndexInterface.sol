@@ -1,20 +1,20 @@
 pragma solidity ^0.4.24;
 
 
-import { BallotBoxIface } from "./BallotBoxIface.sol";
+import { BBFarmIface } from "./BBFarmIface.sol";
 
 
 interface IxIface {
     function doUpgrade(address) external;
 
-    function addBBFarm(address bbFarm) external returns (uint8 bbFarmId);
+    function addBBFarm(BBFarmIface bbFarm) external returns (uint8 bbFarmId);
     function emergencySetABackend(bytes32 toSet, address newSC) external;
     function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) external;
     function emergencySetDAdmin(bytes32 democHash, address newAdmin) external;
 
     function getPayments() external view returns (IxPaymentsIface);
     function getBackend() external view returns (IxBackendIface);
-    function getBBFarm(uint8 bbFarmId) external view returns (address);
+    function getBBFarm(uint8 bbFarmId) external view returns (BBFarmIface);
     function getBBFarmID(bytes4 bbNamespace) external view returns (uint8 bbFarmId);
 
     function getVersion() external view returns (uint256);

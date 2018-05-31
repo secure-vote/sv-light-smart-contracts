@@ -131,7 +131,7 @@ const mkDemoc = async ({svIx, txOpts, erc20}) => {
 
 /* ACTUAL TESTS */
 
-const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbFarm, owner, erc20}) => {
+const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbFarm, owner, erc20, doLog}) => {
     // test that upgrades to new Indexes work
 
     /**
@@ -173,27 +173,28 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbFarm, owner,
 
     // now test the adminPx and make sure that fwds to new democ
     assert.equal(await adminPx._forwardTo(), svIx.address, "adminPx fwdTo still matches init")
-    await ixPx.payForDemocracy(democHash, {value: 1})
+    await doLog('Going to perform an operation through ixPx to verify auto fwdTo upgrade')
+    await ixPx.dSetArbitraryData(democHash, 123, 456);
     assert.equal(await adminPx._forwardTo(), newIx.address, "adminPx fwdTo upgrades automagically when sending after upgrade")
 }
 
 
-const testInit = async ({paySC, owner, svIx, erc20, doLog}) => {
+const testInit = async ({paySC, owner, svIx, erc20, doLog, be}) => {
     // just test the initialization params and sanity check
 
     assert.equal(await paySC.getPayTo(), owner, "payTo should be correct on paymentSC")
-    assert.equal(await svIx.getPayTo(), owner, "payTo should be correct on ix")
+    assert.equal(await paySC.getPayTo(), owner, "payTo should be correct on ix")
     assert.equal(await paySC.owner(), owner, "owner on paymentSC")
     assert.equal(await svIx.owner(), owner, "owner on svIx")
 
     await doLog('checked payto and owner')
 
-    assert.equal(await svIx.getGDemocsN(), 0, 'no democs yet')
-    // assert.equal(await svIx.getGDemoc(0), zeroHash, 'democ 0 has zero hash')
+    assert.equal(await be.getGDemocsN(), 0, 'no democs yet')
+    // assert.equal(await be.getGDemoc(0), zeroHash, 'democ 0 has zero hash')
 
     await doLog('checked getGDemocs')
 
-    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [], 'empty list for erc20 lookup')
+    assert.deepEqual(await be.getGErc20ToDemocs(erc20.address), [], 'empty list for erc20 lookup')
 
     await doLog('checked getGErc20ToDemocs')
 
@@ -202,19 +203,19 @@ const testInit = async ({paySC, owner, svIx, erc20, doLog}) => {
 
     await doLog('created 2x democs')
 
-    assert.equal(await svIx.getGDemocsN(), 2, '2 democs now')
-    assert.equal(await svIx.getGDemoc(0), democHash, 'democ 0 has expected hash')
-    assert.equal(await svIx.getGDemoc(1), democHash2, 'democ 1 has expected hash')
+    assert.equal(await be.getGDemocsN(), 2, '2 democs now')
+    assert.equal(await be.getGDemoc(0), democHash, 'democ 0 has expected hash')
+    assert.equal(await be.getGDemoc(1), democHash2, 'democ 1 has expected hash')
 
-    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [democHash, democHash2], 'erc20 lookup gives us our democs')
+    assert.deepEqual(await be.getGErc20ToDemocs(erc20.address), [democHash, democHash2], 'erc20 lookup gives us our democs')
 
-    assert.deepEqual(await svIx.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(0)], 'getDInfo works as expected (0)')
+    assert.deepEqual(await be.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(0)], 'getDInfo works as expected (0)')
     await ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, await mkStdPacked())
-    assert.deepEqual(await svIx.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(1)], 'getDInfo works as expected (1)')
+    assert.deepEqual(await be.getDInfo(democHash), [erc20.address, adminPx.address, toBigNumber(1)], 'getDInfo works as expected (1)')
 }
 
 
-const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner}) => {
+const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner, be}) => {
     const [user0, user1, user2] = accounts;
 
     const {democHash, adminPx} = await mkDemoc({svIx, erc20, txOpts: {from: user1, value: oneEth}})
@@ -251,7 +252,7 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner}
 }
 
 
-const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}) => {
+const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog, be}) => {
     // test that payments behave as expected
 
     // for simplicity we should set the exchange rate to something simple
@@ -272,11 +273,11 @@ const testPaymentsForDemoc = async ({accounts, svIx, erc20, paySC, owner, scLog}
 
     // create the democ with an absurdly small fee -
     const {democHash, adminPx} = await mkDemoc({svIx, erc20, txOpts: {from: user1, value: 1}});
-    assert.equal(await svIx.accountInGoodStanding(democHash), false, "democ should not be in good standing with such a small fee");
+    assert.equal(await paySC.accountInGoodStanding(democHash), false, "democ should not be in good standing with such a small fee");
     await scLog.log("Created democ and ensured it's not in good standing");
 
     await paySC.payForDemocracy(democHash, {from: user1, value: oneEth});
-    assert.equal(await svIx.accountInGoodStanding(democHash), true, "democ should now be in good standing");
+    assert.equal(await paySC.accountInGoodStanding(democHash), true, "democ should now be in good standing");
 
     const secRemaining = await paySC.getSecondsRemaining(democHash);
     assert.equal(oneEthShouldBuy - secRemaining < 10, true, "should have correct time remaining to within 10s")
@@ -316,14 +317,14 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC,
     const packedTimes = toBigNumber(mkPackedTime(s, e));
 
     await doLog('getting cBallot price')
-    const commBPrice = await svIx.getCommunityBallotWeiPrice()
+    const commBPrice = await paySC.getCommunityBallotWeiPrice()
     const commBPriceStr = web3.fromWei(commBPrice.toFixed(), 'ether')
     await doLog(`got cBallot price: ${commBPriceStr}`)
 
     const user = accounts[3];
     const balPre = await getBalance(user)
     // use extraData as random bytes here for coverage
-    const dcbTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), genRandomBytes32(), packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
+    const dcbTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes, {value: commBPrice.plus(web3.toWei(1, "ether")), gasPrice: 0, from: user})
     const balPost = await getBalance(user)
     await doLog(`deployed community ballot!`)
 
@@ -342,14 +343,14 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC,
         "should not allow a community ballot with fee below the right amount"
     )
 
-    assert.equal(await svIx.accountInGoodStanding(democHash), false, "account should not be in good standing")
+    assert.equal(await paySC.accountInGoodStanding(democHash), false, "account should not be in good standing")
     await doLog('confirmed democ is not in good standing')
 
     // after this tx the account should be in good standing and this should fail
     await adminPx.sendTransaction({from: user, value: web3.toWei(1, 'ether')})
     await doLog('sent funding tx for democ')
 
-    assert.equal(await svIx.accountInGoodStanding(democHash), true, "account should now be in good standing")
+    assert.equal(await paySC.accountInGoodStanding(democHash), true, "account should now be in good standing")
     await doLog('paid 1 ether to democ & confirmed in good standing')
 
     await assertRevert(
@@ -364,7 +365,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC,
     const b = await getBlock('latest')
     const packedTimes2 = await genPackedTime()
 
-    assert.equal(await svIx.accountInGoodStanding(democHash), false, "time now expired")
+    assert.equal(await paySC.accountInGoodStanding(democHash), false, "time now expired")
     // commb works again
     await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, packedTimes2, {value: commBPrice})
 
@@ -372,7 +373,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC,
     // community ballots are disabled (and democ in good standing)
     const count1 = await be.getDCountedBasicBallotsN(democHash);
     await adminPx.setCommunityBallotStatus(true);
-    await svIx.payForDemocracy(democHash, {value: oneEth})  // now in good standing
+    await paySC.payForDemocracy(democHash, {value: oneEth})  // now in good standing
     await doLog('paid for democ in prep of checking commb count')
 
     const [s2, e2] = await genStartEndTimes()
@@ -394,7 +395,7 @@ const testCommunityBallots = async ({accounts, owner, svIx, erc20, doLog, paySC,
 }
 
 
-const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => {
+const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog, be}) => {
     // test our payment code around eth/usd stuff
 
     const [,minorEdits,u2,u3,u4,u5] = accounts;
@@ -413,7 +414,7 @@ const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => 
         assert.deepEqual(await paySC.getBasicExtraBallotFeeWei(), weiPerCent.times(100000).div(basicBallotsPerMonth), 'extra ballot should cost approx 1/nth of basic price where n is how many ballots pe rmonth they get')
     }
 
-    assert.deepEqual(await svIx.getCommunityBallotCentsPrice(), toBigNumber(1000), "community cents price should be $10 init")
+    assert.deepEqual(await paySC.getCommunityBallotCentsPrice(), toBigNumber(1000), "community cents price should be $10 init")
 
     // test setExchAddr
     // test set exchange rate
@@ -453,7 +454,7 @@ const testCurrencyConversion = async ({svIx, paySC, owner, accounts, doLog}) => 
 }
 
 
-const testPaymentsEmergencySetOwner = async ({paySC, owner, backupOwner, accounts}) => {
+const testPaymentsEmergencySetOwner = async ({paySC, owner, backupOwner, accounts, be}) => {
     const [,u1,u2,u3,u4,badActor] = accounts;
     assert.equal(await paySC.emergencyAdmin(), backupOwner, 'emergencyAdmin on paySC init good')
     assert.equal(await paySC.owner(), owner, 'payments owner init good')
@@ -487,49 +488,49 @@ const testAllAdminFunctionsAndCategories = async ({owner, accounts, svIx, erc20,
     }
 
     // set erc20
-    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [democHash], 'democHash in erc20 lookup init')
-    assert.deepEqual(await svIx.getGErc20ToDemocs(token1), [], 'token1 lookup init []')
+    assert.deepEqual(await be.getGErc20ToDemocs(erc20.address), [democHash], 'democHash in erc20 lookup init')
+    assert.deepEqual(await be.getGErc20ToDemocs(token1), [], 'token1 lookup init []')
     await testOnlyAdmin('setDErc20', [democHash, token1])
-    assert.deepEqual(await svIx.getGErc20ToDemocs(erc20.address), [democHash], 'democHash in erc20 lookup')
-    assert.deepEqual(await svIx.getGErc20ToDemocs(token1), [democHash], 'democHash in token1 lookup')
+    assert.deepEqual(await be.getGErc20ToDemocs(erc20.address), [democHash], 'democHash in erc20 lookup')
+    assert.deepEqual(await be.getGErc20ToDemocs(token1), [democHash], 'democHash in token1 lookup')
 
     // add category
-    assert.equal(await svIx.getDCategoriesN(democHash), 0, 'no cats to start with')
+    assert.equal(await be.getDCategoriesN(democHash), 0, 'no cats to start with')
     await testOnlyAdmin('dAddCategory', [democHash, "cat1", false, 0])
     await testOnlyAdmin('dAddCategory', [democHash, "cat2", true, 0])
     await testOnlyAdmin('dAddCategory', [democHash, "cat3", true, 1])
-    assert.equal(await svIx.getDCategoriesN(democHash), 3, 'cats created')
-    assert.deepEqual(await svIx.getDCategory(democHash, 0), [false, "0x6361743100000000000000000000000000000000000000000000000000000000", false, toBigNumber(0)], 'cat0 created')
-    assert.deepEqual(await svIx.getDCategory(democHash, 1), [false, "0x6361743200000000000000000000000000000000000000000000000000000000", true, toBigNumber(0)], 'cat1 created')
-    assert.deepEqual(await svIx.getDCategory(democHash, 2), [false, "0x6361743300000000000000000000000000000000000000000000000000000000", true, toBigNumber(1)], 'cat2 created')
+    assert.equal(await be.getDCategoriesN(democHash), 3, 'cats created')
+    assert.deepEqual(await be.getDCategory(democHash, 0), [false, "0x6361743100000000000000000000000000000000000000000000000000000000", false, toBigNumber(0)], 'cat0 created')
+    assert.deepEqual(await be.getDCategory(democHash, 1), [false, "0x6361743200000000000000000000000000000000000000000000000000000000", true, toBigNumber(0)], 'cat1 created')
+    assert.deepEqual(await be.getDCategory(democHash, 2), [false, "0x6361743300000000000000000000000000000000000000000000000000000000", true, toBigNumber(1)], 'cat2 created')
     // test they worked
 
     // deprecate cat - note, deprecation is not recursive
     await testOnlyAdmin('dDeprecateCategory', [democHash, 1])
-    assert.deepEqual(await svIx.getDCategory(democHash, 0), [false, "0x6361743100000000000000000000000000000000000000000000000000000000", false, toBigNumber(0)], 'cat0 matches')
-    assert.deepEqual(await svIx.getDCategory(democHash, 1), [true, "0x6361743200000000000000000000000000000000000000000000000000000000", true, toBigNumber(0)], 'cat1 deprecated')
-    assert.deepEqual(await svIx.getDCategory(democHash, 2), [false, "0x6361743300000000000000000000000000000000000000000000000000000000", true, toBigNumber(1)], 'cat2 matches')
+    assert.deepEqual(await be.getDCategory(democHash, 0), [false, "0x6361743100000000000000000000000000000000000000000000000000000000", false, toBigNumber(0)], 'cat0 matches')
+    assert.deepEqual(await be.getDCategory(democHash, 1), [true, "0x6361743200000000000000000000000000000000000000000000000000000000", true, toBigNumber(0)], 'cat1 deprecated')
+    assert.deepEqual(await be.getDCategory(democHash, 2), [false, "0x6361743300000000000000000000000000000000000000000000000000000000", true, toBigNumber(1)], 'cat2 matches')
 
     // upgrade
-    assert.equal(await svIx.accountInGoodStanding(democHash), false, 'democ not in good standing yet')
-    await svIx.payForDemocracy(democHash, {from: u3, value: oneEth});
-    assert.equal(await svIx.accountInGoodStanding(democHash), true, 'democ now in good standing')
-    assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), false, 'democ not premium and in good standing')
+    assert.equal(await paySC.accountInGoodStanding(democHash), false, 'democ not in good standing yet')
+    await paySC.payForDemocracy(democHash, {from: u3, value: oneEth});
+    assert.equal(await paySC.accountInGoodStanding(democHash), true, 'democ now in good standing')
+    assert.equal(await paySC.getPremiumStatus(democHash), false, 'democ not premium and in good standing')
     await testOnlyAdmin('dUpgradeToPremium', [democHash])
-    assert.equal(await svIx.accountInGoodStanding(democHash), true, 'democ now in good standing')
-    assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), true, 'democ now IS premium and in good standing')
+    assert.equal(await paySC.accountInGoodStanding(democHash), true, 'democ now in good standing')
+    assert.equal(await paySC.getPremiumStatus(democHash), true, 'democ now IS premium and in good standing')
 
     // downgrade
     await increaseTime(60 * 60 * 24 + 10)  // allow downgrade to work
     await testOnlyAdmin('dDowngradeToBasic', [democHash])
-    assert.equal(await svIx.accountInGoodStanding(democHash), true, 'democ still in good standing')
-    assert.equal(await svIx.accountPremiumAndInGoodStanding(democHash), false, 'democ no longer premium and in good standing')
+    assert.equal(await paySC.accountInGoodStanding(democHash), true, 'democ still in good standing')
+    assert.equal(await paySC.getPremiumStatus(democHash), false, 'democ no longer premium and in good standing')
 
 
     // deploy
-    assert.equal(await svIx.getDBallotsN(democHash), 0, '0 ballots')
+    assert.equal(await be.getDBallotsN(democHash), 0, '0 ballots')
     await testOnlyAdmin('dDeployBallot', [democHash, genRandomBytes32(), zeroHash, await mkStdPacked()])
-    assert.equal(await svIx.getDBallotsN(democHash), 1, '1 ballot')
+    assert.equal(await be.getDBallotsN(democHash), 1, '1 ballot')
 
     // payments
     await Promise.all(R.map(testArgs => testOnlyAdminPayments(...testArgs),
@@ -551,13 +552,13 @@ const testAllAdminFunctionsAndCategories = async ({owner, accounts, svIx, erc20,
 }
 
 
-const testPrefix = async ({svIx, owner, doLog, ensPR, tld, erc20}) => {
+const testPrefix = async ({svIx, owner, doLog, ensPR, tld, erc20, be}) => {
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: owner, value: 1}})
 
     const prefixHex = democHash.slice(2, 2 + 26)
     const prefixBase32 = hexToB32(prefixHex)
 
-    assert.equal(await svIx.getDHash("0x" + prefixHex), democHash)
+    assert.equal(await be.getDHash("0x" + prefixHex), democHash)
 
     const prefixNode = nh.hash(prefixBase32 + "." + tld)
 
@@ -565,13 +566,13 @@ const testPrefix = async ({svIx, owner, doLog, ensPR, tld, erc20}) => {
 }
 
 
-const testRevertCases = async ({svIx, owner, doLog, erc20, be, paySC}) => {
+const testRevertCases = async ({svIx, owner, doLog, erc20, paySC, be}) => {
     await assertRevert(IxPayments.new(zeroAddr), "payments throws on zeroAddr")
 
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {value: 1}})
 
-    await assertRevert(svIx.payForDemocracy(democHash, {value: 0}), 'zero payment should revert')
-    await svIx.payForDemocracy(democHash, {value: oneEth})
+    await assertRevert(paySC.payForDemocracy(democHash, {value: 0}), 'zero payment should revert')
+    await paySC.payForDemocracy(democHash, {value: oneEth})
 
     const [s,e] = await genStartEndTimes()
     await assertRevert(ixPx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_NO_ENC | USE_TESTING)), 'should revert as testing ballots cant be deployed through index')
@@ -582,7 +583,7 @@ const testRevertCases = async ({svIx, owner, doLog, erc20, be, paySC}) => {
 }
 
 
-const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) => {
+const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC, be}) => {
     const premMultiplier = (await paySC.getPremiumMultiplier()).toNumber()
     const premPrice30Days = await paySC.getPremiumCentsPricePer30Days()
     const premWeiPer30Days = await paySC.centsToWei(premPrice30Days)
@@ -607,7 +608,7 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) =
     const centsFor30Days = await paySC.getBasicCentsPricePer30Days();
     const weiFor30Days = await paySC.centsToWei(centsFor30Days);
     assert.deepEqual(await paySC.weiToCents(weiFor30Days), toBigNumber(100000), '30 days of wei matches cents expectation')
-    await svIx.payForDemocracy(democHash, {value: weiFor30Days})
+    await paySC.payForDemocracy(democHash, {value: weiFor30Days})
     const b2 = await getBlock('latest')
     assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30)], 'getAccount matches after payment')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(60 * 60 * 24 * 30), 'should have 30 days left')
@@ -618,14 +619,14 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) =
     assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30 / premMultiplier)], 'getAccount matches after upgrade')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(60 * 60 * 24 * 30 / premMultiplier), 'should have 6 days left')
 
-    await svIx.payForDemocracy(democHash, {value: weiFor30Days})
+    await paySC.payForDemocracy(democHash, {value: weiFor30Days})
     const b3 = await getBlock('latest')
     assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b3.timestamp), toBigNumber(b2.timestamp + 2 * 60 * 60 * 24 * 30 / premMultiplier)], 'getAccount matches after upgrade')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(2 * 60 * 60 * 24 * 30 / premMultiplier), 'should have 12 days left')
 
     assert.deepEqual(premPrice30Days, centsFor30Days.times(premMultiplier), 'prices match according to premium multiplier')
 
-    await svIx.payForDemocracy(democHash, {value: premWeiPer30Days})
+    await paySC.payForDemocracy(democHash, {value: premWeiPer30Days})
     const b4 = await getBlock('latest')
     let timeLeft = ((2 + premMultiplier) * 60 * 60 * 24 * 30 / premMultiplier);
     assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b4.timestamp), toBigNumber(b2.timestamp + timeLeft)], 'getAccount matches after upgrade')
@@ -661,7 +662,7 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC}) =
 }
 
 
-const testPaymentsSettingValues = async ({svIx, owner, doLog, erc20, paySC}) => {
+const testPaymentsSettingValues = async ({svIx, owner, doLog, erc20, paySC, be}) => {
     const initWeiPerCent = toBigNumber('18975332000000')
     const initCommBPrice = toBigNumber(1000)
     const initCentsPer30Days = toBigNumber(100000)
@@ -711,7 +712,7 @@ const testPaymentsSettingValues = async ({svIx, owner, doLog, erc20, paySC}) => 
 }
 
 
-const testPaymentsPayoutAll = async ({svIx, paySC, owner, doLog, accounts}) => {
+const testPaymentsPayoutAll = async ({svIx, paySC, owner, doLog, accounts, be}) => {
     const [, newPayTo, u2, u3, u4] = accounts;
 
     await paySC.setPayTo(newPayTo, {from: owner})
@@ -731,13 +732,7 @@ const testPaymentsPayoutAll = async ({svIx, paySC, owner, doLog, accounts}) => {
 }
 
 
-const testCatagoriesCrud = async () => {
-    // test our ability to create and deprecate catagories
-    throw Error('not implemented');
-}
-
-
-const testSponsorshipOfCommunityBallots = async ({svIx, erc20, accounts, owner, bbFarm, doLog}) => {
+const testSponsorshipOfCommunityBallots = async ({svIx, erc20, accounts, owner, bbFarm, doLog, paySC, be}) => {
     const [, dAdmin, u2, u3, u4, u5] = accounts
 
     await doLog('creating democ')
@@ -745,18 +740,18 @@ const testSponsorshipOfCommunityBallots = async ({svIx, erc20, accounts, owner, 
     const times = await genPackedTime();
 
     await doLog('getting commb price and verifiying ballotsN === 0')
-    const commBPriceEth = await svIx.getCommunityBallotWeiPrice();
+    const commBPriceEth = await paySC.getCommunityBallotWeiPrice();
 
-    assert.equal(await svIx.getDBallotsN(democHash), 0, 'no ballots yet')
+    assert.equal(await be.getDBallotsN(democHash), 0, 'no ballots yet')
 
     await doLog('deploying commb')
     const commBTxr = await adminPx.deployCommunityBallot(genRandomBytes32(), zeroHash, times, {from: u2, value: commBPriceEth})
     const {args: {ballotId}} = getEventFromTxR("BallotCreatedWithID", commBTxr)
     await doLog(`got commb deployed with ballotId: ${ballotId} (txr: \n${toJson(commBTxr)})`)
 
-    assert.equal(await svIx.getDBallotsN(democHash), 1, 'one ballot so far')
+    assert.equal(await be.getDBallotsN(democHash), 1, 'one ballot so far')
 
-    const ballotIdCmp = await svIx.getDBallotID(democHash, 0);
+    const ballotIdCmp = await be.getDBallotID(democHash, 0);
     assert.deepEqual(ballotId, ballotIdCmp, 'ballotIds match')
     assert.equal(await bbFarm.getTotalSponsorship(ballotId), 0, 'no sponsorship yet')
 
@@ -778,7 +773,7 @@ const testVersion = async ({svIx}) => {
 }
 
 
-const testNFPTierAndPayments = async ({svIx, erc20, owner, accounts, doLog, paySC}) => {
+const testNFPTierAndPayments = async ({svIx, erc20, owner, accounts, doLog, paySC, be}) => {
     // test that we can give and remove time on NFP accounts
 
     const [, democAdmin, u2, u3, u4, u5] = accounts;
@@ -915,11 +910,11 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 
     let hasSetEmergency = false;
 
-    const testAddr = async (property, expectedAddr) =>
-        assert.equal(await svIx[property](), expectedAddr, `Address for ${property} (${hasSetEmergency ? 'emergency' : 'init'}) should match expected ${expectedAddr}`)
+    const testAddr = async (property, expectedAddr, ...args) =>
+        assert.equal(await svIx[property](...args), expectedAddr, `Address for ${property} (${hasSetEmergency ? 'emergency' : 'init'}) should match expected ${expectedAddr}`)
 
-    const testBadAddr = async (prop) =>
-        await assertRevert(svIx[prop](accounts[4], {from: accounts[4]}), `cannot run ${prop} from non-owner account`)
+    const testBadAddr = async (prop, arg1) =>
+        await assertRevert(svIx[prop](arg1, accounts[4], {from: accounts[4]}), `cannot run ${prop} from non-owner account`)
 
     /* setDAdmin */
 
@@ -930,11 +925,11 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: democAdmin, value: 1}})
     await doLog(`democ created.`)
 
-    assert.equal(await svIx.getDAdmin(democHash), adminPx.address, "d admin should match")
+    assert.equal(await be.getDAdmin(democHash), adminPx.address, "d admin should match")
 
     await doLog(`running emergencySetDAdmin`)
     await svIx.emergencySetDAdmin(democHash, setTo)
-    assert.equal(await svIx.getDAdmin(democHash), setTo, "d admin should match after emergency")
+    assert.equal(await be.getDAdmin(democHash), setTo, "d admin should match after emergency")
 
     await assertRevert(svIx.emergencySetDAdmin(democHash, badActor, {from: badActor}), 'cannot emergency set admin for democ from bad acct')
 
@@ -942,31 +937,32 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 
     await doLog(`done. about to test init conditions for emergency methods`)
 
-    await testAddr('backend', be.address)
-    await testAddr('payments', paySC.address)
-    await testAddr('getBBFarm', bbFarm.address)
+    await testAddr('getBackend', be.address)
+    await testAddr('getPayments', paySC.address)
+    await testAddr('getBBFarm', bbFarm.address, 0)
     await testAddr('adminPxFactory', pxF.address)
 
     await doLog(`init conditions validated. testing emergency set methods`)
 
-    await svIx.emergencySetPaymentBackend(setTo)
-    await svIx.emergencySetBackend(setTo)
-    await svIx.emergencySetAdminPxFactory(setTo)
-    await svIx.emergencySetBBFarm(setTo)
+    await assertRevert(svIx.emergencySetABackend("nonexistent", setTo), 'emergencySetABackend should revert with nonexistent backend label')
+    await svIx.emergencySetABackend("payments", setTo)
+    await svIx.emergencySetABackend("backend", setTo)
+    await svIx.emergencySetABackend("adminPxF", setTo)
+    await svIx.emergencySetBBFarm(0, setTo)
     hasSetEmergency = true;
 
     await doLog(`emergency set methods tested. testing setting from bad addrs`)
 
-    await testBadAddr('emergencySetPaymentBackend')
-    await testBadAddr('emergencySetBackend')
-    await testBadAddr('emergencySetAdminPxFactory')
-    await testBadAddr('emergencySetBBFarm')
+    await testBadAddr('emergencySetABackend', "payments")
+    await testBadAddr('emergencySetABackend', "backend")
+    await testBadAddr('emergencySetABackend', "adminPxF")
+    await testBadAddr('emergencySetBBFarm', 0)
 
     await doLog(`setting from bad addrs tested. validating results`)
 
-    await testAddr('backend', setTo)
-    await testAddr('payments', setTo)
-    await testAddr('getBBFarm', setTo)
+    await testAddr('getBackend', setTo)
+    await testAddr('getPayments', setTo)
+    await testAddr('getBBFarm', setTo, 0)
     await testAddr('adminPxFactory', setTo)
 
     await doLog(`results validated.`)
@@ -975,7 +971,7 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 }
 
 
-const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog}) => {
+const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog, be}) => {
     const [, dAdmin, u2, u3, u4] = accounts;
 
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: dAdmin, value: oneEth}})
@@ -996,7 +992,7 @@ const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog}) => {
     NoSC: 155579
     BBFarm: 274586
 */
-const testGasOfBallots = async ({svIx, owner, erc20}) => {
+const testGasOfBallots = async ({svIx, owner, erc20, be}) => {
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, txOpts: {from: owner, value: 1}, erc20});
     const packed = toBigNumber(await mkStdPacked());
 

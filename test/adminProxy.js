@@ -177,7 +177,7 @@ const testFwdingFallback = async ({accounts, scLog, owner, payments, svIx, democ
 
     // make sure we can fwd with no data and non-admin sender
     assert.equal(await adminPx.admins(u1), false, "u1 should not be an admin")
-    assert.equal(await svIx.accountInGoodStanding(democHash), false, "democ should not yet be in good standing")
+    assert.equal(await payments.accountInGoodStanding(democHash), false, "democ should not yet be in good standing")
     assert.equal(await payments.getSecondsRemaining(democHash), 0, "democ should have 0 seconds on it")
     await scLog.log("confirmed admins, accountStanding, and secs remaining")
 
@@ -187,7 +187,7 @@ const testFwdingFallback = async ({accounts, scLog, owner, payments, svIx, democ
 
     const secsRemaining = await payments.getSecondsRemaining(democHash);
     const secsPerEth = await payments.weiBuysHowManySeconds(toBigNumber(oneEth));
-    assert.equal(await svIx.accountInGoodStanding(democHash), true, "democ now in good standing due to 1 eth payment")
+    assert.equal(await payments.accountInGoodStanding(democHash), true, "democ now in good standing due to 1 eth payment")
     assert.deepEqual(secsRemaining.minus(secsPerEth).abs().toNumber() < 2, true, "democ should have plenty of secs now")
     assert.equal(secsRemaining.toNumber() > 1000000, true, "secsRemaining should be more than 1 million (about 12 days)")
 
