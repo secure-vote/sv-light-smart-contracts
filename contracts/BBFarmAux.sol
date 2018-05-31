@@ -12,20 +12,20 @@ contract BBFarmAux {
 
     function getVotes(BBFarmIface bbFarm, uint ballotId) external view
         returns ( bytes32[] memory votes
-                , bytes[] memory extras
-                , address[] memory senders) {
+                , address[] memory voters
+                , bytes[] memory extras) {
 
         uint nVotesCast;
         (, nVotesCast,,,,,,,,) = bbFarm.getDetails(ballotId, address(0));
 
-        address sender;
+        address voter;
         bytes32 vote;
         bytes memory extra;
         for (uint i = 0; i < nVotesCast; i++) {
-            (vote, sender, extra) = bbFarm.getVote(ballotId, i);
+            (vote, voter, extra) = bbFarm.getVote(ballotId, i);
             votes = MemArrApp.appendBytes32(votes, vote);
+            voters = MemArrApp.appendAddress(voters, voter);
             extras = MemArrApp.appendBytes(extras, extra);
-            senders = MemArrApp.appendAddress(senders, sender);
         }
     }
 
