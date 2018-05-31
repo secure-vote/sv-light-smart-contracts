@@ -12,9 +12,11 @@ import { MemArrApp } from "../libs/MemArrApp.sol";
 import "./BBLib.sol";
 import "./BPackedUtils.sol";
 import "./BBFarm.sol";
+import "./IxLib.sol";
 
 
 contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
+    using IxLib for IxIface;
 
     uint constant PROXY_VERSION = 2;
 
@@ -72,31 +74,31 @@ contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
             callActive = true;
             caller = msg.sender;
 
-            address fwdTo = checkFwdAddressUpgrade();
+            IxIface ix = checkFwdAddressUpgrade();
 
             if (msg.data.length > 0) {
                 require(admins[msg.sender], "!admin");
                 // note: for this to work we need the `forwardTo` contract must recognise _this_ contract
                 // (not _our_ msg.sender) as having the appropriate permissions (for whatever it is we're calling)
                 // note2: we don't use doSafeSend here because we _want_ potential reentrancy for change transactions
-                require(address(fwdTo).call.value(msg.value)(msg.data), "!tx-send");
+                require(address(ix).call.value(msg.value)(msg.data), "!tx-send");
             } else if (msg.value > 0) {
-                // allow fwding just money to the democracy
-                IxIface ix = IxIface(fwdTo);
-                ix.payForDemocracy.value(msg.value)(democHash);
+                // this happens when no call is active, and there's no data
+                // - allow fwding just money to the democracy
+                ix.payForDemocracy(democHash);
             }
 
             callActive = false;
         }
     }
 
-    function checkFwdAddressUpgrade() internal returns (address) {
+    function checkFwdAddressUpgrade() internal returns (IxIface) {
         // need to check if the SVIndex at forwardTo has been upgraded...
         address _ptr = _forwardTo.getUpgradePointer();
         if (_ptr != address(0)) {
             _forwardTo = upgradePtr(_ptr);
         }
-        return _forwardTo;
+        return IxIface(_forwardTo);
     }
 
     function fwdData(address toAddr, bytes data) isAdmin() public {
@@ -139,7 +141,7 @@ contract SVLightAdminProxy is owned, SVBallotConsts, safeSend {
         id = ix.dDeployBallot(democHash, specHash, extraData, packed);
 
         // should we set owner to 0 so admins can't interfere with community ballots?
-        BBFarm(ix.getBBFarmFromBallotID(id)).setBallotOwner(id, address(0));
+        // BBFarm(ix.getBBFarmFromBallotID(id)).setBallotOwner(id, address(0));
     }
 
     // admin management

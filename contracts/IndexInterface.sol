@@ -5,35 +5,22 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 
 
 interface IxIface {
-    function getVersion() external view returns (uint256);
-    function getBBFarm(uint16 bbFarmId) external view returns (address);
-    function getBBFarmID(uint32 bbNamespace) external view returns (uint16 bbFarmId);
-    function getBBFarmFromBallotID(uint256 ballotId) external view returns (address);
-
     function doUpgrade(address) external;
-    function addBBFarm(address bbFarm) external returns (uint16 bbFarmId);
-    function emergencySetPaymentBackend(IxPaymentsIface) external;
-    function emergencySetBackend(IxBackendIface) external;
-    function emergencySetAdminPxFactory(address _pxF) external;
-    function emergencySetBBFarm(uint16 bbFarmId, address _bbFarm) external;
+
+    function addBBFarm(address bbFarm) external returns (uint8 bbFarmId);
+    function emergencySetABackend(bytes32 toSet, address newSC) external;
+    function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) external;
     function emergencySetDAdmin(bytes32 democHash, address newAdmin) external;
 
-    function getPayTo() external view returns (address);
-    function getCommunityBallotCentsPrice() external view returns (uint);
-    function getCommunityBallotWeiPrice() external view returns (uint);
+    function getPayments() external view returns (IxPaymentsIface);
+    function getBackend() external view returns (IxBackendIface);
+    function getBBFarm(uint8 bbFarmId) external view returns (address);
+    function getBBFarmID(bytes4 bbNamespace) external view returns (uint8 bbFarmId);
 
-    function getGDemocsN() external view returns (uint256);
-    function getGDemoc(uint256 n) external view returns (bytes32);
-    function getGErc20ToDemocs(address erc20) external view returns (bytes32[] democHashes);
+    function getVersion() external view returns (uint256);
 
     function dInit(address defualtErc20) external payable returns (bytes32);
 
-    function payForDemocracy(bytes32 democHash) external payable;
-    function accountInGoodStanding(bytes32 democHash) external view returns (bool);
-    function accountPremiumAndInGoodStanding(bytes32 democHash) external view returns (bool);
-
-    // disable this method bc we don't want admins to move away from our admin SC
-    // function setDAdmin(bytes32 democHash, address newAdmin) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external returns (uint);
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
@@ -41,22 +28,14 @@ interface IxIface {
     function dDowngradeToBasic(bytes32 democHash) external;
     function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) external;
 
-    function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint);
-    // only ix owner - used for adding past ballots
+    /* democ getters (that used to be here) should be called on either backend or payments directly */
+    /* use IxLib for convenience functions from other SCs */
+
+    /* ballot deployment */
+    // only ix owner - used for adding past or special ballots
     function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) external;
+    function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable returns (uint);
 
-    /* global democ getters */
-    function getDCategoriesN(bytes32 democHash) external view returns (uint);
-    function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool deprecated, bytes32 name, bool hasParent, uint parent);
-    function getDAdmin(bytes32 democHash) external view returns (address);
-    function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 nBallots);
-    function getDErc20(bytes32 democHash) external view returns (address);
-    function getDHash(bytes13 prefix) external view returns (bytes32);
-    function getDArbitraryData(bytes32 democHash, uint256 key) external view returns (uint256);
-
-    /* democ ballot getters */
-    function getDBallotsN(bytes32 democHash) external view returns (uint256);
-    function getDBallotID(bytes32 democHash, uint256 n) external view returns (uint256 ballotId);
 
     /* events */
     event PaymentMade(uint[2] valAndRemainder);
@@ -64,6 +43,7 @@ interface IxIface {
     event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
     event EmergencyBBFarm(uint16 bbFarmId);
     event AddedBBFarm(uint16 bbFarmId);
+    event ManuallyAddedBallot(bytes32 democHash, uint256 ballotId, uint256 packed);
     // from backend
     event NewBallot(bytes32 indexed democHash, uint ballotN);
     event NewDemoc(bytes32 democHash);
@@ -144,11 +124,13 @@ interface IxBackendIface {
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
     function setDAdmin(bytes32 democHash, address newAdmin) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
+    function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) external;
 
     /* global democ getters */
     function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 nBallots);
     function getDErc20(bytes32 democHash) external view returns (address);
     function getDAdmin(bytes32 democHash) external view returns (address);
+    function getDArbitraryData(bytes32 democHash, uint256 key) external view returns (uint256 value);
 
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
     function getDBallotID(bytes32 democHash, uint n) external view returns (uint ballotId);

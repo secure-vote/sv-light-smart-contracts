@@ -113,7 +113,7 @@ contract BBFarmProxy {
         ballotId = _ballotId;
     }
 
-    function getVote(uint voteId) external view returns (bytes32, address, bytes32) {
+    function getVote(uint voteId) external view returns (bytes32, address, bytes) {
         return farm.getVote(ballotId, voteId);
     }
 

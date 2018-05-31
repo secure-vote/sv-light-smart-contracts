@@ -13,6 +13,7 @@ import { BallotBoxIface } from "./BallotBoxIface.sol";
 import { MemArrApp } from "../libs/MemArrApp.sol";
 import { SVBallotConsts } from "./SVBallotConsts.sol";
 import { BPackedUtils } from "./BPackedUtils.sol";
+import { BytesLib } from "../libs/BytesLib.sol";
 
 library BBLib {
     // ballot meta
@@ -35,7 +36,7 @@ library BBLib {
     struct Vote {
         bytes32 voteData;
         address sender;
-        bytes32 encPK;
+        bytes extra;
     }
 
     struct Sponsor {
@@ -179,8 +180,8 @@ library BBLib {
     //     return db.voterLog[v].length > 0;
     // }
 
-    function getVote(DB storage db, uint id) internal view returns (bytes32 voteData, address sender, bytes32 encPK) {
-        return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].encPK);
+    function getVote(DB storage db, uint id) internal view returns (bytes32 voteData, address sender, bytes extra) {
+        return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].extra);
     }
 
     // function getStartTime(DB storage db) internal view returns (uint64) {
@@ -213,17 +214,46 @@ library BBLib {
     /* ETH BALLOTS */
 
     // Ballot submission
-    // note: curve25519 keys should be generated for each ballot (then thrown away)
-    function submitVote(DB storage db, bytes32 voteData, bytes32 encPK) external {
-        _addVote(db, voteData, msg.sender, encPK);
+    // note: if USE_ENC then curve25519 keys should be generated for
+    // each ballot (then thrown away).
+    // the curve25519 PKs go in the extra param
+    function submitVote(DB storage db, bytes32 voteData, bytes extra) external {
+        _addVote(db, voteData, msg.sender, extra);
     }
 
-    function _addVote(DB storage db, bytes32 voteData, address sender, bytes32 encPK) internal returns (uint256 id) {
+    function submitProxyVote(DB storage db, bytes32 voteData, bytes extraWSig) external {
+        // in a proxy vote (where the vote is submitted (i.e. tx fee paid by by)
+        // someone else), the first 65 bytes of extraWSig (uint8 v, bytes32 r, bytes32 s)
+        // are used as the parameters for ecrecover to determine the signing ETH
+        // address.
+
+        // `extra` is all bytes after the first 65 bytes of `extraWSig`
+
+        uint eLen = extraWSig.length;
+        // this ensures we have at least enough data for ecrecover; required in all cases
+        require(eLen >= 65, "extra-len");
+
+        uint8 v = uint8(extraWSig[0]);    // drop all but last byte
+        uint256 r = BytesLib.toUint(extraWSig, 1);  // take a uint starting at byte 1
+        uint256 s = BytesLib.toUint(extraWSig, 33); // take a uint starting at byte 33
+
+        address voter = ecrecover(keccak256(abi.encodePacked(voteData)), v, bytes32(r), bytes32(s));
+
+        // copy over excess data from extraWSig to extra
+        bytes memory extra = new bytes(eLen - 65);
+        for (uint i = 0; i < extra.length; i++) {
+            extra[i] = extraWSig[i + 65];
+        }
+
+        _addVote(db, voteData, voter, extra);
+    }
+
+    function _addVote(DB storage db, bytes32 voteData, address sender, bytes extra) internal returns (uint256 id) {
         id = db.nVotesCast;
         db.votes[id].voteData = voteData;
         db.votes[id].sender = sender;
-        if (encPK != bytes32(0)) {
-            db.votes[id].encPK = encPK;
+        if (extra.length > 0) {
+            db.votes[id].extra = extra;
         }
         db.nVotesCast += 1;
         db.voterLog[sender].push(id);

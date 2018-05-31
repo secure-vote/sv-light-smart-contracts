@@ -84,6 +84,16 @@ library MemArrApp {
         toRet[arr.length] = val;
     }
 
+    function appendBytes(bytes[] memory arr, bytes val) internal pure returns (bytes[] memory toRet) {
+        toRet = new bytes[](arr.length + 1);
+
+        for (uint256 i = 0; i < arr.length; i++) {
+            toRet[i] = arr[i];
+        }
+
+        toRet[arr.length] = val;
+    }
+
     function appendAddress(address[] memory arr, address val) internal pure returns (address[] memory toRet) {
         toRet = new address[](arr.length + 1);
 
