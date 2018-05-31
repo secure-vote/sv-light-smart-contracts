@@ -646,8 +646,8 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC, be
     // need to split this up b/c the downgrade can have an error of up to 5s due to rounding (which occurs in the _upgrade_ step)
     const [isPrem, lastPaid, paidTill] = await paySC.getAccount(democHash);
     assert.deepEqual([isPrem, lastPaid], [false, toBigNumber(b4.timestamp)], 'getAccount [0:1] matches after downgrade')
-    assert.reallyClose(paidTill, toBigNumber(b5.timestamp + timeLeft), 'getAccount paidTill matches after downgrade', 5)
-    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft), 'should have 42*5 days left', 5)
+    assert.reallyClose(paidTill, toBigNumber(b5.timestamp + timeLeft), 'getAccount paidTill matches after downgrade', 6)
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft), 'should have 42*5 days left', 6)
 
     // check payments log
     assert.deepEqual(await paySC.getPaymentLogN(), toBigNumber(4), 'payment n log as expected')

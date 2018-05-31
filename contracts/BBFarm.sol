@@ -37,7 +37,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
     constructor() public {
         // this bbFarm requires v4 of BBLib
         assert(BBLib.getVersion() == 4);
-        assert(BALLOT_ID_MASK == uint256(2) ** 48 - 1);
+        // note: not sure if it's that important to have the above - does stop the operator accidentally deploying against the wrong BBLib tho
     }
 
     function getNamespace() external view returns (bytes4) {
