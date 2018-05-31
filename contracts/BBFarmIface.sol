@@ -10,6 +10,10 @@ import "./IndexInterface.sol";
 
 
 interface BBFarmIface {
+    /* from permissioned */
+
+    function upgradeMe(address newSC) external;
+
     /* global bbfarm getters */
 
     function getNamespace() external view returns (bytes4);

@@ -20,7 +20,7 @@ import "./SVPayments.sol";
 import "./EnsOwnerProxy.sol";
 import { BPackedUtils } from "./BPackedUtils.sol";
 import "./BBLib.sol";
-import "./BBFarm.sol";
+import "./BBFarmIface.sol";
 
 
 contract SVAdminPxFactory is payoutAllC {
@@ -230,7 +230,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     SVAdminPxFactory public adminPxFactory;
     SvEnsEverythingPx public ensPx;
     EnsOwnerProxy public ensOwnerPx;
-    BBFarm[] bbFarms;
+    BBFarmIface[] bbFarms;
     // mapping from bbFarm namespace to bbFarmId
     mapping (bytes4 => uint8) bbFarmIdLookup;
 
@@ -251,7 +251,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
                , SVAdminPxFactory _pxF
                , SvEnsEverythingPx _ensPx
                , EnsOwnerProxy _ensOwnerPx
-               , BBFarm _bbFarm0
+               , BBFarmIface _bbFarm0
                ) public {
         backend = _b;
         payments = _pay;
@@ -276,7 +276,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         }
     }
 
-    function _addBBFarm(bytes4 bbNamespace, BBFarm _bbFarm) internal returns (uint8 bbFarmId) {
+    function _addBBFarm(bytes4 bbNamespace, BBFarmIface _bbFarm) internal returns (uint8 bbFarmId) {
         bbFarmId = uint8(bbFarms.length);
         // uint8 overflow check - can't have more than 256 BBFarms
         require(bbFarmId < 2**8, "too-many-farms");
@@ -289,7 +289,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     // adding a new BBFarm
     function addBBFarm(address bbFarm) only_owner() external returns (uint8 bbFarmId) {
         // what a nonsense line of code below. bah.
-        BBFarm _bbFarm = BBFarm(bbFarm);
+        BBFarmIface _bbFarm = BBFarmIface(bbFarm);
         bytes4 bbNamespace = _bbFarm.getNamespace();
         require(bbNamespace != bytes4(0), "bb-farm-namespace");
         // the only place where namespace -> 0 is for the init bbFarm,
@@ -315,7 +315,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     }
 
     function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) only_owner() external {
-        bbFarms[bbFarmId] = BBFarm(_bbFarm);
+        bbFarms[bbFarmId] = BBFarmIface(_bbFarm);
         emit EmergencyBBFarm(bbFarmId);
     }
 
@@ -422,7 +422,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
 
         // the most significant byte of extraData signals the bbFarm to use.
         uint8 bbFarmId = uint8(extraData[0]);
-        BBFarm _bbFarm = bbFarms[bbFarmId];
+        BBFarmIface _bbFarm = bbFarms[bbFarmId];
 
         // by default we don't record towards the basic limit
         bool recordTowardsBasicLimit = false;
@@ -469,7 +469,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         require(secsLeft * 2 > secsToEndTime, "unpaid");
     }
 
-    function _basicBallotLimitOperations(bytes32 democHash, BBFarm _bbFarm) internal returns (bool recordTowardsBasicLimit) {
+    function _basicBallotLimitOperations(bytes32 democHash, BBFarmIface _bbFarm) internal returns (bool recordTowardsBasicLimit) {
         // if we're an official ballot and the democ is basic, ensure the democ
         // isn't over the ballots/mo limit
         if (payments.getPremiumStatus(democHash) == false) {

@@ -13,7 +13,7 @@ import "./IxLib.sol";
 import "../libs/MemArrApp.sol";
 import "./BBFarmIface.sol";
 
-contract BBFarm is permissioned, payoutAllC, BBFarmIface {
+contract BBFarm is BBFarmIface, permissioned, payoutAllC {
     using BBLib for BBLib.DB;
     using IxLib for IxIface;
 
@@ -58,7 +58,7 @@ contract BBFarm is permissioned, payoutAllC, BBFarmIface {
 
     /* db lookup helper */
 
-    function getDb(uint ballotId) internal returns (BBLib.DB storage) {
+    function getDb(uint ballotId) internal view returns (BBLib.DB storage) {
         // cut off anything above 48 bits (where the namespace goes)
         return dbs[uint48(ballotId)];
     }
