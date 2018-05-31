@@ -123,7 +123,7 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         erc20ToDemocs[newErc20].push(democHash);
     }
 
-    function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) only_editors() external {
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) only_editors() external {
         arbitraryData[democHash][key] = value;
     }
 
@@ -156,7 +156,7 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         return democs[democHash].erc20;
     }
 
-    function getDArbitraryData(bytes32 democHash, uint256 key) external view returns (uint256) {
+    function getDArbitraryData(bytes32 democHash, bytes key) external view returns (bytes) {
         return arbitraryData[democHash][key];
     }
 
@@ -383,7 +383,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         payments.downgradeToBasic(democHash);
     }
 
-    function dSetArbitraryData(bytes32 democHash, uint256 key, uint256 value) onlyDemocAdmin(democHash) external {
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) onlyDemocAdmin(democHash) external {
         backend.dSetArbitraryData(democHash, key, value);
     }
 
