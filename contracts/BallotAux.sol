@@ -10,7 +10,7 @@ pragma solidity 0.4.24;
 import "./BallotBoxIface.sol";
 import "./BBLib.sol";
 import "./BPackedUtils.sol";
-import "./BBFarm.sol";
+import "./BBFarmIface.sol";
 
 
 contract BallotAux is BBAuxIface {
@@ -104,11 +104,12 @@ contract BallotAux is BBAuxIface {
 }
 
 
+// used for testing with old BallotBox function signature (no ballotId)
 contract BBFarmProxy {
     uint ballotId;
-    BBFarm farm;
+    BBFarmIface farm;
 
-    constructor(BBFarm _farm, uint _ballotId) public {
+    constructor(BBFarmIface _farm, uint _ballotId) public {
         farm = _farm;
         ballotId = _ballotId;
     }

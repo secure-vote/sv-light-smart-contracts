@@ -13,7 +13,6 @@ pragma solidity 0.4.24;
  */
 
 
-// import "./SVLightIndex.sol";
 import "./IndexInterface.sol";
 
 
