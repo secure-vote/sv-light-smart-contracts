@@ -1,5 +1,4 @@
 pragma solidity ^0.4.24;
-pragma experimental ABIEncoderV2;
 
 /**
  * BBFarm is a contract to use BBLib to replicate the functionality of
@@ -12,27 +11,47 @@ import { IxIface } from "./IndexInterface.sol";
 import "./BPackedUtils.sol";
 import "./IxLib.sol";
 import "../libs/MemArrApp.sol";
+import "./BBFarmIface.sol";
 
-contract BBFarm is permissioned, payoutAllC {
+contract BBFarm is permissioned, payoutAllC, BBFarmIface {
     using BBLib for BBLib.DB;
     using IxLib for IxIface;
 
+    // this is only true for the initial BBFarm - others should not
+    // use this namespace.
     bytes4 constant NAMESPACE = 0x00000000;
 
+    uint constant VERSION = 2;
+
     mapping (uint => BBLib.DB) dbs;
-    // note - start at 1 to avoid any test for if 0 is a valid ballotId
-    uint nBallots = 1;
+    // note - start at 100 to avoid any test for if 0 is a valid ballotId
+    // also gives us some space to play with low numbers if we want.
+    uint constant INITIAL_BALLOT_ID_OFFSET = 100;
+    uint nBallots = INITIAL_BALLOT_ID_OFFSET;
 
     event BallotCreatedWithID(uint ballotId);
 
     /* Constructor */
 
     constructor() public {
-
+        // this bbFarm requires v4 of BBLib
+        assert(BBLib.getVersion() == 4);
     }
 
     function getNamespace() external view returns (bytes4) {
-        return bytes4(0);
+        return NAMESPACE;
+    }
+
+    function getVersion() external view returns (uint) {
+        return VERSION;
+    }
+
+    function getBBLibVersion() external view returns (uint256) {
+        return BBLib.getVersion();
+    }
+
+    function getNBallots() external view returns (uint256) {
+        return nBallots - INITIAL_BALLOT_ID_OFFSET;
     }
 
     /* Init ballot */
@@ -41,13 +60,17 @@ contract BBFarm is permissioned, payoutAllC {
                        , uint256 packed
                        , IxIface ix
                        , address bbAdmin
-                       , bytes32 extraData
-                ) only_editors() external returns (uint ballotId) {
+                       , bytes24 extraData
+                ) only_editors() external returns (uint) {
         // we need to call the init functions on our libraries
-        ballotId = nBallots;
+        uint ballotId = nBallots;
         dbs[ballotId].init(specHash, packed, ix, bbAdmin, extraData);
         nBallots = ballotId + 1;
-        emit BallotCreatedWithID(uint256(NAMESPACE) << 40 ^ ballotId);
+
+        uint ballotIdWNamespace = uint256(NAMESPACE) << 40 ^ ballotId;
+        emit BallotCreatedWithID(ballotIdWNamespace);
+
+        return ballotIdWNamespace;
     }
 
     /* Sponsorship */
@@ -61,13 +84,17 @@ contract BBFarm is permissioned, payoutAllC {
     /* Voting */
 
     function submitVote(uint ballotId, bytes32 vote, bytes extra) external {
-        BBLib.DB storage db = dbs[ballotId];
-        db.requireBallotOpen();
-        db.submitVote(vote, extra);
+        dbs[ballotId].submitVote(vote, extra);
+    }
+
+    function submitProxyVote(uint ballotId, bytes32 vote, bytes extraWSig) external {
+        dbs[ballotId].submitProxyVote(vote, extraWSig);
     }
 
     /* Getters */
 
+    // note - this is the maxmimum number of vars we can return with one
+    // function call (taking 2 args)
     function getDetails(uint ballotId, address voter) external view returns
             ( bool hasVoted
             , uint nVotesCast
@@ -77,7 +104,8 @@ contract BBFarm is permissioned, payoutAllC {
             , uint64 endTime
             , bytes32 specHash
             , bool deprecated
-            , address ballotOwner) {
+            , address ballotOwner
+            , bytes24 extraData) {
         BBLib.DB storage db = dbs[ballotId];
         uint packed = db.packed;
         return (
@@ -89,12 +117,9 @@ contract BBFarm is permissioned, payoutAllC {
             BPackedUtils.packedToEndTime(packed),
             db.specHash,
             db.deprecated,
-            db.ballotOwner
+            db.ballotOwner,
+            db.extraData
         );
-    }
-
-    function getVersion() external pure returns (uint256) {
-        return BBLib.getVersion();
     }
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra) {
@@ -127,8 +152,8 @@ contract BBFarm is permissioned, payoutAllC {
         db.revealSeckey(sk);
     }
 
+    // note: testing only.
     function setEndTime(uint ballotId, uint64 newEndTime) external {
-        // only_owner() onlyTesting()
         BBLib.DB storage db = dbs[ballotId];
         db.requireBallotOwner();
         db.requireTesting();
@@ -145,44 +170,5 @@ contract BBFarm is permissioned, payoutAllC {
         BBLib.DB storage db = dbs[ballotId];
         db.requireBallotOwner();
         db.ballotOwner = newOwner;
-    }
-
-    /* util functions - technically don't need to be in this contract (could
-     * be run externally) - but easier to put here for the moment */
-
-    function getVotes(uint ballotId) external view
-        returns ( bytes32[] memory ballots
-                , bytes[] memory extras
-                , address[] memory senders) {
-
-        address sender;
-        bytes32 voteData;
-        bytes memory extra;
-        BBLib.DB storage db = dbs[ballotId];
-        for (uint i = 0; i < db.nVotesCast; i++) {
-            (voteData, sender, extra) = db.getVote(i);
-            ballots = MemArrApp.appendBytes32(ballots, voteData);
-            extras = MemArrApp.appendBytes(extras, extra);
-            senders = MemArrApp.appendAddress(senders, sender);
-        }
-    }
-
-    function getVotesFrom(uint ballotId, address voter) external view
-        returns ( uint256[] memory ids
-                , bytes32[] memory ballots
-                , bytes[] memory extras) {
-
-        address sender;
-        bytes32 voteData;
-        bytes memory extra;
-        BBLib.DB storage db = dbs[ballotId];
-        for (uint i = 0; i < db.nVotesCast; i++) {
-            (voteData, sender, extra) = db.getVote(i);
-            if (sender == voter) {
-                ids = MemArrApp.appendUint256(ids, i);
-                ballots = MemArrApp.appendBytes32(ballots, voteData);
-                extras = MemArrApp.appendBytes(extras, extra);
-            }
-        }
     }
 }

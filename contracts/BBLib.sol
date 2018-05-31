@@ -17,7 +17,7 @@ import { BytesLib } from "../libs/BytesLib.sol";
 
 library BBLib {
     // ballot meta
-    uint256 constant BB_VERSION = 3;
+    uint256 constant BB_VERSION = 4;
 
     // voting settings
     uint16 constant USE_ETH = 1;          // 2^0
@@ -78,7 +78,7 @@ library BBLib {
         // specHash by which to validate the ballots integrity
         bytes32 specHash;
         // extradata if we need it - allows us to upgrade spechash format, etc
-        bytes32 extraData;
+        bytes24 extraData;
 
         // allow tracking of sponsorship for this ballot & connection to index
         Sponsor[] sponsors;
@@ -98,7 +98,7 @@ library BBLib {
         require(now > BPackedUtils.packedToEndTime(db.packed), "!b-closed");
     }
 
-    function requireBallotOpen(DB storage db) external view {
+    function requireBallotOpen(DB storage db) internal view {
         uint64 _n = uint64(now);
         uint64 startTs;
         uint64 endTs;
@@ -107,19 +107,28 @@ library BBLib {
         require(db.deprecated == false, "b-deprecated");
     }
 
-    function requireBallotOwner(DB storage db) external view {
+    function requireBallotOwner(DB storage db) internal view {
         require(msg.sender == db.ballotOwner, "!b-owner");
     }
 
-    function requireTesting(DB storage db) external view {
+    function requireTesting(DB storage db) internal view {
         require(isTesting(BPackedUtils.packedToSubmissionBits(db.packed)), "!testing");
+    }
+
+    /* Library meta */
+
+    function getVersion() external view returns (uint) {
+        // even though this is constant we want to make sure that it's actually
+        // callable on Ethereum so we don't accidentally package the constant code
+        // in with an SC using BBLib. This function _must_ be external.
+        return BB_VERSION;
     }
 
     /* Functions */
 
     // "Constructor" function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner, bytes32 extraData) external {
+    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner, bytes24 extraData) external {
         db.index = ix;
         db.ballotOwner = ballotOwner;
 
@@ -153,7 +162,7 @@ library BBLib {
         db.packed = BPackedUtils.pack(sb, startTs, endTs);
         db.creationTs = now;
 
-        if (extraData != bytes32(0)) {
+        if (extraData != bytes24(0)) {
             db.extraData = extraData;
         }
 
@@ -170,12 +179,6 @@ library BBLib {
         db.sponsors.push(Sponsor(msg.sender, value));
     }
 
-    // // getters and constants
-
-    function getVersion() internal pure returns (uint256) {
-        return BB_VERSION;
-    }
-
     // function hasVotedEth(DB storage db, address v) external view returns (bool) {
     //     return db.voterLog[v].length > 0;
     // }
@@ -183,22 +186,6 @@ library BBLib {
     function getVote(DB storage db, uint id) internal view returns (bytes32 voteData, address sender, bytes extra) {
         return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].extra);
     }
-
-    // function getStartTime(DB storage db) internal view returns (uint64) {
-    //     return BPackedUtils.packedToStartTime(db.packed);
-    // }
-
-    // function getEndTime(DB storage db) internal view returns (uint64) {
-    //     return BPackedUtils.packedToEndTime(db.packed);
-    // }
-
-    // function getSubmissionBits(DB storage db) internal view returns (uint16) {
-    //     return BPackedUtils.packedToSubmissionBits(db.packed);
-    // }
-
-    // function getSpecHash(DB storage db) internal view returns (bytes32) {
-    //     return db.specHash;
-    // }
 
     function getTotalSponsorship(DB storage db) internal view returns (uint total) {
         for (uint i = 0; i < db.sponsors.length; i++) {
@@ -249,6 +236,8 @@ library BBLib {
     }
 
     function _addVote(DB storage db, bytes32 voteData, address sender, bytes extra) internal returns (uint256 id) {
+        requireBallotOpen(db);
+
         id = db.nVotesCast;
         db.votes[id].voteData = voteData;
         db.votes[id].sender = sender;
