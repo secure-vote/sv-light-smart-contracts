@@ -73,7 +73,7 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
     // this lets us (for example) set particular keys to signal cerain
     // things to client apps s.t. the admin can turn them on and off.
     // arbitraryData[democHash][key]
-    mapping (bytes32 => mapping (uint256 => uint256)) arbitraryData;
+    mapping (bytes32 => mapping (bytes => bytes)) arbitraryData;
 
     //* GLOBAL INFO */
 

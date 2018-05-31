@@ -113,7 +113,7 @@ library IxLib {
         return ix.getBackend().getDCategory(democHash, categoryId);
     }
 
-    function getDArbitraryData(IxIface ix, bytes32 democHash, uint256 key) external view returns (uint256) {
+    function getDArbitraryData(IxIface ix, bytes32 democHash, bytes key) external view returns (bytes) {
         return ix.getBackend().getDArbitraryData(democHash, key);
     }
 }

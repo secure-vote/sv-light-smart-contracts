@@ -154,6 +154,8 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
     var [startTime, endTime] = await genStartEndTimes();
     var shortEndTime = 0;
 
+    assert.deepEqual(await vc.farm.getNBallots(), toBigNumber(0), 'farm has 0 ballots to start with')
+
     const vc = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr, {from: accounts[3]});
     const bCreation = await getBlock('latest')
 
@@ -198,6 +200,8 @@ async function testInstantiation({accounts, BB, bbaux, log}) {
 
     assert.equal(await aux.hasVoted(accounts[0]), true, "hasVoted method should work.");
     await log("hasVoted via aux works")
+
+    assert.deepEqual(await vc.farm.getNBallots(), toBigNumber(1), 'farm has 1 ballot')
 
     const nVotes = accounts.length;
     // console.log(`about to test ${nVotes} votes in parallel via testABallot`)
@@ -481,37 +485,9 @@ const testEndTimeFuture = async ({BB, accounts}) => {
 }
 
 
-/* BBFarm won by a long shot - like 1.1m gas minimum down to 300k-400k minimum */
-
-// const initGasComparison = async ({accounts}) => {
-//     const u = accounts[0];
-//     const farm = await BBFarm.new();
-//     await farm.setPermissions(u, true);
-
-//     const b1 = await getBalance(u);
-
-//     await genStdBB(SVBallotBox);
-
-//     const b2 = await getBalance(u);
-
-//     await genStdBB(BBInstance);
-
-//     const b3 = await getBalance(u);
-
-//     await genStdBB({new: async (...args) => await farm.initBallot(...args, u)})
-
-//     const b4 = await getBalance(u);
-
-//     const g1 = b1.minus(b2);
-//     const g2 = b2.minus(b3);
-//     const g3 = b3.minus(b4);
-
-//     console.log(`Gas for SVBallotBox: ${g1.toFixed()}`)
-//     console.log(`Gas for  BBInstance: ${g2.toFixed()}`)
-//     console.log(`Gas for      BBFarm: ${g3.toFixed()}`)
-
-//     assert.equal(g1.gt(g2), true, "gas for SVBallotBox should be greater than for BBInstance (which uses a library)")
-// }
+const testProxyVote = async ({BB, accounts, doLog}) => {
+    throw Error('unimplemented')
+}
 
 
 function sAssertEq(a, b, msg) {
@@ -584,7 +560,8 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
             }
 
             _BB = {
-                new: mkNewBB
+                new: mkNewBB,
+                farm
             }
         }
 
@@ -613,6 +590,7 @@ contract("BallotBox", function(accounts) {
         ["test community status", testCommStatus],
         ["test owner", testOwner],
         ["test end time must be in future", testEndTimeFuture],
+        ["test proxy vote", testProxyVote],
     ]
     R.map(([desc, f]) => {
         // it("Std BB:  " + desc, _wrapTest({accounts, BB: SVBallotBox, bbName: "Std", mkFarm: false}, f))

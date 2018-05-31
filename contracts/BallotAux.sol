@@ -64,44 +64,6 @@ contract BallotAux is BBAuxIface {
     function hasVoted(BallotBoxIface bb, address voter) external view returns (bool hv) {
         ( hv,,,,,,,,) = bb.getDetails(voter);
     }
-
-    // function getBallotOwner(BallotBoxIface bb) external view returns (address ballotOwner) {
-    //     (,,,,,,,, ballotOwner) = bb.getDetails(zeroAddr);
-    // }
-
-    function getVotes(BallotBoxIface bb) external view
-        returns ( bytes32[] memory ballots
-                , bytes32[] memory pks
-                , address[] memory senders) {
-
-        address sender;
-        bytes32 voteData;
-        bytes32 encPK;
-        for (uint i = 0; i < getNVotesCast(bb); i++) {
-            (voteData, sender, encPK) = bb.getVote(i);
-            ballots = MemArrApp.appendBytes32(ballots, voteData);
-            pks = MemArrApp.appendBytes32(pks, encPK);
-            senders = MemArrApp.appendAddress(senders, sender);
-        }
-    }
-
-    function getVotesFrom(BallotBoxIface bb, address voter) external view
-        returns ( uint256[] memory ids
-                , bytes32[] memory ballots
-                , bytes32[] memory pks) {
-
-        address sender;
-        bytes32 voteData;
-        bytes32 encPK;
-        for (uint i = 0; i < getNVotesCast(bb); i++) {
-            (voteData, sender, encPK) = bb.getVote(i);
-            if (sender == voter) {
-                ids = MemArrApp.appendUint256(ids, i);
-                ballots = MemArrApp.appendBytes32(ballots, voteData);
-                pks = MemArrApp.appendBytes32(pks, encPK);
-            }
-        }
-    }
 }
 
 
@@ -112,10 +74,6 @@ contract BBFarmProxy {
     constructor(BBFarmIface _farm, uint _ballotId) public {
         farm = _farm;
         ballotId = _ballotId;
-    }
-
-    function getVote(uint voteId) external view returns (bytes32, address, bytes) {
-        return farm.getVote(ballotId, voteId);
     }
 
     function getDetails(address voter) external view returns
