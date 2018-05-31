@@ -1,1 +1,0 @@
-[{"constant":true,"inputs":[{"name":"v","type":"bytes32"}],"name":"bytesToUInt","outputs":[{"name":"ret","type":"uint256"}],"payable":false,"stateMutability":"pure","type":"function"},{"constant":true,"inputs":[{"name":"v","type":"uint256"}],"name":"uintToBytes","outputs":[{"name":"ret","type":"bytes32"}],"payable":false,"stateMutability":"pure","type":"function"}]
