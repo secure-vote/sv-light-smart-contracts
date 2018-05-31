@@ -437,7 +437,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             _deployBallotChecks(democHash, endTime);
         }
 
-        // note: bbFarms are allocated a 40bit namespace for ballot ids (~10^12)
+        // note: bbFarms are allocated a 48bit namespace for ballot ids (~10^12)
         // this should be enough to avoid eventual collisions.
         ballotId = _bbFarm.initBallot(
             specHash,

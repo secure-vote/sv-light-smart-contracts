@@ -46,7 +46,7 @@ library IxLib {
     /* Global Ix data */
 
     function getBBFarmFromBallotID(IxIface ix, uint256 ballotId) internal view returns (address) {
-        bytes4 bbNamespace = bytes4(ballotId >> 40);
+        bytes4 bbNamespace = bytes4(ballotId >> 48);
         uint8 bbFarmId = ix.getBBFarmID(bbNamespace);
         return address(ix.getBBFarm(bbFarmId));
     }
