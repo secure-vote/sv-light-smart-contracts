@@ -102,7 +102,7 @@ async function testInstantiation({accounts, BB, bbaux, log, farm}) {
     assert.equal((await aux.getNVotesCast()).toNumber(), 0, "Should have no votes at start");
 
     assert.equal(await vc.farm.getNamespace(), "0x00000001", 'namespace should be bytes4(1) - for this BBFarm at least')
-    assert.deepEqual(await vc.farm.getCreationTs(vc.ballotId), toBigNumber(bCreation.timestamp), "creationTs should match expected");
+    assert.reallyClose(await vc.farm.getCreationTs(vc.ballotId), toBigNumber(bCreation.timestamp), "creationTs should match expected");
 
     //// ASSERTIONS FOR INSTANTIATION COMPLETE
 
@@ -451,13 +451,15 @@ const testEndTimeFuture = async ({BB, accounts}) => {
 
 
 const testProxyVote = async ({BB, accounts, doLog, farm}) => {
+    const [u0, u1, u2, u3] = accounts;
+
     const privKey = genRandomBytes32()
     const {address} = Account.fromPrivate(privKey)
 
-    const bb = new BB(genRandomBytes32(), zeroHash, await genStdPacked())
+    const bb = await BB.new(genRandomBytes32(), await genStdPacked(), u0)
 
-    const ballotId = bb.ballotId
-    const sequence = 1
+    const ballotId = w3.utils.toBN(bb.ballotId)
+    const sequence = 4919  // 0x1337
     const vote = genRandomBytes(32)
     const extra = '0x'
 
@@ -465,9 +467,22 @@ const testProxyVote = async ({BB, accounts, doLog, farm}) => {
 
     await doLog(`Generated proxyReq: ${toJson(proxyReq)}`)
 
-    await farm.submitProxyVote(proxyReq, extra)
+    const b1 = await getBalance(u1)
+    await farm.submitProxyVote(proxyReq, extra, {from: u1, gasPrice: 1})
+    const b2 = await getBalance(u1)
+    console.log(`Cost of casting a vote by proxy: ${b1.minus(b2).toFixed()} gas`)
 
-    assert.deepEqual(await bb.getVote(0), [vote, address, extra], 'ballot submitted via proxy should match expected')
+    assert.deepEqual(await bb.getVote(0), [vote, address.toLowerCase(), extra], 'ballot submitted via proxy should match expected')
+
+    const b3 = await getBalance(u3)
+    await bb.submitVote(vote, extra, {from: u3, gasPrice: 1})
+    const b4 = await getBalance(u3)
+    console.log(`Cost of casting a vote directly: ${b3.minus(b4).toFixed()} gas`)
+
+    const b5 = await getBalance(u2)
+    await bb.submitVote(vote, w3.utils.padRight("0x", 128, 'f'), {from: u2, gasPrice: 1})
+    const b6 = await getBalance(u2)
+    console.log(`Cost of casting a vote directly w 64 bytes of extra: ${b5.minus(b6).toFixed()} gas`)
 }
 
 
@@ -486,9 +501,8 @@ function sAssertEq(a, b, msg) {
 }
 
 
-const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
+const _wrapTest = ({accounts, bbName, mkFarm}, f) => {
     return async () => {
-        let _BB = BB;
         const Emitter = await EmitterTesting.new();
         const log = m => Emitter.log(m);
         const doLog = log;
@@ -497,12 +511,10 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
 
         await farm.setPermissions(accounts[0], true)
 
-        const mkNewBB = async (...args) => {
-            assert.equal(args.length == 3 || args.length == 4, true, "args should be of length 3 or 4 when initing ballot")
-            const lastArg = R.last(args);
+        const mkNewBB = async function(specHash, packed, index, lastArg) {
             const from = (lastArg && lastArg.from) ? lastArg.from : accounts[0];
             const txOpts = isTxOpts(lastArg) ? {...lastArg, from: accounts[0]} : {}
-            const _initBBEvent = await farm.initBallot(...args.slice(0,3), from, zeroHash, txOpts)
+            const _initBBEvent = await farm.initBallot(specHash, packed, index, from, zeroHash, txOpts)
             const {args: {ballotId}} = getEventFromTxR("BallotCreatedWithID", _initBBEvent)
 
             await doLog(`wrapper: Created ballot with ID: ${ballotId.toFixed()}`);
@@ -554,12 +566,12 @@ const _wrapTest = ({accounts, BB, bbName, mkFarm}, f) => {
             return px;
         }
 
-        _BB = {
+        BB = {
             new: mkNewBB,
             farm
         }
 
-        return await f({accounts, BB: _BB, log, doLog, bbaux, bbName, farm});
+        return await f({accounts, BB, log, doLog, bbaux, bbName, farm});
     };
 }
 

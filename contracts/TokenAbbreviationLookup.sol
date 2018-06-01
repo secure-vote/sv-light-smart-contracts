@@ -10,7 +10,6 @@ import "../libs/MemArrApp.sol";
  */
 contract TokenAbbreviationLookup is hasAdmins {
 
-    event Log(uint editTs, uint providedTs);
     event RecordAdded(bytes32 abbreviation, bytes32 democHash, bool hidden);
 
     struct Record {

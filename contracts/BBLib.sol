@@ -40,7 +40,7 @@ library BBLib {
     // struct for ballot
     struct Vote {
         bytes32 voteData;
-        address sender;
+        bytes32 castTsAndSender;
         bytes extra;
     }
 
@@ -70,8 +70,6 @@ library BBLib {
         // note: votes directly from a user ALWAYS take priority b/c they do not have sequence numbers
         // (sequencing is done by Ethereum itself via the tx nonce).
         mapping (address => uint32) sequenceNumber;
-
-        mapping (address => uint256[]) voterLog;
 
         // NOTE - We don't actually want to include the encryption PublicKey because _it's included in the ballotSpec_.
         // It's better to ensure ppl actually have the ballot spec by not including it in the contract.
@@ -180,22 +178,16 @@ library BBLib {
         emit CreatedBallot(db.specHash, startTs, endTs, sb);
     }
 
-    // // fallback function for sponsorship
-    // function() external payable {
-    //     totalSponsorship += msg.value;
-    //     index.getPayTo().transfer(msg.value);
-    // }
+    /* sponsorship */
 
     function logSponsorship(DB storage db, uint value) internal {
         db.sponsors.push(Sponsor(msg.sender, value));
     }
 
-    // function hasVotedEth(DB storage db, address v) external view returns (bool) {
-    //     return db.voterLog[v].length > 0;
-    // }
+    /* getters */
 
-    function getVote(DB storage db, uint id) internal view returns (bytes32 voteData, address sender, bytes extra) {
-        return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].extra);
+    function getVote(DB storage db, uint id) internal view returns (bytes32 voteData, address sender, bytes extra, uint castTs) {
+        return (db.votes[id].voteData, address(db.votes[id].castTsAndSender), db.votes[id].extra, uint(db.votes[id].castTsAndSender) >> 160);
     }
 
     function getSequenceNumber(DB storage db, address voter) internal view returns (uint32) {
@@ -264,12 +256,12 @@ library BBLib {
 
         id = db.nVotesCast;
         db.votes[id].voteData = voteData;
-        db.votes[id].sender = sender;
+        // pack the casting ts right next to the sender
+        db.votes[id].castTsAndSender = bytes32(sender) ^ bytes32(now << 160);
         if (extra.length > 0) {
             db.votes[id].extra = extra;
         }
         db.nVotesCast += 1;
-        db.voterLog[sender].push(id);
         emit SuccessfulVote(sender, id);
     }
 
@@ -300,20 +292,6 @@ library BBLib {
     // do (bits & SETTINGS_MASK) to get just operational bits (as opposed to testing or official flag)
     uint16 constant SETTINGS_MASK = 0xFFFF ^ USE_TESTING ^ IS_OFFICIAL ^ IS_BINDING;
 
-    // function unsafeIsEth(uint16 submissionBits) pure internal returns (bool) {
-    //     // this is unsafe becuase it's not a valid configuration
-    //     return USE_ETH & submissionBits != 0;
-    // }
-
-    // function unsafeIsSigned(uint16 submissionBits) pure internal returns (bool) {
-    //     // unsafe bc it's not a valid configuration
-    //     return USE_SIGNED & submissionBits != 0;
-    // }
-
-    // function unsafeIsEncrypted() view internal returns (bool) {
-    //     return USE_ENC & submissionBits != 0;
-    // }
-
     function isEthNoEnc(uint16 submissionBits) pure internal returns (bool) {
         return checkFlags(submissionBits, USE_ETH | USE_NO_ENC);
     }
@@ -321,14 +299,6 @@ library BBLib {
     function isEthWithEnc(uint16 submissionBits) pure internal returns (bool) {
         return checkFlags(submissionBits, USE_ETH | USE_ENC);
     }
-
-    // function isSignedNoEnc(uint16 submissionBits) pure internal returns (bool) {
-    //     return checkFlags(submissionBits, USE_SIGNED | USE_NO_ENC);
-    // }
-
-    // function isSignedWithEnc(uint16 submissionBits) pure internal returns (bool) {
-    //     return checkFlags(submissionBits, USE_SIGNED | USE_ENC);
-    // }
 
     function isOfficial(uint16 submissionBits) pure internal returns (bool) {
         return (submissionBits & IS_OFFICIAL) == IS_OFFICIAL;
