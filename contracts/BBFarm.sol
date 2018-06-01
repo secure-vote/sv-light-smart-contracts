@@ -121,7 +121,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
             , bytes32 specHash
             , bool deprecated
             , address ballotOwner
-            , bytes24 extraData) {
+            , bytes16 extraData) {
         BBLib.DB storage db = getDb(ballotId);
         uint packed = db.packed;
         return (
