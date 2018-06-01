@@ -29,7 +29,7 @@ interface BBFarmIface {
                        , IxIface ix
                        , address bbAdmin
                        , bytes24 extraData
-                ) external returns (uint ballotId);
+                       ) external returns (uint ballotId);
 
     /* Sponsorship of ballots */
 

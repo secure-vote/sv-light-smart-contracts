@@ -35,7 +35,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
 
     modifier req_namespace(uint ballotId) {
         // bytes4() will take the _first_ 4 bytes
-        require(bytes4(ballotId) == NAMESPACE, "bad-namespace");
+        require(bytes4(ballotId >> 224) == NAMESPACE, "bad-namespace");
         _;
     }
 
@@ -79,7 +79,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
                        , bytes24 extraData
                 ) only_editors() external returns (uint ballotId) {
         // calculate the ballotId based on the last 224 bits of the specHash.
-        ballotId = uint224(specHash) ^ (uint256(bytes32(NAMESPACE)));
+        ballotId = uint224(specHash) ^ (uint256(NAMESPACE) << 224);
         // we need to call the init functions on our libraries
         getDb(ballotId).init(specHash, packed, ix, bbAdmin, bytes16(uint128(extraData)));
         nBallots += 1;
