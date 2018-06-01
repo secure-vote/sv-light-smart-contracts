@@ -29,7 +29,7 @@ interface BBFarmIface {
                        , IxIface ix
                        , address bbAdmin
                        , bytes24 extraData
-                ) external returns (uint ballotIdWNamespace);
+                ) external returns (uint ballotId);
 
     /* Sponsorship of ballots */
 
@@ -52,7 +52,7 @@ interface BBFarmIface {
             , bytes32 specHash
             , bool deprecated
             , address ballotOwner
-            , bytes24 extraData);
+            , bytes16 extraData);
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra);
     function getTotalSponsorship(uint ballotId) external view returns (uint);
