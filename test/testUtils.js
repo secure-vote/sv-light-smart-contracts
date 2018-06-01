@@ -43,9 +43,8 @@ module.exports = function () {
         return JSON.stringify(obj, null, 2);
     }
 
-    this.genRandomBytes32 = () => {
-        return "0x" + crypto.randomBytes(32).toString("hex");
-    };
+    this.genRandomBytes32 = () => w3.utils.randomHex(32)
+    this.genRandomBytes = n => w3.utils.randomHex(n)
 
     this.genStartEndTimes = async () => {
         const {timestamp} = await this.getBlock('latest')
