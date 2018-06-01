@@ -15,6 +15,7 @@
     "coveralls": "^3.0.1",
     "enquirer": "^1.0.3",
     "eth-ens-namehash": "^2.0.8",
+    "eth-lib": "^0.2.8",
     "ethereumjs-testrpc": "^6.0.3",
     "ethereumjs-util": "^5.1.5",
     "ganache-cli": "^6.1.0",

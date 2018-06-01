@@ -1,5 +1,3 @@
-// var SVBallotBox = artifacts.require("./SVLightBallotBox");
-// var BBInstance = artifacts.require("./BBInstance")
 var EmitterTesting = artifacts.require("./EmitterTesting");
 var SvIndex = artifacts.require("./SVLightIndex");
 var SvPayments = artifacts.require("./SVPayments");
@@ -11,8 +9,10 @@ var TestHelper = artifacts.require("./TestHelper")
 
 require("./testUtils")();
 
-var naclJs = require("js-nacl");
-var crypto = require("crypto");
+const naclJs = require("js-nacl")
+const crypto = require("crypto")
+const svLib = require("sv-lib")
+const Account = require("eth-lib/lib/account")
 
 const R = require('ramda')
 
@@ -445,13 +445,29 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
 
 const testEndTimeFuture = async ({BB, accounts}) => {
     const [s, e] = await genStartEndTimes();
-    const packed = mkPacked(s, s - 10, USE_ETH | USE_NO_ENC | IS_OFFICIAL | IS_BINDING);
+    const packed = mkPacked(s, s - 10, USE_ETH | USE_NO_ENC);
     await assertRevert(BB.new(genRandomBytes32(), packed, accounts[0]), 'should throw on end time in past')
 }
 
 
-const testProxyVote = async ({BB, accounts, doLog}) => {
-    throw Error('unimplemented')
+const testProxyVote = async ({BB, accounts, doLog, farm}) => {
+    const privKey = genRandomBytes32()
+    const {address} = Account.fromPrivate(privKey)
+
+    const bb = new BB(genRandomBytes32(), zeroHash, await genStdPacked())
+
+    const ballotId = bb.ballotId
+    const sequence = 1
+    const vote = genRandomBytes(32)
+    const extra = '0x'
+
+    const {proxyReq} = svLib.ballotBox.mkSignedBallotForProxy(ballotId, sequence, vote, extra, privKey)
+
+    await doLog(`Generated proxyReq: ${toJson(proxyReq)}`)
+
+    await farm.submitProxyVote(proxyReq, extra)
+
+    assert.deepEqual(await bb.getVote(0), [vote, address, extra], 'ballot submitted via proxy should match expected')
 }
 
 
