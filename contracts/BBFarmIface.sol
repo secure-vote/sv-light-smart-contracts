@@ -38,7 +38,7 @@ interface BBFarmIface {
     /* Voting functions */
 
     function submitVote(uint ballotId, bytes32 vote, bytes extra) external;
-    function submitProxyVote(uint ballotId, bytes32 voteData, bytes extraWSig) external;
+    function submitProxyVote(bytes32[5] proxyReq, bytes extra) external;
 
     /* Ballot Getters */
 

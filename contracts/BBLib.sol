@@ -16,8 +16,10 @@ import { BPackedUtils } from "./BPackedUtils.sol";
 import { BytesLib } from "../libs/BytesLib.sol";
 
 library BBLib {
+    using BytesLib for bytes;
+
     // ballot meta
-    uint256 constant BB_VERSION = 4;
+    uint256 constant BB_VERSION = 5;
 
     // voting settings
     uint16 constant USE_ETH = 1;          // 2^0
@@ -29,6 +31,9 @@ library BBLib {
     uint16 constant IS_BINDING = 8192;    // 2^13
     uint16 constant IS_OFFICIAL = 16384;  // 2^14
     uint16 constant USE_TESTING = 32768;  // 2^15
+
+    // other consts
+    uint32 constant MAX_UINT32 = 0xFFFFFFFF;
 
     //// ** Storage Variables
 
@@ -61,6 +66,11 @@ library BBLib {
         mapping (uint256 => Vote) votes;
         uint256 nVotesCast;
 
+        // we need replay protection for proxy ballots - this will let us check against a sequence number
+        // note: votes directly from a user ALWAYS take priority b/c they do not have sequence numbers
+        // (sequencing is done by Ethereum itself via the tx nonce).
+        mapping (address => uint32) sequenceNumber;
+
         mapping (address => uint256[]) voterLog;
 
         // NOTE - We don't actually want to include the encryption PublicKey because _it's included in the ballotSpec_.
@@ -78,7 +88,7 @@ library BBLib {
         // specHash by which to validate the ballots integrity
         bytes32 specHash;
         // extradata if we need it - allows us to upgrade spechash format, etc
-        bytes24 extraData;
+        bytes16 extraData;
 
         // allow tracking of sponsorship for this ballot & connection to index
         Sponsor[] sponsors;
@@ -92,8 +102,7 @@ library BBLib {
     }
 
 
-    // ** Modifiers -- note, these are functions here but allow us to use
-    // smaller modifiers in BBInstance
+    // ** Modifiers -- note, these are functions here to allow use as a lib
     function requireBallotClosed(DB storage db) internal view {
         require(now > BPackedUtils.packedToEndTime(db.packed), "!b-closed");
     }
@@ -128,7 +137,7 @@ library BBLib {
 
     // "Constructor" function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
-    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner, bytes24 extraData) external {
+    function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner, bytes16 extraData) external {
         db.index = ix;
         db.ballotOwner = ballotOwner;
 
@@ -162,7 +171,7 @@ library BBLib {
         db.packed = BPackedUtils.pack(sb, startTs, endTs);
         db.creationTs = now;
 
-        if (extraData != bytes24(0)) {
+        if (extraData != bytes16(0)) {
             db.extraData = extraData;
         }
 
@@ -187,6 +196,10 @@ library BBLib {
         return (db.votes[id].voteData, db.votes[id].sender, db.votes[id].extra);
     }
 
+    function getSequenceNumber(DB storage db, address voter) internal view returns (uint32) {
+        return db.sequenceNumber[voter];
+    }
+
     function getTotalSponsorship(DB storage db) internal view returns (uint total) {
         for (uint i = 0; i < db.sponsors.length; i++) {
             total += db.sponsors[i].amount;
@@ -206,31 +219,42 @@ library BBLib {
     // the curve25519 PKs go in the extra param
     function submitVote(DB storage db, bytes32 voteData, bytes extra) external {
         _addVote(db, voteData, msg.sender, extra);
+        // set the sequence number to max uint32 to disable proxy submitted ballots
+        // after a voter submits a transaction personally - effectivley disables proxy
+        // ballots. You can _always_ submit a new vote _personally_ with this scheme.
+        if (db.sequenceNumber[msg.sender] != MAX_UINT32) {
+            // using an IF statement here let's us save 4800 gas on repeat votes at the cost of 20k extra gas initially
+            db.sequenceNumber[msg.sender] = MAX_UINT32;
+        }
     }
 
-    function submitProxyVote(DB storage db, bytes32 voteData, bytes extraWSig) external {
-        // in a proxy vote (where the vote is submitted (i.e. tx fee paid by by)
-        // someone else), the first 65 bytes of extraWSig (uint8 v, bytes32 r, bytes32 s)
-        // are used as the parameters for ecrecover to determine the signing ETH
-        // address.
+    // Boundaries for constructing the msg we'll validate the signature of
+    function submitProxyVote(DB storage db, bytes32[5] proxyReq, bytes extra) external {
+        // a proxy vote (where the vote is submitted (i.e. tx fee paid by someone else)
+        // docs for datastructs: https://github.com/secure-vote/tokenvote/blob/master/Docs/DataStructs.md
 
-        // `extra` is all bytes after the first 65 bytes of `extraWSig`
+        bytes32 r = proxyReq[0];
+        bytes32 s = proxyReq[1];
+        uint8 v = uint8(proxyReq[2][0]);
+        // converting to uint248 will truncate the first byte, and we can then convert it to a bytes31.
+        // in general (I think) uintN() conversion pads (or removes) the most significant bits,
+        // and bytesN() pads or truncates the from the end
+        bytes31 proxyReq2 = bytes31(uint248(proxyReq[2]));
+        // proxyReq[3] is ballotId - required for verifying sig but not used for anything else
+        bytes32 ballotId = proxyReq[3];
+        bytes32 voteData = proxyReq[4];
 
-        uint eLen = extraWSig.length;
-        // this ensures we have at least enough data for ecrecover; required in all cases
-        require(eLen >= 65, "extra-len");
+        // using abi.encodePacked is much cheaper than making bytes in other ways...
+        bytes memory signed = abi.encodePacked(proxyReq2, ballotId, voteData, extra);
+        bytes32 msgHash = keccak256(signed);
+        // need to be sure we are signing the entire ballot and any extra data that comes with it
+        address voter = ecrecover(msgHash, v, r, s);
 
-        uint8 v = uint8(extraWSig[0]);    // drop all but last byte
-        uint256 r = BytesLib.toUint(extraWSig, 1);  // take a uint starting at byte 1
-        uint256 s = BytesLib.toUint(extraWSig, 33); // take a uint starting at byte 33
-
-        address voter = ecrecover(keccak256(abi.encodePacked(voteData)), v, bytes32(r), bytes32(s));
-
-        // copy over excess data from extraWSig to extra
-        bytes memory extra = new bytes(eLen - 65);
-        for (uint i = 0; i < extra.length; i++) {
-            extra[i] = extraWSig[i + 65];
-        }
+        // we need to make sure that this is the most recent vote the voter made, and that it has
+        // not been seen before. NOTE: we've already validated the BBFarm namespace before this, so
+        // we know it's meant for _this_ ballot.
+        uint32 sequence = uint32(proxyReq2);  // last 4 bytes of proxyReq2 - the sequence number
+        _proxyReplayProtection(db, voter, sequence);
 
         _addVote(db, voteData, voter, extra);
     }
@@ -247,6 +271,14 @@ library BBLib {
         db.nVotesCast += 1;
         db.voterLog[sender].push(id);
         emit SuccessfulVote(sender, id);
+    }
+
+    function _proxyReplayProtection(DB storage db, address voter, uint32 sequence) internal {
+        // we want the replay protection sequence number to be STRICTLY MORE than what
+        // is stored in the mapping. This means we can set sequence to MAX_UINT32 to disable
+        // any future votes.
+        require(db.sequenceNumber[voter] < sequence, "bad-sequence-n");
+        db.sequenceNumber[voter] = sequence;
     }
 
     /* Admin */
