@@ -167,6 +167,7 @@ library BBLib {
             startTs = startTs > now ? startTs : uint64(now);
         }
         require(db.specHash == bytes32(0), "b-exists");
+        require(_specHash != bytes32(0), "null-specHash");
         db.specHash = _specHash;
 
         db.packed = BPackedUtils.pack(sb, startTs, endTs);
