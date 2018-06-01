@@ -436,8 +436,6 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             _deployBallotChecks(democHash, endTime);
         }
 
-        // note: bbFarms are allocated a 48bit namespace for ballot ids (~10^12)
-        // this should be enough to avoid eventual collisions.
         ballotId = _bbFarm.initBallot(
             specHash,
             packed,
@@ -445,8 +443,9 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             msg.sender,
             // we are certain that the first 8 bytes are for index use only.
             // truncating extraData like this means we can occasionally
-            // save on gas.
-            bytes24(extraData));
+            // save on gas. we need to use uint192 first because that will take
+            // the _last_ 24 bytes of extraData.
+            bytes24(uint192(extraData)));
 
         _addBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
     }

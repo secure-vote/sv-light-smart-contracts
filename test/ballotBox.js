@@ -486,6 +486,9 @@ const testEndTimeFuture = async ({BB, accounts}) => {
 
 
 const testProxyVote = async ({BB, accounts, doLog}) => {
+
+
+
     throw Error('unimplemented')
 }
 

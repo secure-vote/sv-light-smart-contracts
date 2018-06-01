@@ -20,23 +20,30 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
     // namespaces should be unique for each bbFarm
     bytes4 constant NAMESPACE = 0x00000001;
     // last 48 bits
-    uint256 constant BALLOT_ID_MASK = 0x0000000000000000000000000000000000000000000000000000FFFFFFFFFFFF;
+    uint256 constant BALLOT_ID_MASK = 0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
     uint constant VERSION = 2;
 
-    mapping (uint48 => BBLib.DB) dbs;
+    mapping (uint224 => BBLib.DB) dbs;
     // note - start at 100 to avoid any test for if 0 is a valid ballotId
     // also gives us some space to play with low numbers if we want.
-    uint constant INITIAL_BALLOT_ID_OFFSET = 100;
-    uint nBallots = INITIAL_BALLOT_ID_OFFSET;
+    uint nBallots = 0;
 
     event BallotCreatedWithID(uint ballotId);
+
+    /* modifiers */
+
+    modifier req_namespace(uint ballotId) {
+        // bytes4() will take the _first_ 4 bytes
+        require(bytes4(ballotId) == NAMESPACE, "bad-namespace");
+        _;
+    }
 
     /* Constructor */
 
     constructor() public {
-        // this bbFarm requires v4 of BBLib
-        assert(BBLib.getVersion() == 4);
+        // this bbFarm requires v5 of BBLib (note: v4 deprecated immediately due to insecure submitProxyVote)
+        assert(BBLib.getVersion() == 5);
         // note: not sure if it's that important to have the above - does stop the operator accidentally deploying against the wrong BBLib tho
     }
 
@@ -53,14 +60,14 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
     }
 
     function getNBallots() external view returns (uint256) {
-        return nBallots - INITIAL_BALLOT_ID_OFFSET;
+        return nBallots;
     }
 
     /* db lookup helper */
 
     function getDb(uint ballotId) internal view returns (BBLib.DB storage) {
-        // cut off anything above 48 bits (where the namespace goes)
-        return dbs[uint48(ballotId)];
+        // cut off anything above 224 bits (where the namespace goes)
+        return dbs[uint224(ballotId)];
     }
 
     /* Init ballot */
@@ -70,14 +77,14 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
                        , IxIface ix
                        , address bbAdmin
                        , bytes24 extraData
-                ) only_editors() external returns (uint ballotIdWNamespace) {
+                ) only_editors() external returns (uint ballotId) {
+        // calculate the ballotId based on the last 224 bits of the specHash.
+        ballotId = uint224(specHash) ^ (uint256(bytes32(NAMESPACE)));
         // we need to call the init functions on our libraries
-        uint ballotId = nBallots;
-        getDb(ballotId).init(specHash, packed, ix, bbAdmin, extraData);
-        nBallots = ballotId + 1;
+        getDb(ballotId).init(specHash, packed, ix, bbAdmin, bytes16(uint128(extraData)));
+        nBallots += 1;
 
-        ballotIdWNamespace = uint256(NAMESPACE) << 48 ^ ballotId;
-        emit BallotCreatedWithID(ballotIdWNamespace);
+        emit BallotCreatedWithID(ballotId);
     }
 
     /* Sponsorship */
@@ -90,12 +97,14 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
 
     /* Voting */
 
-    function submitVote(uint ballotId, bytes32 vote, bytes extra) external {
+    function submitVote(uint ballotId, bytes32 vote, bytes extra) req_namespace(ballotId) external {
         getDb(ballotId).submitVote(vote, extra);
     }
 
-    function submitProxyVote(uint ballotId, bytes32 vote, bytes extraWSig) external {
-        getDb(ballotId).submitProxyVote(vote, extraWSig);
+    function submitProxyVote(bytes32[5] proxyReq, bytes extra) req_namespace(uint256(proxyReq[3])) external {
+        // see https://github.com/secure-vote/tokenvote/blob/master/Docs/DataStructs.md for breakdown of params
+        uint ballotId = uint256(proxyReq[3]);
+        getDb(ballotId).submitProxyVote(proxyReq, extra);
     }
 
     /* Getters */
@@ -131,6 +140,10 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra) {
         return getDb(ballotId).getVote(voteId);
+    }
+
+    function getSequenceNumber(uint ballotId, address voter) external view returns (uint32 sequence) {
+        return getDb(ballotId).getSequenceNumber(voter);
     }
 
     function getTotalSponsorship(uint ballotId) external view returns (uint) {
