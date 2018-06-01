@@ -125,7 +125,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
         BBLib.DB storage db = getDb(ballotId);
         uint packed = db.packed;
         return (
-            db.voterLog[voter].length > 0,
+            db.getSequenceNumber(voter) > 0,
             db.nVotesCast,
             db.ballotEncryptionSeckey,
             BPackedUtils.packedToSubmissionBits(packed),
@@ -139,7 +139,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
     }
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra) {
-        return getDb(ballotId).getVote(voteId);
+        (voteData, sender, extra, ) = getDb(ballotId).getVote(voteId);
     }
 
     function getSequenceNumber(uint ballotId, address voter) external view returns (uint32 sequence) {
