@@ -166,6 +166,7 @@ library BBLib {
             // (which someone might be able to do if they could set the timestamp in the past)
             startTs = startTs > now ? startTs : uint64(now);
         }
+        require(db.specHash == bytes32(0), "b-exists");
         db.specHash = _specHash;
 
         db.packed = BPackedUtils.pack(sb, startTs, endTs);
@@ -237,8 +238,6 @@ library BBLib {
         bytes32 s = proxyReq[1];
         uint8 v = uint8(proxyReq[2][0]);
         // converting to uint248 will truncate the first byte, and we can then convert it to a bytes31.
-        // in general (I think) uintN() conversion pads (or removes) the most significant bits,
-        // and bytesN() pads or truncates the from the end
         bytes31 proxyReq2 = bytes31(uint248(proxyReq[2]));
         // proxyReq[3] is ballotId - required for verifying sig but not used for anything else
         bytes32 ballotId = proxyReq[3];

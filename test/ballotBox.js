@@ -85,6 +85,9 @@ async function testInstantiation({accounts, BB, bbaux, log, farm}) {
     const bCreation = await getBlock('latest')
     const aux = mkBBPx(vc, bbaux);
 
+    // test ballotId is constructed correctly
+    assert.equal("1" + specHash.slice(10), vc.ballotId.toString(16), 'ballotId is constructed correctly')
+
     assert.deepEqual(await farm.getNBallots(), toBigNumber(1), 'farm has 1 ballot now')
 
     assert.equal(await vc.getOwner(), accounts[3], "Owner must be set on launch.");
@@ -159,7 +162,8 @@ async function testEncryptionBranching({accounts, BB, bbaux}) {
     /* ENCRYPTION */
 
     // best BB with enc
-    const vcEnc = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
+    const _specHash1 = genRandomBytes32();
+    const vcEnc = await BB.new(_specHash1, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
 
     const aux = mkBBPx(vcEnc, bbaux);
 
@@ -183,13 +187,14 @@ async function testEncryptionBranching({accounts, BB, bbaux}) {
     /* NO ENCRYPTION */
 
     // create ballot box with no enc
-    const vcNoEnc = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
+    const _specHash2 = genRandomBytes32();
+    const vcNoEnc = await BB.new(_specHash2, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
     const auxNoEnc = mkBBPx(vcNoEnc, bbaux);
 
     // assert useEnc is false with no enc
     assert.equal(await auxNoEnc.getSubmissionBits(), USE_ETH | USE_NO_ENC | USE_TESTING, "encryption should be disabled");
     // test ballot submissions w no enc
-    const _bData = hexSk;
+    const _bData = genRandomBytes32();
     const _noEnc = await vcNoEnc.submitVote(_bData, "");
     assertNoErr(_noEnc);
     assertOnlyEvent("SuccessfulVote", _noEnc);
@@ -385,8 +390,8 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
     const _pk1 = genRandomBytes32();
     const _pk2 = genRandomBytes32();
 
-    const bbNoEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
-    const bbEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
+    const bbNoEnc = await BB.new(genRandomBytes32(), mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
+    const bbEnc = await BB.new(genRandomBytes32(), mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
 
     // const bb2NoEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
     // const bb2Enc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
