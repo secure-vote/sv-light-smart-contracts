@@ -8,6 +8,12 @@ module.exports = function () {
     //     Injecting LOTS of variables into the global namespace.
     //     You should really read this file if you're reading tests.`)
 
+    this.throwTodoAsync = async (doLog) => {
+        if (doLog && doLog.log)
+            await doLog.log("throwing unimplemented")
+        throw Error("Unimplemented")
+    }
+
     this.toBigNumber = i => {
         // BigNumber as in Web3 0.20.x
         return web3.toBigNumber(i.toFixed ? i.toFixed() : i.toString());

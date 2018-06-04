@@ -986,7 +986,9 @@ const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog, be}) =>
 
 
 const testIxLib = async ({svIx, accounts, owner, erc20, doLog, be, paySC}) => {
-    throw Error('unimpl')
+
+
+
 }
 
 

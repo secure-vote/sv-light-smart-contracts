@@ -19,6 +19,7 @@
     "ethereumjs-testrpc": "^6.0.3",
     "ethereumjs-util": "^5.1.5",
     "ganache-cli": "^6.1.0",
+    "graceful-fs": "^4.1.11",
     "jq": "^1.7.2",
     "js-nacl": "^1.2.2",
     "node-clip": "^0.1.1",

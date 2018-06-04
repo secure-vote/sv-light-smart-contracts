@@ -40,9 +40,13 @@ const testTAL = async ({owner, accounts, doLog, tal}) => {
     const t1 = b.timestamp;
     await increaseTime(5);
 
+    assert.equal(await tal.nEdits(), toBigNumber(0), 'edits 0')
+
     await tal.addRecord("MAX", "0x01", false)
     await tal.addRecord("BRUCE", "0x02", true)
     await tal.addRecord(w3.utils.asciiToHex("3"), "0x03", false)
+
+    assert.equal(await tal.nEdits(), toBigNumber(3), 'edits 3')
 
     await increaseTime(100);
     await tal.setAdmin(u1, true)
@@ -52,6 +56,8 @@ const testTAL = async ({owner, accounts, doLog, tal}) => {
     await tal.addRecord("SUGAR", "0x112233445566778899", false, {from: u1})
     await tal.addRecord("MAX", "0x1337", false, {from: u1})
     assertRevert(tal.addRecord("MYSWEETDEMOC", "0x1234", false, {from: u2}))
+
+    assert.equal(await tal.nEdits(), toBigNumber(5), 'edits 5')
 
     // verify individual
 

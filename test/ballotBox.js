@@ -233,6 +233,11 @@ const testABallot = accounts => async (vc, account, msg = "no message provided")
     assert.equal(_pkRet, vtrPubkey, "pubkey should match");
     assert.equal(_ballotRet, encBallot, "ballots should match");
 
+    const badNamespaceBId = vc.ballotId.plus(toBigNumber(2).pow(230))
+    const badBallotId = vc.ballotId.plus(3)
+    await assertRevert(vc.farm.submitVote(badNamespaceBId, encBallot, vtrPubkey), 'cannot submit vote with bad namespace')
+    await assertRevert(vc.farm.submitVote(badBallotId, encBallot, vtrPubkey), 'cannot submit vote with bad ballotId')
+
     return true;
 };
 
@@ -450,20 +455,24 @@ const testEndTimeFuture = async ({BB, accounts}) => {
 }
 
 
-const testProxyVote = async ({BB, accounts, doLog, farm}) => {
-    const [u0, u1, u2, u3] = accounts;
-
-    const privKey = genRandomBytes32()
+const mkProxyVote = async ({ballotId, sequence = 4919, extra = '0x', privKey = null}) => {
+    privKey = privKey || genRandomBytes32()
     const {address} = Account.fromPrivate(privKey)
 
+    const _ballotId = w3.utils.toBN(ballotId)
+    const vote = genRandomBytes(32)
+
+    const {proxyReq} = svLib.ballotBox.mkSignedBallotForProxy(_ballotId, sequence, vote, extra, privKey, {skipSequenceSizeCheck: true})
+
+    return {proxyReq, extra, vote, sequence, address, privKey}
+}
+
+
+const testProxyVote = async ({BB, accounts, doLog, farm}) => {
+    const [u0, u1, u2, u3] = accounts;
     const bb = await BB.new(genRandomBytes32(), await genStdPacked(), u0)
 
-    const ballotId = w3.utils.toBN(bb.ballotId)
-    const sequence = 4919  // 0x1337
-    const vote = genRandomBytes(32)
-    const extra = '0x'
-
-    const {proxyReq} = svLib.ballotBox.mkSignedBallotForProxy(ballotId, sequence, vote, extra, privKey)
+    const {proxyReq, extra, vote, sequence, address} = await mkProxyVote({ballotId: bb.ballotId})
 
     await doLog(`Generated proxyReq: ${toJson(proxyReq)}`)
 
@@ -487,12 +496,48 @@ const testProxyVote = async ({BB, accounts, doLog, farm}) => {
 
 
 const testProxyVoteReplayProtection = async ({BB, farm, accounts, doLog}) => {
-    throw Error('notimp')
+    // also test sequence number props
+
+    const [, u1, u2, u3] = accounts;
+    const bb = await genStdBB(BB);
+    const ballotId = bb.ballotId
+
+    const privKey = genRandomBytes32()
+
+    const pxVote1 = await mkProxyVote({ballotId, sequence: 1, privKey})
+    const pxVote2 = await mkProxyVote({ballotId, sequence: 2, privKey})
+    const pxVote3 = await mkProxyVote({ballotId, sequence: 3, privKey})
+    const pxVoteMax = await mkProxyVote({ballotId, sequence: 0xffffffff, privKey})
+    const pxVoteOverMax = await mkProxyVote({ballotId, sequence: 0xffffffff + 1, privKey})
+    const pxAddr = pxVote1.address;
+
+    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(0), 'seq = 0')
+    await farm.submitProxyVote(pxVote1.proxyReq, pxVote1.extra)
+    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(1), 'seq = 1')
+    await assertRevert(farm.submitProxyVote(pxVote1.proxyReq, pxVote1.extra), 'cannot submit vote twice')
+    // submit vote 3
+    await farm.submitProxyVote(pxVote3.proxyReq, pxVote3.extra)
+    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(3), 'seq = 3')
+    await assertRevert(farm.submitProxyVote(pxVote2.proxyReq, pxVote2.extra), 'cannot submit vote with earlier sequence number')
+
+    await farm.submitProxyVote(pxVoteMax.proxyReq, pxVoteMax.extra)
+    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(0xffffffff), 'seq = 0xffffffff')
+
+    await assertRevert(farm.submitProxyVote(pxVoteOverMax.proxyReq, pxVoteOverMax.extra), 'seq max is 0xffffffff - this should overflow to 0 and thus fail')
+
+    assert.deepEqual(await farm.getSequenceNumber(ballotId, u1), toBigNumber(0), 'seq = 0 for u1 init')
+    await bb.submitVote(genRandomBytes32(), '0x', {from: u1})
+    // can vote directly twice+
+    await bb.submitVote(genRandomBytes32(), '0x', {from: u1})
+    assert.deepEqual(await farm.getSequenceNumber(ballotId, u1), toBigNumber(0xffffffff), 'seq = 0xffffffff')
 }
 
 
-const testSeqNumberProperties = async ({BB, farm, accounts, doLog}) => {
-    throw Error('not imp')
+const testRevertConditions = async ({BB, farm, accounts, doLog}) => {
+    const specHash1 = genRandomBytes32();
+    const bb1 = await BB.new(specHash1, await genStdPacked(), zeroAddr);
+    await assertRevert(BB.new(specHash1, await genStdPacked(), zeroAddr), 'cannot create ballot with same specHash')
+    await assertRevert(BB.new(zeroHash, await genStdPacked(), zeroAddr), 'cannot create ballot with zero specHash')
 }
 
 
@@ -514,7 +559,7 @@ const _wrapTest = ({accounts, bbName, mkFarm}, f) => {
         const mkNewBB = async function(specHash, packed, index, lastArg) {
             const from = (lastArg && lastArg.from) ? lastArg.from : accounts[0];
             const txOpts = isTxOpts(lastArg) ? {...lastArg, from: accounts[0]} : {}
-            const _initBBEvent = await farm.initBallot(specHash, packed, index, from, zeroHash, txOpts)
+            const _initBBEvent = await farm.initBallot(specHash, packed, index, from, genRandomBytes(31) + "01", txOpts)
             const {args: {ballotId}} = getEventFromTxR("BallotCreatedWithID", _initBBEvent)
 
             await doLog(`wrapper: Created ballot with ID: ${ballotId.toFixed()}`);
@@ -584,8 +629,8 @@ contract("BallotBox", function(accounts) {
 
     const tests = [
         ["should instantiate correctly", testInstantiation],
+        ["test revert conditions", testRevertConditions],
         ["test proxy vote", testProxyVote],
-        ["test sequence num properties", testSeqNumberProperties],
         ["test proxy vote replay attacks", testProxyVoteReplayProtection],
         ["test getBallots*From", testGetVotes],
         ["should allow setting owner", testSetOwner],

@@ -59,3 +59,10 @@ Unless you're also upgrading any component:
 ### Changing Payment Settings
 
 You'll need to interact with the paymentSettings SC used by the democIndex (this is so settings persist with SVIndexUpgrades).
+
+
+## Notes
+
+**Problems installing dependencies** (2018-06-04)
+
+had some problems installing dependencies of `sha3` and `scrypt` libs after upgrading `yarn` via `brew` (because it installed node). resetting `nvm` via `nvm install 8 && nvm alias default 8` fixed.

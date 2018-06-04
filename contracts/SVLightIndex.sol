@@ -138,8 +138,8 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         return catId;
     }
 
-    function dDeprecateCategory(bytes32 democHash, uint categoryId) only_editors() external {
-        democCategories[democHash].categories[categoryId].deprecated = true;
+    function dDeprecateCategory(bytes32 democHash, uint catId) only_editors() external {
+        democCategories[democHash].categories[catId].deprecated = true;
     }
 
     /* democ getters */
@@ -184,11 +184,11 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         return democCategories[democHash].nCategories;
     }
 
-    function getDCategory(bytes32 democHash, uint categoryId) external view returns (bool deprecated, bytes32 catName, bool hasParent, uint256 parent) {
-        deprecated = democCategories[democHash].categories[categoryId].deprecated;
-        catName = democCategories[democHash].categories[categoryId].name;
-        hasParent = democCategories[democHash].categories[categoryId].hasParent;
-        parent = democCategories[democHash].categories[categoryId].parent;
+    function getDCategory(bytes32 democHash, uint catId) external view returns (bool deprecated, bytes32 catName, bool hasParent, uint256 parent) {
+        deprecated = democCategories[democHash].categories[catId].deprecated;
+        catName = democCategories[democHash].categories[catId].name;
+        hasParent = democCategories[democHash].categories[catId].hasParent;
+        parent = democCategories[democHash].categories[catId].parent;
     }
 
     //* ADD BALLOT TO RECORD */
@@ -371,8 +371,8 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         return backend.dAddCategory(democHash, catName, hasParent, parent);
     }
 
-    function dDeprecateCategory(bytes32 democHash, uint categoryId) onlyDemocAdmin(democHash) external {
-        backend.dDeprecateCategory(democHash, categoryId);
+    function dDeprecateCategory(bytes32 democHash, uint catId) onlyDemocAdmin(democHash) external {
+        backend.dDeprecateCategory(democHash, catId);
     }
 
     function dUpgradeToPremium(bytes32 democHash) onlyDemocAdmin(democHash) external {
