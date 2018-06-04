@@ -622,11 +622,6 @@ const _wrapTest = ({accounts, bbName, mkFarm}, f) => {
 
 
 contract("BallotBox", function(accounts) {
-    // we want to replicate tests between SVLightBallotBox and BBInstance.
-    // we do this by wrapping every test and prefixing it, then running them
-    // and passing in the contract instance as a variable. We also prepend the
-    // test description to note the differences.
-
     const tests = [
         ["should instantiate correctly", testInstantiation],
         ["test revert conditions", testRevertConditions],
@@ -646,11 +641,6 @@ contract("BallotBox", function(accounts) {
         ["test end time must be in future", testEndTimeFuture],
     ]
     R.map(([desc, f]) => {
-        // it("Std BB:  " + desc, _wrapTest({accounts, BB: SVBallotBox, bbName: "Std", mkFarm: false}, f))
-        // it("Lib BB:  " + desc, _wrapTest({accounts, BB: BBInstance, bbName: "Lib", mkFarm: false}, f))
         it("BBFarm: " + desc, _wrapTest({accounts, bbName: "Farm", mkFarm: true}, f))
     }, tests);
-
-    // not used anymore because BBFarm is much better than other options
-    // it("Init gas comparison", async () => await initGasComparison({accounts}));
 });

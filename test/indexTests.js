@@ -592,14 +592,14 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC, be
     const b = await getBlock('latest')
 
     // test upgrade and downgrade with no time
-    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(0), toBigNumber(0)], 'getAccount matches init expectations')
+    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(0), toBigNumber(0), false], 'getAccount matches init expectations')
     assert.equal(await paySC.getPremiumStatus(democHash), false, 'not premium 1')
     await ixPx.dUpgradeToPremium(democHash)
-    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(0), toBigNumber(0)], 'getAccount matches expectations after null upgrade')
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(0), toBigNumber(0), false], 'getAccount matches expectations after null upgrade')
     assert.equal(await paySC.getPremiumStatus(democHash), true, 'is premium 1')
     // we can downgrade freely if there are 0 seconds left
     await ixPx.dDowngradeToBasic(democHash)
-    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(0), toBigNumber(0)], 'getAccount matches expectations after null downgrade')
+    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(0), toBigNumber(0), false], 'getAccount matches expectations after null downgrade')
     assert.equal(await paySC.getPremiumStatus(democHash), false, 'not premium 2')
 
     assert.deepEqual(await paySC.getSecondsRemaining(democHash), toBigNumber(0), 'no seconds remaining')
@@ -610,18 +610,18 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC, be
     assert.deepEqual(await paySC.weiToCents(weiFor30Days), toBigNumber(100000), '30 days of wei matches cents expectation')
     await paySC.payForDemocracy(democHash, {value: weiFor30Days})
     const b2 = await getBlock('latest')
-    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30)], 'getAccount matches after payment')
+    assert.deepEqual(await paySC.getAccount(democHash), [false, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30), false], 'getAccount matches after payment')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(60 * 60 * 24 * 30), 'should have 30 days left')
 
     // let's do that upgrade!
     await ixPx.dUpgradeToPremium(democHash)
     await assertRevert(ixPx.dUpgradeToPremium(democHash), 'cannot upgrade to premium twice')
-    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30 / premMultiplier)], 'getAccount matches after upgrade')
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b2.timestamp), toBigNumber(b2.timestamp + 60 * 60 * 24 * 30 / premMultiplier), false], 'getAccount matches after upgrade')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(60 * 60 * 24 * 30 / premMultiplier), 'should have 6 days left')
 
     await paySC.payForDemocracy(democHash, {value: weiFor30Days})
     const b3 = await getBlock('latest')
-    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b3.timestamp), toBigNumber(b2.timestamp + 2 * 60 * 60 * 24 * 30 / premMultiplier)], 'getAccount matches after upgrade')
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b3.timestamp), toBigNumber(b2.timestamp + 2 * 60 * 60 * 24 * 30 / premMultiplier), false], 'getAccount matches after upgrade')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(2 * 60 * 60 * 24 * 30 / premMultiplier), 'should have 12 days left')
 
     assert.deepEqual(premPrice30Days, centsFor30Days.times(premMultiplier), 'prices match according to premium multiplier')
@@ -629,7 +629,7 @@ const testPremiumUpgradeDowngrade = async ({svIx, owner, doLog, erc20, paySC, be
     await paySC.payForDemocracy(democHash, {value: premWeiPer30Days})
     const b4 = await getBlock('latest')
     let timeLeft = ((2 + premMultiplier) * 60 * 60 * 24 * 30 / premMultiplier);
-    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b4.timestamp), toBigNumber(b2.timestamp + timeLeft)], 'getAccount matches after upgrade')
+    assert.deepEqual(await paySC.getAccount(democHash), [true, toBigNumber(b4.timestamp), toBigNumber(b2.timestamp + timeLeft), false], 'getAccount matches after upgrade')
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(timeLeft), 'should have 42 days left')
 
 
@@ -985,13 +985,6 @@ const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog, be}) =>
 }
 
 
-const testIxLib = async ({svIx, accounts, owner, erc20, doLog, be, paySC}) => {
-
-
-
-}
-
-
 const testGrantingSelfTime = async ({svIx, accounts, owner, erc20, doLog, be, paySC}) => {
     const [, u1, u2, u3, u4] = accounts;
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: u2, value: 1}})
@@ -1051,7 +1044,6 @@ const testGasOfBallots = async ({svIx, owner, erc20, be}) => {
 
 contract("SVLightIndex", function (accounts) {
     tests = [
-        ["test IxLib", testIxLib],
         ["test payments setting values", testPaymentsSettingValues],
         ["test nfp tier", testNFPTierAndPayments],
         ["test owner add ballot", testOwnerAddBallot],
