@@ -990,6 +990,27 @@ const testIxLib = async ({svIx, accounts, owner, erc20, doLog, be, paySC}) => {
 }
 
 
+const testGrantingSelfTime = async ({svIx, accounts, owner, erc20, doLog, be, paySC}) => {
+    const [, u1, u2, u3, u4] = accounts;
+    const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: u2, value: 1}})
+
+    await assertRevert(paySC.freeExtension(democHash), 'cannot grant self time yet')
+    assert.deepEqual(await paySC.getSecondsRemaining(democHash), toBigNumber(0), 'no time atm')
+
+    const sec1 = 60 * 60 * 24 * 20;
+    await paySC.giveTimeToDemoc(democHash, sec1, "0x00")
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(sec1), `has ${sec1} seconds`)
+
+    const days60 = 60 * 60 * 24 * 60;
+    assert.equal(await paySC.getFreeExtension(democHash), false, 'no free ext yet')
+    await paySC.setFreeExtension(democHash, true)
+    assert.equal(await paySC.getFreeExtension(democHash), true, 'has free ext now')
+
+    await paySC.doFreeExtension(democHash, {from: u2})
+    assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(days60), `has 60 days secs now`)
+}
+
+
 
 /* bb farm won - by a lot
     Std:  1392871
