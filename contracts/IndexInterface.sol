@@ -75,6 +75,7 @@ interface IxPaymentsIface {
     function getPremiumMultiplier() external view returns (uint8);
     function getPremiumCentsPricePer30Days() external view returns (uint);
     function setWeiPerCent(uint) external;
+    function setFreeExtension(bytes32 democHash, bool hasFreeExt) external;
     function getWeiPerCent() external view returns (uint weiPerCent);
     function getUsdEthExchangeRate() external view returns (uint centsPerEth);
 
@@ -82,12 +83,14 @@ interface IxPaymentsIface {
 
     function downgradeToBasic(bytes32 democHash) external;
     function upgradeToPremium(bytes32 democHash) external;
+    function doFreeExtension(bytes32 democHash) external;
 
     function payForDemocracy(bytes32 democHash) external payable;
     function accountInGoodStanding(bytes32 democHash) external view returns (bool);
     function getSecondsRemaining(bytes32 democHash) external view returns (uint);
     function getPremiumStatus(bytes32 democHash) external view returns (bool);
-    function getAccount(bytes32 democHash) external view returns (bool isPremium, uint lastPaymentTs, uint paidUpTill);
+    function getAccount(bytes32 democHash) external view returns (bool isPremium, uint lastPaymentTs, uint paidUpTill, bool hasFreeExtension);
+    function getFreeExtension(bytes32 democHash) external view returns (bool);
 
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) external;
 
@@ -106,6 +109,7 @@ interface IxPaymentsIface {
     event DowngradeToBasic(bytes32 indexed democHash);
     event UpgradeToPremium(bytes32 indexed democHash);
     event SetExchangeRate(uint weiPerCent);
+    event FreeExtension(bytes32 democHash);
 }
 
 

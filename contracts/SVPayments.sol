@@ -36,6 +36,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     event DowngradeToBasic(bytes32 indexed democHash);
     event UpgradeToPremium(bytes32 indexed democHash);
     event SetExchangeRate(uint weiPerCent);
+    event FreeExtension(bytes32 democHash);
 
 
     struct Account {
@@ -67,7 +68,8 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     PaymentLog[] payments;
 
     mapping (bytes32 => bool) denyPremium;
-
+    // this is used for non-profits or organisations that have perpetual licenses, etc
+    mapping (bytes32 => bool) freeExtension;
 
     modifier owner_or(address addr) {
         require(msg.sender == addr || msg.sender == owner, "!owner-or");
@@ -145,16 +147,28 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         return accounts[democHash].isPremium;
     }
 
-    function getAccount(bytes32 democHash) external view returns (bool isPremium, uint lastPaymentTs, uint paidUpTill) {
+    function getFreeExtension(bytes32 democHash) external view returns (bool) {
+        return freeExtension[democHash];
+    }
+
+    function getAccount(bytes32 democHash) external view returns (bool isPremium, uint lastPaymentTs, uint paidUpTill, bool hasFreeExtension) {
         isPremium = accounts[democHash].isPremium;
         lastPaymentTs = accounts[democHash].lastPaymentTs;
         paidUpTill = accounts[democHash].paidUpTill;
+        hasFreeExtension = freeExtension[democHash];
     }
 
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) owner_or(minorEditsAddr) external {
         _modAccountBalance(democHash, additionalSeconds);
         payments.push(PaymentLog(true, democHash, additionalSeconds, 0));
         emit GrantedAccountTime(democHash, additionalSeconds, ref);
+    }
+
+    function doFreeExtension(bytes32 democHash) external {
+        require(freeExtension[democHash], "!free");
+        uint newPaidUpTill = now + 60 days;
+        accounts[democHash].paidUpTill = newPaidUpTill;
+        emit FreeExtension(democHash);
     }
 
     function upgradeToPremium(bytes32 democHash) only_editors() external {
@@ -218,6 +232,10 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     function setWeiPerCent(uint wpc) owner_or(minorEditsAddr) external {
         weiPerCent = wpc;
         emit SetExchangeRate(wpc);
+    }
+
+    function setFreeExtension(bytes32 democHash, bool hasFreeExt) owner_or(minorEditsAddr) external {
+        freeExtension[democHash] = hasFreeExt;
     }
 
     function setMinorEditsAddr(address a) only_owner() external {
