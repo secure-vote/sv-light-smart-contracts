@@ -277,9 +277,9 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     }
 
     function _addBBFarm(bytes4 bbNamespace, BBFarmIface _bbFarm) internal returns (uint8 bbFarmId) {
-        bbFarmId = uint8(bbFarms.length);
-        // uint8 overflow check - can't have more than 256 BBFarms
-        require(bbFarmId < 2**8, "too-many-farms");
+        uint256 bbFarmIdLong = bbFarms.length;
+        require(bbFarmIdLong < 2**8, "too-many-farms");
+        bbFarmId = uint8(bbFarmIdLong);
 
         bbFarms.push(_bbFarm);
         bbFarmIdLookup[bbNamespace] = bbFarmId;
@@ -291,9 +291,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         // what a nonsense line of code below. bah.
         bytes4 bbNamespace = bbFarm.getNamespace();
         require(bbNamespace != bytes4(0), "bb-farm-namespace");
-        // the only place where namespace -> 0 is for the init bbFarm,
-        // which is never the case in this funciton (so this require is okay)
-        require(bbFarmIdLookup[bbNamespace] == 0, "bb-farm-exists");
+        require(bbFarmIdLookup[bbNamespace] == 0 && bbNamespace != bbFarms[0].getNamespace(), "bb-namespace-used");
 
         bbFarmId = _addBBFarm(bbNamespace, bbFarm);
     }

@@ -10,6 +10,11 @@ import "./IndexInterface.sol";
 
 
 interface BBFarmIface {
+    /* events */
+
+    event BBFarmInit(bytes4 namespace);
+    event BallotCreatedWithID(uint ballotId);
+
     /* from permissioned */
 
     function upgradeMe(address newSC) external;

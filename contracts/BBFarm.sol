@@ -30,6 +30,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
     uint nBallots = 0;
 
     event BallotCreatedWithID(uint ballotId);
+    event BBFarmInit(bytes4 namespace);
 
     /* modifiers */
 
@@ -45,6 +46,7 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
         // this bbFarm requires v5 of BBLib (note: v4 deprecated immediately due to insecure submitProxyVote)
         assert(BBLib.getVersion() == 5);
         // note: not sure if it's that important to have the above - does stop the operator accidentally deploying against the wrong BBLib tho
+        emit BBFarmInit(NAMESPACE);
     }
 
     function getNamespace() external view returns (bytes4) {
