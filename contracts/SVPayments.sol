@@ -37,7 +37,9 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     event UpgradeToPremium(bytes32 indexed democHash);
     event SetExchangeRate(uint weiPerCent);
     event FreeExtension(bytes32 democHash);
-
+    event SetBallotsPer30Days(uint amount);
+    event SetFreeExtension(bytes32 democHash, bool hasFreeExt);
+    event SetDenyPremium(bytes32 democHash, bool isPremiumDenied);
 
     struct Account {
         bool isPremium;
@@ -58,11 +60,10 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     address public minorEditsAddr;
 
     // payment details
-    uint communityBallotCentsPrice = 1000;  // $10/ballot
-    uint basicCentsPricePer30Days = 100000; // $1000/mo
-    uint basicBallotsPer30Days = 5;
+    uint basicCentsPricePer30Days = 125000; // $1250/mo
+    uint basicBallotsPer30Days = 10;
     uint8 premiumMultiplier = 5;
-    uint weiPerCent = 0.000018975332 ether;  // $527, 14:00 May 29th AEST
+    uint weiPerCent = 0.000016583747 ether;  // $603, 4th June 2018
 
     mapping (bytes32 => Account) accounts;
     PaymentLog[] payments;
@@ -108,6 +109,8 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         accounts[democHash].lastPaymentTs = now;
     }
 
+    /* Financial Calculations */
+
     function weiBuysHowManySeconds(uint amount) public view returns (uint) {
         uint centsPaid = weiToCents(amount);
         // multiply by 10**18 to ensure we make rounding errors insignificant
@@ -116,6 +119,16 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         uint additionalSeconds = secondsOffsetPaid / (10 ** 18);
         return additionalSeconds;
     }
+
+    function weiToCents(uint w) public view returns (uint) {
+        return w / weiPerCent;
+    }
+
+    function centsToWei(uint c) public view returns (uint) {
+        return c * weiPerCent;
+    }
+
+    /* account management */
 
     function payForDemocracy(bytes32 democHash) external payable {
         require(msg.value > 0, "need to send some ether to make payment");
@@ -134,6 +147,48 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
 
         _payTo.transfer(msg.value);
     }
+
+    function doFreeExtension(bytes32 democHash) external {
+        require(freeExtension[democHash], "!free");
+        uint newPaidUpTill = now + 60 days;
+        accounts[democHash].paidUpTill = newPaidUpTill;
+        emit FreeExtension(democHash);
+    }
+
+    function downgradeToBasic(bytes32 democHash) only_editors() external {
+        require(accounts[democHash].isPremium, "!premium");
+        accounts[democHash].isPremium = false;
+        // convert premium minutes to basic
+        uint paidTill = accounts[democHash].paidUpTill;
+        uint timeRemaining = SafeMath.subToZero(paidTill, now);
+        // if we have time remaining: convert it
+        if (timeRemaining > 0) {
+            // prevent accounts from downgrading if they have time remaining
+            // and upgraded less than 24hrs ago
+            require(accounts[democHash].lastUpgradeTs < (now - 24 hours), "downgrade-too-soon");
+            timeRemaining *= premiumMultiplier;
+            accounts[democHash].paidUpTill = now + timeRemaining;
+        }
+        emit DowngradeToBasic(democHash);
+    }
+
+    function upgradeToPremium(bytes32 democHash) only_editors() external {
+        require(denyPremium[democHash] == false, "upgrade-denied");
+        require(!accounts[democHash].isPremium, "!basic");
+        accounts[democHash].isPremium = true;
+        // convert basic minutes to premium minutes
+        uint paidTill = accounts[democHash].paidUpTill;
+        uint timeRemaining = SafeMath.subToZero(paidTill, now);
+        // if we have time remaning then convert it - otherwise don't need to do anything
+        if (timeRemaining > 0) {
+            timeRemaining /= premiumMultiplier;
+            accounts[democHash].paidUpTill = now + timeRemaining;
+        }
+        accounts[democHash].lastUpgradeTs = now;
+        emit UpgradedToPremium(democHash);
+    }
+
+    /* account status - getters */
 
     function accountInGoodStanding(bytes32 democHash) external view returns (bool) {
         return accounts[democHash].paidUpTill >= now;
@@ -158,61 +213,26 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         hasFreeExtension = freeExtension[democHash];
     }
 
+    function getDenyPremium(bytes32 democHash) external view returns (bool) {
+        return denyPremium[democHash];
+    }
+
+    /* admin utils for accounts */
+
     function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) owner_or(minorEditsAddr) external {
         _modAccountBalance(democHash, additionalSeconds);
         payments.push(PaymentLog(true, democHash, additionalSeconds, 0));
         emit GrantedAccountTime(democHash, additionalSeconds, ref);
     }
 
-    function doFreeExtension(bytes32 democHash) external {
-        require(freeExtension[democHash], "!free");
-        uint newPaidUpTill = now + 60 days;
-        accounts[democHash].paidUpTill = newPaidUpTill;
-        emit FreeExtension(democHash);
-    }
-
-    function upgradeToPremium(bytes32 democHash) only_editors() external {
-        require(denyPremium[democHash] == false, "upgrade-denied");
-        require(!accounts[democHash].isPremium, "!basic");
-        accounts[democHash].isPremium = true;
-        // convert basic minutes to premium minutes
-        uint paidTill = accounts[democHash].paidUpTill;
-        uint timeRemaining = SafeMath.subToZero(paidTill, now);
-        // if we have time remaning then convert it - otherwise don't need to do anything
-        if (timeRemaining > 0) {
-            timeRemaining /= premiumMultiplier;
-            accounts[democHash].paidUpTill = now + timeRemaining;
-        }
-        accounts[democHash].lastUpgradeTs = now;
-        emit UpgradedToPremium(democHash);
-    }
-
-    function downgradeToBasic(bytes32 democHash) only_editors() external {
-        require(accounts[democHash].isPremium, "!premium");
-        accounts[democHash].isPremium = false;
-        // convert premium minutes to basic
-        uint paidTill = accounts[democHash].paidUpTill;
-        uint timeRemaining = SafeMath.subToZero(paidTill, now);
-        // if we have time remaining: convert it
-        if (timeRemaining > 0) {
-            // prevent accounts from downgrading if they have time remaining
-            // and upgraded less than 24hrs ago
-            require(accounts[democHash].lastUpgradeTs < (now - 24 hours), "downgrade-too-soon");
-            timeRemaining *= premiumMultiplier;
-            accounts[democHash].paidUpTill = now + timeRemaining;
-        }
-        emit DowngradeToBasic(democHash);
-    }
-
-    //* PAYMENT AND OWNER FUNCTIONS */
+    /* admin setters global */
 
     function setPayTo(address newPayTo) only_owner() external {
         _payTo = newPayTo;
     }
 
-    function setCommunityBallotCentsPrice(uint amount) only_owner() external {
-        communityBallotCentsPrice = amount;
-        emit SetCommunityBallotFee(amount);
+    function setMinorEditsAddr(address a) only_owner() external {
+        minorEditsAddr = a;
     }
 
     function setBasicCentsPricePer30Days(uint amount) only_owner() external {
@@ -222,6 +242,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
 
     function setBasicBallotsPer30Days(uint amount) only_owner() external {
         basicBallotsPer30Days = amount;
+        emit SetBallotsPer30Days(amount);
     }
 
     function setPremiumMultiplier(uint8 m) only_owner() external {
@@ -236,29 +257,18 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
 
     function setFreeExtension(bytes32 democHash, bool hasFreeExt) owner_or(minorEditsAddr) external {
         freeExtension[democHash] = hasFreeExt;
-    }
-
-    function setMinorEditsAddr(address a) only_owner() external {
-        minorEditsAddr = a;
+        emit SetFreeExtension(democHash, hasFreeExt);
     }
 
     function setDenyPremium(bytes32 democHash, bool isPremiumDenied) owner_or(minorEditsAddr) external {
         denyPremium[democHash] = isPremiumDenied;
+        emit SetDenyPremium(democHash, isPremiumDenied);
     }
 
-
-    /* Getters */
+    /* global getters */
 
     function getPayTo() external view returns (address) {
         return _payTo;
-    }
-
-    function getCommunityBallotCentsPrice() external view returns (uint) {
-        return communityBallotCentsPrice;
-    }
-
-    function getCommunityBallotWeiPrice() external view returns (uint) {
-        return centsToWei(communityBallotCentsPrice);
     }
 
     function getBasicCentsPricePer30Days() external view returns (uint) {
@@ -294,9 +304,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         return 1 ether / weiPerCent;
     }
 
-    function getDenyPremium(bytes32 democHash) external view returns (bool) {
-        return denyPremium[democHash];
-    }
+    /* payments stuff */
 
     function getPaymentLogN() external view returns (uint) {
         return payments.length;
@@ -307,16 +315,5 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         _democHash = payments[n]._democHash;
         _seconds = payments[n]._seconds;
         _ethValue = payments[n]._ethValue;
-    }
-
-
-    /* payment util functions */
-
-    function weiToCents(uint w) public view returns (uint) {
-        return w / weiPerCent;
-    }
-
-    function centsToWei(uint c) public view returns (uint) {
-        return c * weiPerCent;
     }
 }

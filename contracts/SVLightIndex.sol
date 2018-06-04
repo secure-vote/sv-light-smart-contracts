@@ -9,11 +9,9 @@ pragma solidity ^0.4.24;
 //
 
 
-import { SVLightAdminProxy } from "./SVLightAdminProxy.sol";
 import { permissioned, hasAdmins, owned, upgradePtr, payoutAllC } from "./SVCommon.sol";
 import { StringLib } from "../libs/StringLib.sol";
 import { Base32Lib } from "../libs/Base32Lib.sol";
-import { SvEnsEverythingPx } from "./SvEnsEverythingPx.sol";
 import "./IndexInterface.sol";
 import { BallotBoxIface } from "./BallotBoxIface.sol";
 import "./SVPayments.sol";
@@ -21,29 +19,35 @@ import "./EnsOwnerProxy.sol";
 import { BPackedUtils } from "./BPackedUtils.sol";
 import "./BBLib.sol";
 import "./BBFarmIface.sol";
-
-
-contract SVAdminPxFactory is payoutAllC {
-    function spawn(bytes32 democHash, address initAdmin, address fwdTo) external returns (SVLightAdminProxy px) {
-        px = new SVLightAdminProxy(democHash, initAdmin, fwdTo);
-    }
-}
+import "./CommunityAuction.sol";
+import "./SVBallotConsts.sol";
 
 
 contract ixBackendEvents {
-    event NewBallot(bytes32 indexed democHash, uint ballotN);
     event NewDemoc(bytes32 democHash);
-    event DemocAdminSet(bytes32 indexed democHash, address admin);
     event ManuallyAddedDemoc(bytes32 democHash, address erc20);
+    event NewBallot(bytes32 indexed democHash, uint ballotN);
+    event DemocOwnerSet(bytes32 indexed democHash, address owner);
+    event DemocEditorSet(bytes32 indexed democHash, address editor, bool canEdit);
+    event DemocEditorsWiped(bytes32 indexed democHash);
+    event DemocErc20Set(bytes32 indexed democHash, address erc20);
+    event DemocDataSet(bytes32 indexed democHash, bytes32 keyHash);
+    event DemocCatAdded(bytes32 indexed democHash, uint catId);
+    event DemocCatDeprecated(bytes32 indexed democHash, uint catId);
+    event DemocCommunityBallotsEnabled(bytes32 indexed democHash, bool enabled);
 }
 
 
 contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payoutAllC {
     struct Democ {
         address erc20;
-        address admin;
+        address owner;
+        bool communityBallotsDisabled;
+        uint editorEpoch;
+        mapping (uint => mapping (address => bool)) editors;
         uint256[] allBallots;
         uint256[] includedBasicBallots;  // the IDs of official ballots
+
     }
 
     struct BallotRef {
@@ -73,9 +77,9 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
     // this lets us (for example) set particular keys to signal cerain
     // things to client apps s.t. the admin can turn them on and off.
     // arbitraryData[democHash][key]
-    mapping (bytes32 => mapping (bytes => bytes)) arbitraryData;
+    mapping (bytes32 => mapping (bytes32 => bytes)) arbitraryData;
 
-    //* GLOBAL INFO */
+    /* GLOBAL INFO */
 
     function getGDemocsN() external view returns (uint) {
         return democList.length;
@@ -89,7 +93,14 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         return erc20ToDemocs[erc20];
     }
 
-    //* DEMOCRACY ADMIN FUNCTIONS */
+    /* Owner functions */
+
+    function dAdd(bytes32 democHash, address erc20) only_owner() external {
+        _addDemoc(democHash, erc20);
+        emit ManuallyAddedDemoc(democHash, erc20);
+    }
+
+    /* DEMOCRACY ADMIN FUNCTIONS */
 
     function _addDemoc(bytes32 democHash, address erc20) internal {
         democList.push(democHash);
@@ -108,48 +119,94 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         _addDemoc(democHash, defaultErc20);
     }
 
-    function dAdd(bytes32 democHash, address erc20) only_owner() external {
-        _addDemoc(democHash, erc20);
-        emit ManuallyAddedDemoc(democHash, erc20);
+    function setDOwner(bytes32 democHash, address newOwner) only_editors() external {
+        democs[democHash].owner = newOwner;
+        emit DemocOwnerSet(democHash, newOwner);
     }
 
-    function setDAdmin(bytes32 democHash, address newAdmin) only_editors() external {
-        democs[democHash].admin = newAdmin;
-        emit DemocAdminSet(democHash, newAdmin);
+    function setDEditor(bytes32 democHash, address editor, bool canEdit) only_editors() external {
+        Democ storage d = democs[democHash];
+        d.editors[d.editorEpoch][editor] = canEdit;
+        emit DemocEditorSet(democHash, editor, canEdit);
+    }
+
+    function setDNoEditors(bytes32 democHash) only_editors() external {
+        democs[democHash].editorEpoch += 1;
+        emit DemocEditorsWiped(democHash);
     }
 
     function setDErc20(bytes32 democHash, address newErc20) only_editors() external {
         democs[democHash].erc20 = newErc20;
         erc20ToDemocs[newErc20].push(democHash);
+        emit DemocErc20Set(democHash, newErc20);
     }
 
     function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) only_editors() external {
-        arbitraryData[democHash][key] = value;
+        bytes32 k = keccak256(key);
+        arbitraryData[democHash][k] = value;
+        emit DemocDataSet(democHash, k);
     }
 
-    function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) only_editors() external returns (uint) {
+    function dAddCategory(bytes32 democHash, bytes32 name, bool hasParent, uint parent) only_editors() external {
         uint catId = democCategories[democHash].nCategories;
-        democCategories[democHash].categories[catId].name = categoryName;
+        democCategories[democHash].categories[catId].name = name;
         if (hasParent) {
             democCategories[democHash].categories[catId].hasParent = true;
             democCategories[democHash].categories[catId].parent = parent;
         }
         democCategories[democHash].nCategories += 1;
-        return catId;
+        emit DemocCatAdded(democHash, catId);
     }
 
     function dDeprecateCategory(bytes32 democHash, uint catId) only_editors() external {
         democCategories[democHash].categories[catId].deprecated = true;
+        emit DemocCatDeprecated(democHash, catId);
+    }
+
+    function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) only_editors() external {
+        democs[democHash].communityBallotsDisabled = !enabled;
+        emit DemocCommunityBallotsEnabled(democHash, enabled);
+    }
+
+    //* ADD BALLOT TO RECORD */
+
+    function _commitBallot(bytes32 democHash, uint ballotId, uint256 packed, bool recordTowardsBasicLimit) internal {
+        uint16 subBits;
+        subBits = BPackedUtils.packedToSubmissionBits(packed);
+
+        uint localBallotId = democs[democHash].allBallots.length;
+        democs[democHash].allBallots.push(ballotId);
+
+        // do this for anything that doesn't qualify as a community ballot
+        if (recordTowardsBasicLimit) {
+            democs[democHash].includedBasicBallots.push(ballotId);
+        }
+
+        emit NewBallot(democHash, localBallotId);
+    }
+
+    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed, bool countTowardsLimit) only_editors() external {
+        _commitBallot(democHash, ballotId, packed, countTowardsLimit);
     }
 
     /* democ getters */
+
+    function getDOwner(bytes32 democHash) external view returns (address) {
+        return democs[democHash].owner;
+    }
+
+    function isDEditor(bytes32 democHash, address editor) external view returns (bool) {
+        Democ storage d = democs[democHash];
+        // allow either an editor or always the owner
+        return d.editors[d.editorEpoch][editor] || editor == d.owner;
+    }
 
     function getDHash(bytes13 prefix) external view returns (bytes32) {
         return democPrefixToHash[prefix];
     }
 
-    function getDInfo(bytes32 democHash) external view returns (address erc20, address admin, uint256 nBallots) {
-        return (democs[democHash].erc20, democs[democHash].admin, democs[democHash].allBallots.length);
+    function getDInfo(bytes32 democHash) external view returns (address erc20, address owner, uint256 nBallots) {
+        return (democs[democHash].erc20, democs[democHash].owner, democs[democHash].allBallots.length);
     }
 
     function getDErc20(bytes32 democHash) external view returns (address) {
@@ -157,11 +214,7 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
     }
 
     function getDArbitraryData(bytes32 democHash, bytes key) external view returns (bytes) {
-        return arbitraryData[democHash][key];
-    }
-
-    function getDAdmin(bytes32 democHash) external view returns (address) {
-        return democs[democHash].admin;
+        return arbitraryData[democHash][keccak256(key)];
     }
 
     function getDBallotsN(bytes32 democHash) external view returns (uint256) {
@@ -184,53 +237,36 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
         return democCategories[democHash].nCategories;
     }
 
-    function getDCategory(bytes32 democHash, uint catId) external view returns (bool deprecated, bytes32 catName, bool hasParent, uint256 parent) {
+    function getDCategory(bytes32 democHash, uint catId) external view returns (bool deprecated, bytes32 name, bool hasParent, uint256 parent) {
         deprecated = democCategories[democHash].categories[catId].deprecated;
-        catName = democCategories[democHash].categories[catId].name;
+        name = democCategories[democHash].categories[catId].name;
         hasParent = democCategories[democHash].categories[catId].hasParent;
         parent = democCategories[democHash].categories[catId].parent;
     }
 
-    //* ADD BALLOT TO RECORD */
-
-    function _commitBallot(bytes32 democHash, uint ballotId, uint256 packed, bool recordTowardsBasicLimit) internal {
-        uint16 subBits;
-        subBits = BPackedUtils.packedToSubmissionBits(packed);
-
-        uint localBallotId = democs[democHash].allBallots.length;
-        democs[democHash].allBallots.push(ballotId);
-
-        // do this for anything that doesn't qualify as a community ballot
-        if (recordTowardsBasicLimit) {
-            democs[democHash].includedBasicBallots.push(ballotId);
-        }
-
-        emit NewBallot(democHash, localBallotId);
-    }
-
-    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed, bool recordTowardsBasicLimit) only_editors() external {
-        _commitBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
+    function getDCommBallotsEnabled(bytes32 democHash) external view returns (bool) {
+        return !democs[democHash].communityBallotsDisabled;
     }
 }
 
 
 contract ixEvents {
     event PaymentMade(uint[2] valAndRemainder);
-    event Emergency(bytes32 setWhat);
+    event AddedBBFarm(uint8 bbFarmId);
+    event Emergency(bytes32 setWhat, address newSC);
+    event EmergencyBBFarm(uint8 bbFarmId, address bbFarm);
     event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
-    event EmergencyBBFarm(uint16 bbFarmId);
-    event AddedBBFarm(uint16 bbFarmId);
+    event CommunityBallot(bytes32 democHash, uint256 ballotId);
     event ManuallyAddedBallot(bytes32 democHash, uint256 ballotId, uint256 packed);
 }
 
 
-contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents, ixEvents {
+contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents, ixEvents, SVBallotConsts {
     IxBackendIface backend;
     IxPaymentsIface payments;
-    SVAdminPxFactory public adminPxFactory;
-    SvEnsEverythingPx public ensPx;
     EnsOwnerProxy public ensOwnerPx;
     BBFarmIface[] bbFarms;
+    CommAuctionIface commAuction;
     // mapping from bbFarm namespace to bbFarmId
     mapping (bytes4 => uint8) bbFarmIdLookup;
 
@@ -238,8 +274,13 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
 
     //* MODIFIERS /
 
-    modifier onlyDemocAdmin(bytes32 democHash) {
-        require(msg.sender == backend.getDAdmin(democHash), "!democ-admin");
+    modifier onlyDemocOwner(bytes32 democHash) {
+        require(msg.sender == backend.getDOwner(democHash), "!d-owner");
+        _;
+    }
+
+    modifier onlyDemocEditor(bytes32 democHash) {
+        require(backend.isDEditor(democHash, msg.sender), "!d-editor");
         _;
     }
 
@@ -248,17 +289,15 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     // constructor
     constructor( IxBackendIface _b
                , IxPaymentsIface _pay
-               , SVAdminPxFactory _pxF
-               , SvEnsEverythingPx _ensPx
                , EnsOwnerProxy _ensOwnerPx
                , BBFarmIface _bbFarm0
+               , CommAuctionIface _commAuction
                ) public {
         backend = _b;
         payments = _pay;
-        adminPxFactory = _pxF;
-        ensPx = _ensPx;
         ensOwnerPx = _ensOwnerPx;
         _addBBFarm(0x0, _bbFarm0);
+        commAuction = _commAuction;
     }
 
     //* UPGRADE STUFF */
@@ -267,9 +306,9 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         doUpgradeInternal(nextSC);
         backend.upgradeMe(nextSC);
         payments.upgradeMe(nextSC);
-        ensPx.upgradeMeAdmin(nextSC);
         ensOwnerPx.setAddr(nextSC);
         ensOwnerPx.upgradeMeAdmin(nextSC);
+        commAuction.upgradeMe(nextSC);
 
         for (uint i = 0; i < bbFarms.length; i++) {
             bbFarms[i].upgradeMe(nextSC);
@@ -299,13 +338,13 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     /* FOR EMERGENCIES - setting backends */
 
     function emergencySetABackend(bytes32 toSet, address newSC) only_owner() external {
-        emit Emergency(toSet);
+        emit Emergency(toSet, newSC);
         if (toSet == bytes32("payments")) {
             payments = IxPaymentsIface(newSC);
         } else if (toSet == bytes32("backend")) {
             backend = IxBackendIface(newSC);
-        } else if (toSet == bytes32("adminPxF")) {
-            adminPxFactory = SVAdminPxFactory(newSC);
+        } else if (toSet == bytes32("commAuction")) {
+            commAuction = CommAuctionIface(newSC);
         } else {
             revert("404");
         }
@@ -313,12 +352,12 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
 
     function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) only_owner() external {
         bbFarms[bbFarmId] = BBFarmIface(_bbFarm);
-        emit EmergencyBBFarm(bbFarmId);
+        emit EmergencyBBFarm(bbFarmId, _bbFarm);
     }
 
-    function emergencySetDAdmin(bytes32 democHash, address newAdmin) only_owner() external {
-        backend.setDAdmin(democHash, newAdmin);
-        emit EmergencyDemocAdmin(democHash, newAdmin);
+    function emergencySetDOwner(bytes32 democHash, address newOwner) only_owner() external {
+        backend.setDOwner(democHash, newOwner);
+        emit EmergencyDemocOwner(democHash, newOwner);
     }
 
     /* Getters for backends */
@@ -339,9 +378,13 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         return bbFarmIdLookup[bbNamespace];
     }
 
+    function getCommAuction() external view returns (CommAuctionIface) {
+        return commAuction;
+    }
+
     //* GLOBAL INFO */
 
-    function getVersion() external view returns (uint256) {
+    function getVersion() external pure returns (uint256) {
         return _version;
     }
 
@@ -350,10 +393,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     function dInit(address defaultErc20) not_upgraded() external payable returns (bytes32) {
         bytes32 democHash = backend.dInit(defaultErc20);
 
-        SVLightAdminProxy adminPx = adminPxFactory.spawn(democHash, msg.sender, address(this));
-        address admin = address(adminPx);
-        backend.setDAdmin(democHash, admin);
-        mkDomain(democHash, admin);
+        backend.setDOwner(democHash, msg.sender);
 
         payments.payForDemocracy.value(msg.value)(democHash);
         return democHash;
@@ -361,28 +401,40 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
 
     // admin methods
 
-    function setDErc20(bytes32 democHash, address newErc20) onlyDemocAdmin(democHash) external {
+    function setDEditor(bytes32 democHash, address editor, bool canEdit) onlyDemocOwner(democHash) external {
+        backend.setDEditor(democHash, editor, canEdit);
+    }
+
+    function setDOwner(bytes32 democHash, address owner) onlyDemocOwner(democHash) external {
+        backend.setDOwner(democHash, owner);
+    }
+
+    function setDErc20(bytes32 democHash, address newErc20) onlyDemocOwner(democHash) external {
         backend.setDErc20(democHash, newErc20);
     }
 
-    function dAddCategory(bytes32 democHash, bytes32 catName, bool hasParent, uint parent) onlyDemocAdmin(democHash) external returns (uint) {
-        return backend.dAddCategory(democHash, catName, hasParent, parent);
+    function dAddCategory(bytes32 democHash, bytes32 catName, bool hasParent, uint parent) onlyDemocEditor(democHash) external {
+        backend.dAddCategory(democHash, catName, hasParent, parent);
     }
 
-    function dDeprecateCategory(bytes32 democHash, uint catId) onlyDemocAdmin(democHash) external {
+    function dDeprecateCategory(bytes32 democHash, uint catId) onlyDemocEditor(democHash) external {
         backend.dDeprecateCategory(democHash, catId);
     }
 
-    function dUpgradeToPremium(bytes32 democHash) onlyDemocAdmin(democHash) external {
+    function dUpgradeToPremium(bytes32 democHash) onlyDemocOwner(democHash) external {
         payments.upgradeToPremium(democHash);
     }
 
-    function dDowngradeToBasic(bytes32 democHash) onlyDemocAdmin(democHash) external {
+    function dDowngradeToBasic(bytes32 democHash) onlyDemocOwner(democHash) external {
         payments.downgradeToBasic(democHash);
     }
 
-    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) onlyDemocAdmin(democHash) external {
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) onlyDemocOwner(democHash) external {
         backend.dSetArbitraryData(democHash, key, value);
+    }
+
+    function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) onlyDemocOwner(democHash) external {
+        backend.dSetCommunityBallotsEnabled(democHash, enabled);
     }
 
     /* Democ Getters - deprecated */
@@ -390,7 +442,6 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     // this has been removed to reduce gas costs + size of Ix contract
     // For SCs you should use IxLib for convenience.
     // For Offchain use you should query the backend directly (via ix.getBackend())
-
 
     /* Add and Deploy Ballots */
 
@@ -406,14 +457,8 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         emit ManuallyAddedBallot(democHash, ballotId, packed);
     }
 
-    // only way a democ admin can deploy a ballot (must be sent via adminProxy)
-    function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed)
-                          onlyDemocAdmin(democHash)
-                          // todo: handling payments here
-                          external payable
-                          returns (uint ballotId) {
 
-        uint64 endTime = BPackedUtils.packedToEndTime(packed);
+    function _deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint packed, bool checkLimit) internal returns (uint ballotId) {
         uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
         require(BBLib.isTesting(submissionBits) == false, "b-testing");
 
@@ -421,17 +466,16 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         uint8 bbFarmId = uint8(extraData[0]);
         BBFarmIface _bbFarm = bbFarms[bbFarmId];
 
-        // by default we don't record towards the basic limit
-        bool recordTowardsBasicLimit = false;
         // anything that isn't a community ballot counts towards the basic limit.
         // we want to check in cases where
         // the ballot doesn't qualify as a community ballot
         // OR (the ballot qualifies as a community ballot
         //     AND the admins have _disabled_ community ballots).
-        bool requiresCheck = BBLib.qualifiesAsCommunityBallot(submissionBits) == false || _checkEvenIfCommBallot(democHash);
-        if (requiresCheck) {
-            recordTowardsBasicLimit = _basicBallotLimitOperations(democHash, _bbFarm);
-            _deployBallotChecks(democHash, endTime);
+        bool countTowardsLimit = checkLimit;
+        if (checkLimit) {
+            uint64 endTime = BPackedUtils.packedToEndTime(packed);
+            countTowardsLimit = _basicBallotLimitOperations(democHash, _bbFarm);
+            _accountOkayChecks(democHash, endTime);
         }
 
         ballotId = _bbFarm.initBallot(
@@ -445,17 +489,43 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
             // the _last_ 24 bytes of extraData.
             bytes24(uint192(extraData)));
 
-        _addBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
+        _addBallot(democHash, ballotId, packed, countTowardsLimit);
+    }
+
+    function dDeployCommunityBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes) external payable {
+        uint price = commAuction.getNextPrice(democHash);
+        require(msg.value >= price, "!cb-fee");
+
+        doSafeSend(payments.getPayTo(), price);
+        doSafeSend(msg.sender, msg.value - price);
+
+        bool canProceed = backend.getDCommBallotsEnabled(democHash) || !payments.accountInGoodStanding(democHash);
+        require(canProceed, "!cb-enabled");
+
+        uint256 packed = BPackedUtils.setSB(uint256(packedTimes), (USE_ETH | USE_NO_ENC));
+
+        uint ballotId = _deployBallot(democHash, specHash, extraData, packed, false);
+        commAuction.noteBallotDeployed(democHash);
+
+        emit CommunityBallot(democHash, ballotId);
+    }
+
+    // only way a democ admin can deploy a ballot
+    function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed)
+                          onlyDemocEditor(democHash)
+                          external payable {
+
+        _deployBallot(democHash, specHash, extraData, packed, true);
     }
 
     // internal logic around adding a ballot
-    function _addBallot(bytes32 democHash, uint256 ballotId, uint256 packed, bool recordTowardsBasicLimit) internal {
+    function _addBallot(bytes32 democHash, uint256 ballotId, uint256 packed, bool countTowardsLimit) internal {
         // backend handles events
-        backend.dAddBallot(democHash, ballotId, packed, recordTowardsBasicLimit);
+        backend.dAddBallot(democHash, ballotId, packed, countTowardsLimit);
     }
 
-    //
-    function _deployBallotChecks(bytes32 democHash, uint64 endTime) internal view {
+    // check an account has paid up enough for this ballot
+    function _accountOkayChecks(bytes32 democHash, uint64 endTime) internal view {
         // if the ballot is marked as official require the democracy is paid up to
         // some relative amount - exclude NFP accounts from this check
         uint secsLeft = payments.getSecondsRemaining(democHash);
@@ -465,7 +535,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         require(secsLeft * 2 > secsToEndTime, "unpaid");
     }
 
-    function _basicBallotLimitOperations(bytes32 democHash, BBFarmIface _bbFarm) internal returns (bool recordTowardsBasicLimit) {
+    function _basicBallotLimitOperations(bytes32 democHash, BBFarmIface _bbFarm) internal returns (bool) {
         // if we're an official ballot and the democ is basic, ensure the democ
         // isn't over the ballots/mo limit
         if (payments.getPremiumStatus(democHash) == false) {
@@ -514,38 +584,5 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         } else {  // if we're premium we don't count ballots
             return false;
         }
-    }
-
-    // this is a separate function b/c putting this inline in `requiresCheck` definition
-    // will load the storage before it "shortcuts" (though bool use),
-    // so this way we only access storage if we _really_ need to.
-    // --
-    // The point of this function is to count and check ballots even if they qualify
-    // as a community ballot, b/c if the admin has turned off community ballots they
-    // must be counted.
-    // Returns true if community ballots disabled and the account is in good standing.
-    // Returns false if comm bs are enabled, or the account is not in good standing
-    function _checkEvenIfCommBallot(bytes32 democHash) internal view returns (bool) {
-        SVLightAdminProxy admin = SVLightAdminProxy(backend.getDAdmin(democHash));
-        return payments.accountInGoodStanding(democHash) && admin.getCommunityBallotsEnabled() == false;
-    }
-
-    // sv ens domains
-    function mkDomain(bytes32 democHash, address adminSc) internal returns (bytes32 node) {
-        // create domain for admin SC!
-        // truncate the democHash to 13 bytes and then to base32 (alphabet borrowed from bech32 spec)
-        bytes13 democPrefix = bytes13(democHash);
-        bytes memory prefixB32 = Base32Lib.toBase32(b13ToBytes(democPrefix));
-        // set owner to 0 so it's well known the domain can't be redirected
-        node = ensPx.regNameWOwner(string(prefixB32), adminSc, address(0));
-    }
-
-    // utils
-    function b13ToBytes(bytes13 b13) pure internal returns(bytes) {
-        bytes memory bs = new bytes(13);
-        for (uint i = 0; i < 13; i++) {
-            bs[i] = b13[i];
-        }
-        return bs;
     }
 }

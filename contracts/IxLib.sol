@@ -34,14 +34,6 @@ library IxLib {
         return ix.getPayments().getPayTo();
     }
 
-    function getCommunityBallotCentsPrice(IxIface ix) internal view returns (uint) {
-        return ix.getPayments().getCommunityBallotCentsPrice();
-    }
-
-    function getCommunityBallotWeiPrice(IxIface ix) internal view returns (uint) {
-        return ix.getPayments().getCommunityBallotWeiPrice();
-    }
-
     /* Global Ix data */
 
     function getBBFarmFromBallotID(IxIface ix, uint256 ballotId) internal view returns (BBFarmIface) {
@@ -81,8 +73,12 @@ library IxLib {
 
     /* Democ getters */
 
-    function getDAdmin(IxIface ix, bytes32 democHash) internal view returns (address) {
-        return ix.getBackend().getDAdmin(democHash);
+    function getDOwner(IxIface ix, bytes32 democHash) internal view returns (address) {
+        return ix.getBackend().getDOwner(democHash);
+    }
+
+    function isDEditor(IxIface ix, bytes32 democHash, address editor) internal view returns (bool) {
+        return ix.getBackend().isDEditor(democHash, editor);
     }
 
     function getDBallotsN(IxIface ix, bytes32 democHash) internal view returns (uint256) {
