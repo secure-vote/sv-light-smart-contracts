@@ -12,6 +12,7 @@ const EmitterTesting = artifacts.require("./EmitterTesting");
 const TestHelper = artifacts.require("./TestHelper");
 const FaucetErc20 = artifacts.require("./FaucetErc20");
 const BBFarm = artifacts.require("./BBFarm")
+const BBFarmTesting = artifacts.require("./BBFarmTesting")
 
 const nh = require('eth-ens-namehash');
 
@@ -174,7 +175,8 @@ const testUpgrade = async ({svIx, ensPx, paySC, be, ixEnsPx, pxF, bbFarm, owner,
     // now test the adminPx and make sure that fwds to new democ
     assert.equal(await adminPx._forwardTo(), svIx.address, "adminPx fwdTo still matches init")
     await doLog('Going to perform an operation through ixPx to verify auto fwdTo upgrade')
-    await ixPx.dSetArbitraryData(democHash, 123, 456);
+    await ixPx.dSetArbitraryData(democHash, "0x0123", "0x01c8");
+    assert.equal(await be.getDArbitraryData(democHash, "0x0123"), "0x01c8", 'arb data matches')
     assert.equal(await adminPx._forwardTo(), newIx.address, "adminPx fwdTo upgrades automagically when sending after upgrade")
 }
 
@@ -989,7 +991,7 @@ const testGrantingSelfTime = async ({svIx, accounts, owner, erc20, doLog, be, pa
     const [, u1, u2, u3, u4] = accounts;
     const {democHash, adminPx, ixPx} = await mkDemoc({svIx, erc20, txOpts: {from: u2, value: 1}})
 
-    await assertRevert(paySC.freeExtension(democHash), 'cannot grant self time yet')
+    await assertRevert(paySC.doFreeExtension(democHash), 'cannot grant self time yet')
     assert.deepEqual(await paySC.getSecondsRemaining(democHash), toBigNumber(0), 'no time atm')
 
     const sec1 = 60 * 60 * 24 * 20;
@@ -1003,6 +1005,30 @@ const testGrantingSelfTime = async ({svIx, accounts, owner, erc20, doLog, be, pa
 
     await paySC.doFreeExtension(democHash, {from: u2})
     assert.reallyClose(await paySC.getSecondsRemaining(democHash), toBigNumber(days60), `has 60 days secs now`)
+}
+
+
+const testAddingBBFarm = async({svIx, owner, erc20, be, paySC, doLog, accounts}) => {
+    const [, u1, u2, u3] = accounts;
+    const farmTesting2 = await BBFarmTesting.new("0x00000000")
+    const farmCopy = await BBFarmTesting.new("0x00000001")
+    const farmTesting = await BBFarmTesting.new("0x00000002")
+
+    await assertRevert(svIx.addBBFarm(farmCopy.address, {from: owner}), 'reverts bc the namespace is taken')
+    await assertRevert(svIx.addBBFarm(farmTesting2.address, {from: owner}), 'reverts bc the namespace is 0')
+    await assertRevert(svIx.addBBFarm(farmTesting.address, {from: u1}), 'reverts bc sender is bad')
+    await svIx.addBBFarm(farmTesting.address, {from: owner})  // works
+
+    for (var i = 2; i < 260; i++){
+        var ns = genRandomBytes(4)
+        var newFarm = await BBFarmTesting.new(ns)
+        await doLog(`Deploying bbfarm ${i} and ns ${ns}`)
+        if (i >= 2**8) {
+            await assertRevert(svIx.addBBFarm(newFarm.address, {from: owner}), `reverts as bbfarm id would be ${i} (>= 256)`)
+        } else {
+            await svIx.addBBFarm(newFarm.address, {from: owner})
+        }
+    }
 }
 
 
@@ -1045,6 +1071,8 @@ const testGasOfBallots = async ({svIx, owner, erc20, be}) => {
 contract("SVLightIndex", function (accounts) {
     tests = [
         ["test payments setting values", testPaymentsSettingValues],
+        ["test granting self time", testGrantingSelfTime],
+        ["test adding BBFarm", testAddingBBFarm],
         ["test nfp tier", testNFPTierAndPayments],
         ["test owner add ballot", testOwnerAddBallot],
         ["test paying for extra ballots (basic)", testBasicExtraBallots],

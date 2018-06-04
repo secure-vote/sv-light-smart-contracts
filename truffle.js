@@ -20,7 +20,14 @@ module.exports = {
       gas: 19000000,
       network_id: "*", // Match any network id
       gasPrice: 1,
-      solc: { optimizer: { enabled: true, runs: 200 } },
+      // solc: { optimizer: { enabled: true, runs: 200 } },
+    },
+    testrpc: {
+      host: "localhost",
+      port: 8545,
+      network_id: "*",
+      gas: 7000000,
+      gasPrice: 1,
     }
   }
 };
