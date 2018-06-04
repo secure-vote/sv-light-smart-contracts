@@ -163,7 +163,7 @@ interface IxBackendIface {
     /* global democ getters */
     function getDOwner(bytes32 democHash) external view returns (address);
     function isDEditor(bytes32 democHash, address editor) external view returns (bool);
-    function getDHash(bytes32 prefix) external view returns (bytes32);
+    function getDHash(bytes13 prefix) external view returns (bytes32);
     function getDInfo(bytes32 democHash) external view returns (address erc20, address owner, uint256 nBallots);
     function getDErc20(bytes32 democHash) external view returns (address);
     function getDArbitraryData(bytes32 democHash, bytes key) external view returns (bytes value);
