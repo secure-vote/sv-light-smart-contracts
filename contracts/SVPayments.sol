@@ -325,10 +325,6 @@ contract SVPayments is IxPaymentsIface {
 
     /* global getters */
 
-    function getPayTo() external view returns (address) {
-        return _getPayTo();
-    }
-
     function getBasicCentsPricePer30Days() external view returns (uint) {
         return basicCentsPricePer30Days;
     }

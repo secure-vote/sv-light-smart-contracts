@@ -95,11 +95,7 @@ contract owned {
 
 // just to give other contracts an ABI - should not be used / deployed
 contract controlled {
-    address public controller;
-
-    constructor() public {
-        revert();
-    }
+    function controller() external view returns (address);
 }
 
 

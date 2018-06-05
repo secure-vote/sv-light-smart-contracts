@@ -44,6 +44,7 @@ contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC
     function setDNoEditors(bytes32 democHash) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
     function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) external;
+    function dSetEditorArbitraryData(bytes32 democHash, bytes key, bytes value) external;
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external;
     function dDeprecateCategory(bytes32 democHash, uint catId) external;
     function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) external;
@@ -59,6 +60,7 @@ contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC
     function getDInfo(bytes32 democHash) external view returns (address erc20, address owner, uint256 nBallots);
     function getDErc20(bytes32 democHash) external view returns (address);
     function getDArbitraryData(bytes32 democHash, bytes key) external view returns (bytes value);
+    function getDEditorArbitraryData(bytes32 democHash, bytes key) external view returns (bytes value);
     function getDBallotsN(bytes32 democHash) external view returns (uint256);
     function getDBallotID(bytes32 democHash, uint n) external view returns (uint ballotId);
     function getDCountedBasicBallotsN(bytes32 democHash) external view returns (uint256);
@@ -201,6 +203,12 @@ contract SVIndexBackend is IxBackendIface {
         emit DemocDataSet(democHash, k);
     }
 
+    function dSetEditorArbitraryData(bytes32 democHash, bytes key, bytes value) only_editors() external {
+        bytes32 k = keccak256(_calcEditorKey(key));
+        arbitraryData[democHash][k] = value;
+        emit DemocDataSet(democHash, k);
+    }
+
     function dAddCategory(bytes32 democHash, bytes32 name, bool hasParent, uint parent) only_editors() external {
         uint catId = democCategories[democHash].nCategories;
         democCategories[democHash].categories[catId].name = name;
@@ -276,6 +284,10 @@ contract SVIndexBackend is IxBackendIface {
         return arbitraryData[democHash][keccak256(key)];
     }
 
+    function getDEditorArbitraryData(bytes32 democHash, bytes key) external view returns (bytes) {
+        return arbitraryData[democHash][keccak256(_calcEditorKey(key))];
+    }
+
     function getDBallotsN(bytes32 democHash) external view returns (uint256) {
         return democs[democHash].allBallots.length;
     }
@@ -309,5 +321,11 @@ contract SVIndexBackend is IxBackendIface {
 
     function getDErc20OwnerClaimEnabled(bytes32 democHash) external view returns (bool) {
         return !democs[democHash].erc20OwnerClaimDisabled;
+    }
+
+    /* util for calculating editor key */
+
+    function _calcEditorKey(bytes key) internal pure returns (bytes) {
+        return abi.encodePacked("editor.", key);
     }
 }

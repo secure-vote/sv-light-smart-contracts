@@ -76,12 +76,28 @@ const testHasAdmins = async ({owner, accounts}) => {
 }
 
 
+const testSafeSend = async({owner, accounts}) => {
+    await throwTodoAsync()
+}
+
+
+const testPayoutAllC = async({owner, accounts}) => {
+    const [,u1,u2,u3] = accounts;
+
+    await assertRevert(payoutAllC(0), 'payoutAllC reverts on 0 addr')
+
+    const c = await payoutAllCSettable(u1);
+    assert.equal(await c.getPayTo(), u1, 'payoutAllCSettable returns owner on getPayTo')
+}
+
 
 
 contract("SVCommon", function (accounts) {
     tests = [
         ["test permissioned contract", testPermissioned],
         ["test hasAdmins", testHasAdmins],
+        ["test safeSend + reentrancy", testSafeSend],
+        ["test payoutAllC", testPayoutAllC],
     ];
     R.map(([desc, f]) => it(desc, wrapTest({accounts}, f)), tests);
 });
