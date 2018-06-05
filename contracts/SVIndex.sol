@@ -59,10 +59,11 @@ contract IxIface is hasVersion,
     function getCommAuction() external view returns (CommAuctionIface);
 
     /* init a democ */
-    function dInit(address defualtErc20) external payable returns (bytes32);
+    function dInit(address defualtErc20, bool disableErc20OwnerClaim) external payable returns (bytes32);
 
     /* democ owner / editor functions */
     function setDEditor(bytes32 democHash, address editor, bool canEdit) external;
+    function setDNoEditors(bytes32 democHash) external;
     function setDOwner(bytes32 democHash, address newOwner) external;
     function dOwnerErc20Claim(bytes32 democHash) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
@@ -135,7 +136,7 @@ contract SVIndex is IxIface {
     /* payoutAllC */
 
     function _getPayTo() internal view returns (address) {
-        return owner;
+        return payments.getPayTo();
     }
 
     /* UPGRADE STUFF */
@@ -230,10 +231,14 @@ contract SVIndex is IxIface {
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
-    function dInit(address defaultErc20) not_upgraded() external payable returns (bytes32) {
+    function dInit(address defaultErc20, bool disableErc20OwnerClaim) not_upgraded() external payable returns (bytes32) {
         bytes32 democHash = backend.dInit(defaultErc20);
 
         backend.setDOwner(democHash, msg.sender);
+
+        if (disableErc20OwnerClaim) {
+            backend.dDisableErc20OwnerClaim(democHash);
+        }
 
         payments.payForDemocracy.value(msg.value)(democHash);
         return democHash;
@@ -243,6 +248,10 @@ contract SVIndex is IxIface {
 
     function setDEditor(bytes32 democHash, address editor, bool canEdit) onlyDemocOwner(democHash) external {
         backend.setDEditor(democHash, editor, canEdit);
+    }
+
+    function setDNoEditors(bytes32 democHash) onlyDemocOwner(democHash) external {
+        backend.setDNoEditors(democHash);
     }
 
     function setDOwner(bytes32 democHash, address newOwner) onlyDemocOwner(democHash) external {
@@ -255,9 +264,9 @@ contract SVIndex is IxIface {
         // test if we can call the erc20.owner() method, etc
         // also limit gas use to 3000 because we don't know what they'll do with it
         // during testing both owned and controlled could be called from other contracts for 2525 gas.
-        if (erc20.call.gas(3000)(OWNER_SIG)) {
+        if (erc20.call.gas(3000)(abi.encodeWithSelector(OWNER_SIG))) {
             require(msg.sender == owned(erc20).owner.gas(3000)(), "!erc20-owner");
-        } else if (erc20.call.gas(3000)(CONTROLLER_SIG)) {
+        } else if (erc20.call.gas(3000)(abi.encodeWithSelector(CONTROLLER_SIG))) {
             require(msg.sender == controlled(erc20).controller.gas(3000)(), "!erc20-controller");
         } else {
             revert();
@@ -286,8 +295,14 @@ contract SVIndex is IxIface {
         payments.downgradeToBasic(democHash);
     }
 
-    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) onlyDemocOwner(democHash) external {
-        backend.dSetArbitraryData(democHash, key, value);
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) external {
+        if (msg.sender == backend.getDOwner(democHash)) {
+            backend.dSetArbitraryData(democHash, key, value);
+        } else if (backend.isDEditor(democHash, msg.sender)) {
+            backend.dSetEditorArbitraryData(democHash, key, value);
+        } else {
+            revert();
+        }
     }
 
     function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) onlyDemocOwner(democHash) external {

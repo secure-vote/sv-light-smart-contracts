@@ -31,7 +31,7 @@ contract CommunityAuctionSimple is owned {
     mapping (address => Record[]) public ballotLog;
     mapping (address => address) public upgrades;
 
-    function getNextPrice(bytes32 democHash) external view returns (uint) {
+    function getNextPrice(bytes32) external view returns (uint) {
         return commBallotPriceWei;
     }
 
