@@ -81,7 +81,35 @@ const testHasAdmins = async ({owner, accounts}) => {
 
 
 const testSafeSend = async({owner, accounts}) => {
+    // scaffold taken from old adminProxy testReentrancy test
 
+    const [, u1, u2, u3, u4, u5] = accounts;
+    // use lots of gas
+    const gas = 5000000
+    const freetx = {gasPrice: 0}
+
+    const scLog = await EmitterTesting.new(freetx)
+    const log = async (msg) => await scLog.log(msg, freetx);
+    await log("Created scLog")
+
+    const testHelper = await TestHelper.new(freetx)
+    const th = testHelper.address
+    await log("created testHelper")
+
+    // function sendTo(address to, uint value) external;
+    const safeSender = await payoutAllCSettable.new(u1);
+    await safeSender.sendTransaction({value: oneEth.times(10)})
+
+    // the tx that triggers reentrancy check
+    const tx1 = getData(safeSender.sendTo, u1, "0x", oneEth);
+    // the tx that will fwd back to safeSender
+    const tx2 = getData(testHelper.reentrancyHelper, safeSender.address, tx1, oneEth.times(1.1))
+
+    // make sure this works atm
+    await testHelper.sendTransaction({value: oneEth.times(1.2), data: tx2, ...freetx})
+
+    // and now we trigger!
+    await assertRevert(safeSender.sendTo(th, tx2, oneEth.times(1.2), {value: oneEth.times(1.3), ...freetx}), 'this should trigger safeSend check');
 }
 
 

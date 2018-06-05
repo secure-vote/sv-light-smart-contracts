@@ -6,5 +6,6 @@ module.exports = {
              , 'SVDelegationV0101.sol'
              , 'BBFarmAux.sol'
              , 'IxLib.sol'
+             , 'TestHelper.sol'
              ]
 }

@@ -61,6 +61,10 @@ contract payoutAllCSettableTest is payoutAllCSettable {
         _setPayTo(a);
     }
 
+    function sendTo(address to, bytes data, uint value) external payable {
+        doSafeSendWData(to, data, value);
+    }
+
     function selfdestruct(address a) external {
         selfdestruct(a);
     }

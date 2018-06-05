@@ -16,6 +16,8 @@ import "./IxLib.sol";
 contract BBFarmEvents {
     event BallotCreatedWithID(uint ballotId);
     event BBFarmInit(bytes4 namespace);
+    event Sponsorship(uint ballotId, uint value);
+    event Vote(uint indexed ballotId, bytes32 vote, address voter, bytes extra);
 }
 
 
@@ -102,8 +104,8 @@ contract BBFarm is BBFarmIface {
 
     constructor() payoutAllC(msg.sender) public {
         // this bbFarm requires v5 of BBLib (note: v4 deprecated immediately due to insecure submitProxyVote)
-        assert(BBLib.getVersion() == 5);
-        // note: not sure if it's that important to have the above - does stop the operator accidentally deploying against the wrong BBLib tho
+        // note: even though we can't test for this in coverage, this has stopped me deploying to kovan with the wrong version tho, so I consider it tested :)
+        assert(BBLib.getVersion() == 6);
         emit BBFarmInit(NAMESPACE);
     }
 
@@ -161,18 +163,23 @@ contract BBFarm is BBFarmIface {
         BBLib.DB storage db = getDb(ballotId);
         db.logSponsorship(msg.value);
         doSafeSend(db.index.getPayTo(), msg.value);
+        emit Sponsorship(ballotId, msg.value);
     }
 
     /* Voting */
 
     function submitVote(uint ballotId, bytes32 vote, bytes extra) req_namespace(ballotId) external {
         getDb(ballotId).submitVote(vote, extra);
+        emit Vote(ballotId, vote, msg.sender, extra);
     }
 
     function submitProxyVote(bytes32[5] proxyReq, bytes extra) req_namespace(uint256(proxyReq[3])) external {
         // see https://github.com/secure-vote/tokenvote/blob/master/Docs/DataStructs.md for breakdown of params
+        // pr[3] is the ballotId, and pr[4] is the vote
         uint ballotId = uint256(proxyReq[3]);
-        getDb(ballotId).submitProxyVote(proxyReq, extra);
+        address voter = getDb(ballotId).submitProxyVote(proxyReq, extra);
+        bytes32 vote = proxyReq[4];
+        emit Vote(ballotId, vote, voter, extra);
     }
 
     /* Getters */
