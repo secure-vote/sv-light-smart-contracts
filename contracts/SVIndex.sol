@@ -9,16 +9,16 @@ pragma solidity ^0.4.24;
 //
 
 
-import "./SVCommon.sol";
-import "./IndexInterface.sol";
-import "./SVPayments.sol";
+import { owned, upgradePtr, payoutAllC } from "./SVCommon.sol";
+import "./hasVersion.sol";
 import "./EnsOwnerProxy.sol";
 import "./BPackedUtils.sol";
 import "./BBLib.sol";
-import "./BBFarmIface.sol";
-import "./CommunityAuction.sol";
+import { BBFarmIface } from "./BBFarm.sol";
+import { CommAuctionIface } from "./CommunityAuction.sol";
 import "./SVBallotConsts.sol";
-import "./SVIndexBackend.sol";
+import { IxBackendIface, ixBackendEvents } from "./SVIndexBackend.sol";
+import { IxPaymentsIface, ixPaymentEvents } from "./SVPayments.sol";
 
 
 contract ixEvents {
@@ -32,7 +32,83 @@ contract ixEvents {
 }
 
 
-contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents, ixEvents, SVBallotConsts {
+// this should really be an interface or explictly abstract, but alas solidity is ... immature
+contract IxIface is hasVersion,
+                    ixPaymentEvents,
+                    ixBackendEvents,
+                    ixEvents,
+                    SVBallotConsts,
+                    owned,
+                    upgradePtr,
+                    payoutAllC {
+
+    /* owner functions */
+    function addBBFarm(BBFarmIface bbFarm) external returns (uint8 bbFarmId);
+    function emergencySetABackend(bytes32 toSet, address newSC) external;
+    function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) external;
+    function emergencySetDOwner(bytes32 democHash, address newOwner) external;
+
+    /* global getters */
+    function getPayments() external view returns (IxPaymentsIface);
+    function getBackend() external view returns (IxBackendIface);
+    function getBBFarm(uint8 bbFarmId) external view returns (BBFarmIface);
+    function getBBFarmID(bytes4 bbNamespace) external view returns (uint8 bbFarmId);
+    function getCommAuction() external view returns (CommAuctionIface);
+
+    /* init a democ */
+    function dInit(address defualtErc20) external payable returns (bytes32);
+
+    /* democ owner / editor functions */
+    function setDEditor(bytes32 democHash, address editor, bool canEdit) external;
+    function setDOwner(bytes32 democHash, address owner) external;
+    function setDErc20(bytes32 democHash, address newErc20) external;
+    function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external;
+    function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
+    function dUpgradeToPremium(bytes32 democHash) external;
+    function dDowngradeToBasic(bytes32 democHash) external;
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) external;
+    function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) external;
+
+    /* democ getters (that used to be here) should be called on either backend or payments directly */
+    /* use IxLib for convenience functions from other SCs */
+
+    /* ballot deployment */
+    // only ix owner - used for adding past or special ballots
+    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) external;
+    function dDeployCommunityBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes) external payable;
+    function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable;
+
+
+    /* events */
+    event PaymentMade(uint[2] valAndRemainder);
+    event AddedBBFarm(uint8 bbFarmId);
+    event Emergency(bytes32 setWhat, address newSC);
+    event EmergencyBBFarm(uint8 bbFarmId, address bbFarm);
+    event EmergencyDemocOwner(bytes32 democHash, address newOwner);
+    event CommunityBallot(bytes32 democHash, uint256 ballotId);
+    event ManuallyAddedBallot(bytes32 democHash, uint256 ballotId, uint256 packed);
+    // from backend
+    event NewDemoc(bytes32 democHash);
+    event ManuallyAddedDemoc(bytes32 democHash, address erc20);
+    event NewBallot(bytes32 indexed democHash, uint ballotN);
+    event DemocOwnerSet(bytes32 indexed democHash, address owner);
+    event DemocEditorSet(bytes32 indexed democHash, address editor, bool canEdit);
+    event DemocEditorsWiped(bytes32 indexed democHash);
+    event DemocErc20Set(bytes32 indexed democHash, address erc20);
+    event DemocDataSet(bytes32 indexed democHash, bytes32 keyHash);
+    event DemocCatAdded(bytes32 indexed democHash, uint catId);
+    event DemocCatDeprecated(bytes32 indexed democHash, uint catId);
+    event DemocCommunityBallotsEnabled(bytes32 indexed democHash, bool enabled);
+    // from BBFarm
+    event BallotCreatedWithID(uint ballotId);
+}
+
+
+contract SVIndex is IxIface {
+    uint256 constant VERSION = 2;
+
+    /* backend & other SC storage */
+
     IxBackendIface backend;
     IxPaymentsIface payments;
     EnsOwnerProxy public ensOwnerPx;
@@ -40,8 +116,6 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     CommAuctionIface commAuction;
     // mapping from bbFarm namespace to bbFarmId
     mapping (bytes4 => uint8) bbFarmIdLookup;
-
-    uint256 constant _version = 2;
 
     //* MODIFIERS /
 
@@ -55,7 +129,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         _;
     }
 
-    //* FUNCTIONS *//
+    /* FUNCTIONS */
 
     // constructor
     constructor( IxBackendIface _b
@@ -63,7 +137,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
                , EnsOwnerProxy _ensOwnerPx
                , BBFarmIface _bbFarm0
                , CommAuctionIface _commAuction
-               ) public {
+               ) payoutAllC(msg.sender) public {
         backend = _b;
         payments = _pay;
         ensOwnerPx = _ensOwnerPx;
@@ -71,7 +145,13 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
         commAuction = _commAuction;
     }
 
-    //* UPGRADE STUFF */
+    /* payoutAllC */
+
+    function _getPayTo() internal view returns (address) {
+        return owner;
+    }
+
+    /* UPGRADE STUFF */
 
     function doUpgrade(address nextSC) only_owner() not_upgraded() external {
         doUpgradeInternal(nextSC);
@@ -156,7 +236,7 @@ contract SVLightIndex is owned, upgradePtr, payoutAllC, IxIface, ixBackendEvents
     //* GLOBAL INFO */
 
     function getVersion() external pure returns (uint256) {
-        return _version;
+        return VERSION;
     }
 
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */

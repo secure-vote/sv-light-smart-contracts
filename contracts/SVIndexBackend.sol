@@ -1,11 +1,14 @@
 pragma solidity 0.4.24;
 
 
+/**
+    Backend for the Index - all setters should be only_owner() or only_editors()
+ */
 
-import "./IndexInterface.sol";
-import "./SVCommon.sol";
+
+import { permissioned, payoutAllC } from "./SVCommon.sol";
 import "./BPackedUtils.sol";
-
+import "./hasVersion.sol";
 
 
 contract ixBackendEvents {
@@ -23,7 +26,48 @@ contract ixBackendEvents {
 }
 
 
-contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payoutAllC {
+// this should really be an interface, but alas solidity is ... immature
+contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC {
+    /* global getters */
+    function getGDemocsN() external view returns (uint);
+    function getGDemoc(uint id) external view returns (bytes32);
+    function getGErc20ToDemocs(address erc20) external view returns (bytes32[] democHashes);
+
+    /* owner functions */
+    function dAdd(bytes32 democHash, address erc20) external;
+
+    /* democ admin */
+    function dInit(address defaultErc20) external returns (bytes32 democHash);
+    function setDOwner(bytes32 democHash, address newOwner) external;
+    function setDEditor(bytes32 democHash, address editor, bool canEdit) external;
+    function setDNoEditors(bytes32 democHash) external;
+    function setDErc20(bytes32 democHash, address newErc20) external;
+    function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) external;
+    function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external;
+    function dDeprecateCategory(bytes32 democHash, uint catId) external;
+    function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) external;
+    function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed, bool countTowardsLimit) external;
+
+    /* global democ getters */
+    function getDOwner(bytes32 democHash) external view returns (address);
+    function isDEditor(bytes32 democHash, address editor) external view returns (bool);
+    function getDHash(bytes13 prefix) external view returns (bytes32);
+    function getDInfo(bytes32 democHash) external view returns (address erc20, address owner, uint256 nBallots);
+    function getDErc20(bytes32 democHash) external view returns (address);
+    function getDArbitraryData(bytes32 democHash, bytes key) external view returns (bytes value);
+    function getDBallotsN(bytes32 democHash) external view returns (uint256);
+    function getDBallotID(bytes32 democHash, uint n) external view returns (uint ballotId);
+    function getDCountedBasicBallotsN(bytes32 democHash) external view returns (uint256);
+    function getDCountedBasicBallotID(bytes32 democHash, uint256 n) external view returns (uint256);
+    function getDCategoriesN(bytes32 democHash) external view returns (uint);
+    function getDCategory(bytes32 democHash, uint catId) external view returns (bool deprecated, bytes32 name, bool hasParent, uint parent);
+    function getDCommBallotsEnabled(bytes32 democHash) external view returns (bool);
+}
+
+
+contract SVIndexBackend is IxBackendIface {
+    uint constant VERSION = 2;
+
     struct Democ {
         address erc20;
         address owner;
@@ -63,6 +107,22 @@ contract SVIndexBackend is IxBackendIface, permissioned, ixBackendEvents, payout
     // things to client apps s.t. the admin can turn them on and off.
     // arbitraryData[democHash][key]
     mapping (bytes32 => mapping (bytes32 => bytes)) arbitraryData;
+
+    /* constructor */
+
+    constructor() payoutAllC(msg.sender) public {
+        // do nothing
+    }
+
+    /* base contract overloads */
+
+    function _getPayoutTo() internal view returns (address) {
+        return owner;
+    }
+
+    function getVersion() external pure returns (uint) {
+        return VERSION;
+    }
 
     /* GLOBAL INFO */
 

@@ -13,7 +13,9 @@ pragma solidity 0.4.24;
  */
 
 
-import "./IndexInterface.sol";
+import { IxIface } from "./SVIndex.sol";
+import { BBFarmIface } from "./BBFarm.sol";
+import { IxPaymentsIface } from "./SVPayments.sol";
 
 
 library IxLib {

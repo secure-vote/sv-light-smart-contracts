@@ -8,9 +8,15 @@ for f in $(ls ./contracts | grep "sol$"); do
     ./bin/compile.sh -d contracts -c $f;
 done
 
-for f in $(ls ./_solDist/ | grep bin | grep -v Iface | grep -v Interface); do
+for f in $(ls ./_solDist/ | grep bin \
+                          | grep -v Iface \
+                          | grep -v Interface \
+                          | grep -v hasVersion \
+                          | grep -v payoutAllCSettable \
+                          ); do
     if [ "$(wc -c ./_solDist/$f | xargs | cut -d ' ' -f 1)" -eq "0" ]; then
         echo "ERROR: Null binary detected for $(basename $f | cut -d '.' -f 1)"
+        echo "If this is okay (the contract is abstract) then add it to the list of exceptions in compileAllSvLight.sh"
         exit 1
     fi
 done

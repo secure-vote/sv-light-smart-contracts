@@ -9,24 +9,23 @@ pragma solidity ^0.4.24;
 //
 
 
-import { permissioned, payoutAllC } from "./SVCommon.sol";
-import "./IndexInterface.sol";
+import { permissioned, payoutAllCSettable } from "./SVCommon.sol";
+import "./hasVersion.sol";
+// import "./SVIndex.sol";
 
 
+// local library just to give us a safe subtraction (usually for calculating time remaining)
 library SafeMath {
-
     function subToZero(uint a, uint b) internal pure returns (uint) {
         if (a < b) {  // then (a - b) would overflow
             return 0;
         }
         return a - b;
     }
-
 }
 
 
-
-contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
+contract ixPaymentEvents {
     event UpgradedToPremium(bytes32 indexed democHash);
     event GrantedAccountTime(bytes32 indexed democHash, uint additionalSeconds, bytes32 ref);
     event AccountPayment(bytes32 indexed democHash, uint additionalSeconds);
@@ -40,6 +39,63 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     event SetBallotsPer30Days(uint amount);
     event SetFreeExtension(bytes32 democHash, bool hasFreeExt);
     event SetDenyPremium(bytes32 democHash, bool isPremiumDenied);
+}
+
+
+// this should really be an interface, but alas solidity is ... immature
+contract IxPaymentsIface is hasVersion, ixPaymentEvents, permissioned, payoutAllCSettable {
+    /* in emergency break glass */
+    function emergencySetOwner(address newOwner) external;
+
+    /* financial calcluations */
+    function weiBuysHowManySeconds(uint amount) public view returns (uint secs);
+    function weiToCents(uint w) public view returns (uint);
+    function centsToWei(uint c) public view returns (uint);
+
+    /* account management */
+    function payForDemocracy(bytes32 democHash) external payable;
+    function doFreeExtension(bytes32 democHash) external;
+    function downgradeToBasic(bytes32 democHash) external;
+    function upgradeToPremium(bytes32 democHash) external;
+
+    /* account status - getters */
+    function accountInGoodStanding(bytes32 democHash) external view returns (bool);
+    function getSecondsRemaining(bytes32 democHash) external view returns (uint);
+    function getPremiumStatus(bytes32 democHash) external view returns (bool);
+    function getFreeExtension(bytes32 democHash) external view returns (bool);
+    function getAccount(bytes32 democHash) external view returns (bool isPremium, uint lastPaymentTs, uint paidUpTill, bool hasFreeExtension);
+    function getDenyPremium(bytes32 democHash) external view returns (bool);
+
+    /* admin utils for accounts */
+    function giveTimeToDemoc(bytes32 democHash, uint additionalSeconds, bytes32 ref) external;
+
+    /* admin setters global */
+    function setPayTo(address) external;
+    function setMinorEditsAddr(address) external;
+    function setBasicCentsPricePer30Days(uint amount) external;
+    function setBasicBallotsPer30Days(uint amount) external;
+    function setPremiumMultiplier(uint8 amount) external;
+    function setWeiPerCent(uint) external;
+    function setFreeExtension(bytes32 democHash, bool hasFreeExt) external;
+    function setDenyPremium(bytes32 democHash, bool isPremiumDenied) external;
+
+    /* global getters */
+    function getBasicCentsPricePer30Days() external view returns(uint);
+    function getBasicExtraBallotFeeWei() external view returns (uint);
+    function getBasicBallotsPer30Days() external view returns (uint);
+    function getPremiumMultiplier() external view returns (uint8);
+    function getPremiumCentsPricePer30Days() external view returns (uint);
+    function getWeiPerCent() external view returns (uint weiPerCent);
+    function getUsdEthExchangeRate() external view returns (uint centsPerEth);
+
+    /* payments stuff */
+    function getPaymentLogN() external view returns (uint);
+    function getPaymentLog(uint n) external view returns (bool _external, bytes32 _democHash, uint _seconds, uint _ethValue);
+}
+
+
+contract SVPayments is IxPaymentsIface {
+    uint constant VERSION = 2;
 
     struct Account {
         bool isPremium;
@@ -68,14 +124,10 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     mapping (bytes32 => Account) accounts;
     PaymentLog[] payments;
 
+    // can set this on freeExtension democs to deny them premium upgrades
     mapping (bytes32 => bool) denyPremium;
     // this is used for non-profits or organisations that have perpetual licenses, etc
     mapping (bytes32 => bool) freeExtension;
-
-    modifier owner_or(address addr) {
-        require(msg.sender == addr || msg.sender == owner, "!owner-or");
-        _;
-    }
 
 
     /* BREAK GLASS IN CASE OF EMERGENCY */
@@ -90,13 +142,19 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     /* END BREAK GLASS */
 
 
-    constructor(address _emergencyAdmin) public {
+    constructor(address payTo, address _emergencyAdmin) payoutAllCSettable(payTo) public {
         emergencyAdmin = _emergencyAdmin;
-        require(_emergencyAdmin != address(0), "backup-admin-null");
+        assert(_emergencyAdmin != address(0));
+    }
+
+    /* base SCs */
+
+    function getVersion() external pure returns (uint) {
+        return VERSION;
     }
 
     function() payable public {
-        _payTo.transfer(msg.value);
+        _getPayTo().transfer(msg.value);
     }
 
     function _modAccountBalance(bytes32 democHash, uint additionalSeconds) internal {
@@ -145,7 +203,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
         payments.push(PaymentLog(false, democHash, additionalSeconds, msg.value));
         emit AccountPayment(democHash, additionalSeconds);
 
-        _payTo.transfer(msg.value);
+        _getPayTo().transfer(msg.value);
     }
 
     function doFreeExtension(bytes32 democHash) external {
@@ -228,7 +286,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     /* admin setters global */
 
     function setPayTo(address newPayTo) only_owner() external {
-        _payTo = newPayTo;
+        _setPayTo(newPayTo);
     }
 
     function setMinorEditsAddr(address a) only_owner() external {
@@ -268,7 +326,7 @@ contract SVPayments is IxPaymentsIface, permissioned, payoutAllC {
     /* global getters */
 
     function getPayTo() external view returns (address) {
-        return _payTo;
+        return _getPayTo();
     }
 
     function getBasicCentsPricePer30Days() external view returns (uint) {
