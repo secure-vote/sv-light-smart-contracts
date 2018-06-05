@@ -211,23 +211,23 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
 
 
 const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner, ixBackend, doLog}) => {
-    const [user0, user1, user2, u3, u4, u5, u6] = accounts;
+    const [user0, u1, u2, u3, u4, u5, u6] = accounts;
 
-    const {democHash, dOwner} = await mkDemoc({svIx, erc20, txOpts: {from: user1, value: oneEth}})
+    const {democHash, dOwner} = await mkDemoc({svIx, erc20, txOpts: {from: u1, value: oneEth}})
 
     await scLog.log(`Created democ w hash ${democHash} and owner ${dOwner}`)
 
     // test some adminProps
-    assert.equal(await ixBackend.isDEditor(democHash, user1), true, "user1 should be editor to start with");
-    assert.equal(await ixBackend.getDOwner(democHash), user1, "user1 should be owner to start with");
-    await svIx.setDOwner(democHash, user2, {from: user1});
-    assert.equal(await ixBackend.isDEditor(democHash, user1), true, "user1 is still editor (not owner)");
-    assert.equal(await ixBackend.isDEditor(democHash, user2), true, "user2 is editor (owner)");
-    assert.equal(await ixBackend.getDOwner(democHash), user2, "user2 now owner");
-    await svIx.setDEditor(democHash, user1, false, {from: user2})
-    assert.equal(await ixBackend.isDEditor(democHash, user1), false, "user1 should not be editor 3984");
-    await svIx.setDEditor(democHash, user1, true, {from: user2})
-    assert.equal(await ixBackend.isDEditor(democHash, user1), true, "user1 should be editor again 2345");
+    assert.equal(await ixBackend.isDEditor(democHash, u1), true, "user1 should be editor to start with");
+    assert.equal(await ixBackend.getDOwner(democHash), u1, "user1 should be owner to start with");
+    await svIx.setDOwner(democHash, u2, {from: u1});
+    assert.equal(await ixBackend.isDEditor(democHash, u1), true, "user1 is still editor (not owner)");
+    assert.equal(await ixBackend.isDEditor(democHash, u2), true, "user2 is editor (owner)");
+    assert.equal(await ixBackend.getDOwner(democHash), u2, "user2 now owner");
+    await svIx.setDEditor(democHash, u1, false, {from: u2})
+    assert.equal(await ixBackend.isDEditor(democHash, u1), false, "user1 should not be editor 3984");
+    await svIx.setDEditor(democHash, u1, true, {from: u2})
+    assert.equal(await ixBackend.isDEditor(democHash, u1), true, "user1 should be editor again 2345");
 
     // test ercOwnerClaim
     await doLog("about to test owner erc20 claim")
@@ -236,14 +236,14 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner,
 
     assert.equal(await ixBackend.isDEditor(democHash, owner), true, "erc20 owner claim works (editor)");
     assert.equal(await ixBackend.getDOwner(democHash), owner, "erc20 owner claim works");
-    await assertRevert(svIx.dOwnerErc20Claim(democHash, {from: user2}), "erc20 owner can't claim if now actual owner")
+    await assertRevert(svIx.dOwnerErc20Claim(democHash, {from: u2}), "erc20 owner can't claim if now actual owner")
 
     await doLog("about to test owner erc20 claim while disabled")
     // test disable
-    const {democHash: dh2} = await mkDemoc({svIx, erc20, txOpts: {from: user2, value: oneEth}})
+    const {democHash: dh2} = await mkDemoc({svIx, erc20, txOpts: {from: u2, value: oneEth}})
 
     assert.equal(await ixBackend.getDErc20OwnerClaimEnabled(dh2), true, 'erc20 owner claim enabled by default')
-    await svIx.dDisableErc20OwnerClaim(dh2, {from: user2})
+    await svIx.dDisableErc20OwnerClaim(dh2, {from: u2})
     await assertRevert(svIx.dOwnerErc20Claim(dh2, {from: owner}), "erc20 owner can't claim if feature disabled")
 
     await svIx.dInit(erc20.address, true, {value: 1})  // create a democ where erc20 owner claims prohibited
@@ -251,15 +251,18 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner,
 
     await doLog("about to test controller erc20 claim")
     // test controller
-    const controlled = await ControlledTest.new({from: user1});
-    assert.equal(await controlled.controller(), user1, 'user1 is controller')
+    const controlled = await ControlledTest.new({from: u1});
+    assert.equal(await controlled.controller(), u1, 'user1 is controller')
 
-    const {democHash: dh3} = await mkDemoc({svIx, erc20: controlled, txOpts: {from: user2, value: oneEth}})
+    const {democHash: dh3} = await mkDemoc({svIx, erc20: controlled, txOpts: {from: u2, value: oneEth}})
     await doLog('about to claim owner for controlled token')
     await assertRevert(svIx.dOwnerErc20Claim(dh3, {from: u4}), 'not controller = no claim')
-    await svIx.dOwnerErc20Claim(dh3, {from: user1}) // "erc20 controller can claim"
-    await assertRevert(svIx.dOwnerErc20Claim(dh3, {from: user1}), 'disabled after use')
-    assert.equal(await ixBackend.getDOwner(dh3), user1, 'user1 is owner now!');
+    await svIx.dOwnerErc20Claim(dh3, {from: u1}) // "erc20 controller can claim"
+    await assertRevert(svIx.dOwnerErc20Claim(dh3, {from: u1}), 'disabled after use')
+    assert.equal(await ixBackend.getDOwner(dh3), u1, 'user1 is owner now!');
+
+    const {democHash: dh4} = await mkDemoc({svIx, erc20: u1, txOpts: {from: u2, value: oneEth}})
+    await assertRevert(svIx.dOwnerErc20Claim(dh4, {from: u4}), 'no owner or controller method = no claim')
 }
 
 
@@ -305,8 +308,6 @@ const testPaymentsForDemoc = async ({accounts, svIx, erc20, ixPayments, owner, s
     const balPre = await getBalance(owner);
     await ixPayments.sendTransaction({from: accounts[2], value: oneEth});
     assert.deepEqual(balPre.plus(toBigNumber(oneEth)), await getBalance(owner), `ixPayments fallback works (pre-balance: ${balPre.toString()}`);
-
-    // any more tests?
 }
 
 
@@ -578,7 +579,8 @@ const testPrefix = async ({svIx, owner, doLog, ensPR, tld, erc20, ixBackend}) =>
 }
 
 
-const testRevertCases = async ({svIx, owner, doLog, erc20, ixPayments, ixBackend}) => {
+const testRevertCases = async ({svIx, accounts, owner, doLog, erc20, ixPayments, ixBackend, commBSimple}) => {
+    const [,u1,u2,u3,u4] = accounts;
     await asyncAssertThrow(() => SVPayments.new(zeroAddr), "payments assert-throws on zeroAddr")
 
     const {democHash} = await mkDemoc({svIx, erc20, txOpts: {value: 1000}})
@@ -590,8 +592,12 @@ const testRevertCases = async ({svIx, owner, doLog, erc20, ixPayments, ixBackend
     await assertRevert(svIx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s, e, USE_ETH | USE_NO_ENC | USE_TESTING)), 'should revert as testing ballots cant ixBackend deployed through index')
     await svIx.dDeployBallot(democHash, genRandomBytes32(), zeroHash,              mkPacked(s, e, USE_ETH | USE_NO_ENC))
 
-    await ixBackend.dAdd(toHex("test democ sldkfjlskdjlsk"), erc20.address)
-    await asyncAssertThrow(() => ixBackend.dAdd(toHex("test democ sldkfjlskdjlsk"), erc20.address), 'conflict of democHash prefix')
+    await ixBackend.dAdd(toHex("test democ sldkfjlskdjlsk"), erc20.address, false)
+    await asyncAssertThrow(() => ixBackend.dAdd(toHex("test democ sldkfjlskdjlsk"), erc20.address, false), 'conflict of democHash prefix')
+
+    // trigger commBSimple upgrade revert
+    await commBSimple.upgradeMe(u2, {from: u1})
+    await assertRevert(commBSimple.upgradeMe(u3, {from : u1}), 'cant upgrade same acct twice')
 }
 
 
@@ -943,11 +949,6 @@ const testBasicExtraBallots = async ({svIx, owner, doLog, erc20, ixPayments, acc
     const [s2] = await genStartEndTimes()
     await assertRevert(svIx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s2, s2 + (2 * secsLeft) + 100, USE_ETH | USE_NO_ENC | IS_BINDING)), 'cannot create ballot with end time > 2x the seconds remaining')
     await svIx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, mkPacked(s2, s2 + (2 * secsLeft) - 100, USE_ETH | USE_NO_ENC | IS_BINDING))
-
-    // test _ballotLimitOperations -> earlyBallotTs < now - 30 days
-    // await throwTodoAsync(doLog)
-    console.log("TEST INCOMPLETE - DON'T FORGET ME IF WE HAVEN'T TESTED THIS STUFF")
-    // test require extra ballot fee - that seems not to be working
 }
 
 
@@ -1025,10 +1026,6 @@ const testOwnerAddBallot  = async ({svIx, accounts, owner, erc20, doLog, ixBacke
 
     await svIx.dAddBallot(democHash, 666, await mkStdPacked(), {from: owner})
     await assertRevert(svIx.dAddBallot(democHash, 666, await mkStdPacked(), {from: dAdmin}), 'democAdmin cant call dAddBallot')
-
-    // need to add test for ballot that is endTime > 2x seconds left
-    // await throwTodoAsync(doLog)
-    console.log("DONT FORGET ABOUT THIS TEST!")
 }
 
 
@@ -1090,12 +1087,20 @@ const testDeprecateBBFarm = async ({doLog, svIx, bbFarm, ixBackend, ixPayments, 
     await svIx.addBBFarm(bbf2.address, {from: owner})
     // this works now because we're using the second bbfarm via the first byte of extraData
     await svIx.dDeployBallot(democHash, genRandomBytes32(), "0x01" + genRandomBytes(31).slice(2), await mkStdPacked(), {from: owner})
+    assert.deepEqual(await svIx.getBBFarmID('0x00001337'), toBigNumber(1), 'namespace lookup works')
 }
 
 
-const testRefundIfAccidentalValueTfer = async ({doLog, svIx, ixBackend, ixPayments, erc20, owner, accounts: [, u1,u2,u3,u4]}) => {
-    // await throwTodoAsync(doLog);
-    console.log("DONT FORGET TO IMPLEMENT ME")
+const testRefundIfAccidentalValueTfer = async ({doLog, svIx, ixBackend, ixPayments, erc20, owner, accounts: [,u1,u2,u3,u4]}) => {
+    const {democHash, dOwner} = await mkDemoc({svIx, erc20, txOpts: {value: oneEth, from: u1}})
+
+    assert.equal(await ixPayments.accountInGoodStanding(democHash), true, 'account is in good stnaidng')
+
+    const b1 = await getBalance(dOwner);
+    await svIx.dDeployBallot(democHash, genRandomBytes32(), zeroHash, await mkStdPacked(), {value: oneEth, gasPrice: 0, from: dOwner})
+    const b2 = await getBalance(dOwner)
+
+    assert.deepEqual(b1, b2, 'balance should not decrease if user accidentally sends funds to dDeployBallot');
 }
 
 
@@ -1162,12 +1167,20 @@ const testGasOfBallots = async ({svIx, owner, erc20, ixBackend}) => {
 
 
 contract("SVLightIndex", function (accounts) {
+    const skipOnEnvVar = (testStr, testF, envVarStr) => {
+        const eVar = process.env[envVarStr]
+        const cond = (eVar && eVar.toString().toLowerCase() === "true") === true
+        console.log(`Test (${testStr}) will be skipped if the following env var is present:\n${envVarStr}=true`)
+        console.log(cond ? "running this time" : "skipping this time")
+        const defaultF = async () => { return true; }
+        return [testStr, cond ? testF : defaultF]
+    }
+
     tests = [
         ["test instantiation", testInit],
         ["test gas ballots", testGasOfBallots],
         ["test payments setting values", testPaymentsSettingValues],
         ["test granting self time", testGrantingSelfTime],
-        ["test adding BBFarm", testAddingBBFarm],
         ["test deprecation of bbfarms", testDeprecateBBFarm],
         ["test refund on accidental tfer to paybale methods", testRefundIfAccidentalValueTfer],
         ["test nfp tier", testNFPTierAndPayments],
@@ -1188,6 +1201,7 @@ contract("SVLightIndex", function (accounts) {
         ["test upgrade", testUpgrade],
         ["test creating democ and permissions", testCreateDemoc],
         ["test payments for democ", testPaymentsForDemoc],
+        skipOnEnvVar("test adding BBFarm", testAddingBBFarm, "TEST_ADD_BBFARMS"),
 
     ];
     S.map(([desc, f]) => it(desc, wrapTestIx({accounts}, f)), tests);

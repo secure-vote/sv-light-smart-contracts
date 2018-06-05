@@ -36,10 +36,10 @@ contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC
     function getGErc20ToDemocs(address erc20) external view returns (bytes32[] democHashes);
 
     /* owner functions */
-    function dAdd(bytes32 democHash, address erc20) external;
+    function dAdd(bytes32 democHash, address erc20, bool disableErc20OwnerClaim) external;
 
     /* democ admin */
-    function dInit(address defaultErc20) external returns (bytes32 democHash);
+    function dInit(address defaultErc20, address initOwner, bool disableErc20OwnerClaim) external returns (bytes32 democHash);
     function setDOwner(bytes32 democHash, address newOwner) external;
     function setDOwnerFromClaim(bytes32 democHash, address newOwner) external;
     function setDEditor(bytes32 democHash, address editor, bool canEdit) external;
@@ -148,16 +148,9 @@ contract SVIndexBackend is IxBackendIface {
         return erc20ToDemocs[erc20];
     }
 
-    /* Owner functions */
-
-    function dAdd(bytes32 democHash, address erc20) only_owner() external {
-        _addDemoc(democHash, erc20);
-        emit ManuallyAddedDemoc(democHash, erc20);
-    }
-
     /* DEMOCRACY ADMIN FUNCTIONS */
 
-    function _addDemoc(bytes32 democHash, address erc20) internal {
+    function _addDemoc(bytes32 democHash, address erc20, address initOwner, bool disableErc20OwnerClaim) internal {
         democList.push(democHash);
         democs[democHash].erc20 = erc20;
         // this should never trigger if we have a good security model - entropy for 13 bytes ~ 2^(8*13) ~ 10^31
@@ -167,19 +160,36 @@ contract SVIndexBackend is IxBackendIface {
         emit NewDemoc(democHash);
     }
 
-    function dInit(address defaultErc20) only_editors() external returns (bytes32 democHash) {
+    /* owner democ admin functions */
+
+    function dAdd(bytes32 democHash, address erc20, bool disableErc20OwnerClaim) only_owner() external {
+        _addDemoc(democHash, erc20, msg.sender, disableErc20OwnerClaim);
+        emit ManuallyAddedDemoc(democHash, erc20);
+    }
+
+    /* user democ admin functions */
+
+    function dInit(address defaultErc20, address initOwner, bool disableErc20OwnerClaim) only_editors() external returns (bytes32 democHash) {
         // generating the democHash in this way guarentees it'll be unique/hard-to-brute-force
         // (particularly because prevBlockHash and now are part of the hash)
         democHash = keccak256(abi.encodePacked(democList.length, blockhash(block.number-1), defaultErc20, now));
-        _addDemoc(democHash, defaultErc20);
+        _addDemoc(democHash, defaultErc20, initOwner, disableErc20OwnerClaim);
+        _setDOwner(democHash, initOwner);
+    }
+
+    function _setDOwner(bytes32 democHash, address newOwner) internal {
+        Democ storage d = democs[democHash];
+        uint epoch = d.editorEpoch;
+        d.owner = newOwner;
+        // unset prev owner as editor - does little if one was not set
+        d.editors[epoch][d.owner] = false;
+        // make new owner an editor too
+        d.editors[epoch][newOwner] = true;
+        emit DemocOwnerSet(democHash, newOwner);
     }
 
     function setDOwner(bytes32 democHash, address newOwner) only_editors() external {
-        Democ storage d = democs[democHash];
-        d.owner = newOwner;
-        // make them an editor too
-        d.editors[d.editorEpoch][newOwner] = true;
-        emit DemocOwnerSet(democHash, newOwner);
+        _setDOwner(democHash, newOwner);
     }
 
     function setDOwnerFromClaim(bytes32 democHash, address newOwner) only_editors() external {
@@ -252,7 +262,7 @@ contract SVIndexBackend is IxBackendIface {
 
     //* ADD BALLOT TO RECORD */
 
-    function _commitBallot(bytes32 democHash, uint ballotId, uint256 packed, bool recordTowardsBasicLimit) internal {
+    function _commitBallot(bytes32 democHash, uint ballotId, uint256 packed, bool countTowardsLimit) internal {
         uint16 subBits;
         subBits = BPackedUtils.packedToSubmissionBits(packed);
 
@@ -260,13 +270,14 @@ contract SVIndexBackend is IxBackendIface {
         democs[democHash].allBallots.push(ballotId);
 
         // do this for anything that doesn't qualify as a community ballot
-        if (recordTowardsBasicLimit) {
+        if (countTowardsLimit) {
             democs[democHash].includedBasicBallots.push(ballotId);
         }
 
         emit NewBallot(democHash, localBallotId);
     }
 
+    // what SVIndex uses to add a ballot
     function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed, bool countTowardsLimit) only_editors() external {
         _commitBallot(democHash, ballotId, packed, countTowardsLimit);
     }

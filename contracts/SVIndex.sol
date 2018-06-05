@@ -232,14 +232,7 @@ contract SVIndex is IxIface {
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
     function dInit(address defaultErc20, bool disableErc20OwnerClaim) not_upgraded() external payable returns (bytes32) {
-        bytes32 democHash = backend.dInit(defaultErc20);
-
-        backend.setDOwner(democHash, msg.sender);
-
-        if (disableErc20OwnerClaim) {
-            backend.dDisableErc20OwnerClaim(democHash);
-        }
-
+        bytes32 democHash = backend.dInit(defaultErc20, msg.sender, disableErc20OwnerClaim);
         payments.payForDemocracy.value(msg.value)(democHash);
         return democHash;
     }
@@ -349,10 +342,15 @@ contract SVIndex is IxIface {
         // OR (the ballot qualifies as a community ballot
         //     AND the admins have _disabled_ community ballots).
         bool countTowardsLimit = checkLimit;
+        bool performedSend;
         if (checkLimit) {
             uint64 endTime = BPackedUtils.packedToEndTime(packed);
-            countTowardsLimit = _basicBallotLimitOperations(democHash, _bbFarm);
+            (countTowardsLimit, performedSend) = _basicBallotLimitOperations(democHash, _bbFarm);
             _accountOkayChecks(democHash, endTime);
+        }
+
+        if (!performedSend && msg.value > 0) {
+            doSafeSend(msg.sender, msg.value);
         }
 
         ballotId = _bbFarm.initBallot(
@@ -412,7 +410,7 @@ contract SVIndex is IxIface {
         require(secsLeft * 2 > secsToEndTime, "unpaid");
     }
 
-    function _basicBallotLimitOperations(bytes32 democHash, BBFarmIface _bbFarm) internal returns (bool) {
+    function _basicBallotLimitOperations(bytes32 democHash, BBFarmIface _bbFarm) internal returns (bool shouldCount, bool performedSend) {
         // if we're an official ballot and the democ is basic, ensure the democ
         // isn't over the ballots/mo limit
         if (payments.getPremiumStatus(democHash) == false) {
@@ -422,7 +420,7 @@ contract SVIndex is IxIface {
             // if the democ has less than nBallotsAllowed then it's guarenteed to be okay
             if (nBallotsAllowed > nBallotsBasicCounted) {
                 // and we should count this ballot
-                return true;
+                return (true, false);
             }
 
             // we want to check the creation timestamp of the nth most recent ballot
@@ -438,7 +436,7 @@ contract SVIndex is IxIface {
             // if the earlyBallot was created more than 30 days in the past we should
             // count the new ballot
             if (earlyBallotTs < now - 30 days) {
-                return true;
+                return (true, false);
             }
 
             // at this point it may be the case that we shouldn't allow the ballot
@@ -457,9 +455,9 @@ contract SVIndex is IxIface {
 
             // only in this case do we want to return false - don't count towards the
             // limit because it's been paid for here.
-            return false;
+            return (false, true);
         } else {  // if we're premium we don't count ballots
-            return false;
+            return (false, false);
         }
     }
 }

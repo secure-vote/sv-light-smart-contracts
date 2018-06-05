@@ -78,6 +78,7 @@ contract IxPaymentsIface is hasVersion, ixPaymentEvents, permissioned, payoutAll
     function setWeiPerCent(uint) external;
     function setFreeExtension(bytes32 democHash, bool hasFreeExt) external;
     function setDenyPremium(bytes32 democHash, bool isPremiumDenied) external;
+    function setMinWeiForDInit(uint amount) external;
 
     /* global getters */
     function getBasicCentsPricePer30Days() external view returns(uint);
@@ -87,6 +88,7 @@ contract IxPaymentsIface is hasVersion, ixPaymentEvents, permissioned, payoutAll
     function getPremiumCentsPricePer30Days() external view returns (uint);
     function getWeiPerCent() external view returns (uint weiPerCent);
     function getUsdEthExchangeRate() external view returns (uint centsPerEth);
+    function getMinWeiForDInit() external view returns (uint);
 
     /* payments stuff */
     function getPaymentLogN() external view returns (uint);
@@ -120,6 +122,8 @@ contract SVPayments is IxPaymentsIface {
     uint basicBallotsPer30Days = 10;
     uint8 premiumMultiplier = 5;
     uint weiPerCent = 0.000016583747 ether;  // $603, 4th June 2018
+
+    uint minWeiForDInit = 1;  // minimum 1 wei - match existing behaviour in SVIndex
 
     mapping (bytes32 => Account) accounts;
     PaymentLog[] payments;
@@ -323,6 +327,10 @@ contract SVPayments is IxPaymentsIface {
         emit SetDenyPremium(democHash, isPremiumDenied);
     }
 
+    function setMinWeiForDInit(uint amount) owner_or(minorEditsAddr) external {
+        minWeiForDInit = amount;
+    }
+
     /* global getters */
 
     function getBasicCentsPricePer30Days() external view returns (uint) {
@@ -356,6 +364,10 @@ contract SVPayments is IxPaymentsIface {
     function getUsdEthExchangeRate() external view returns (uint) {
         // this returns cents per ether
         return 1 ether / weiPerCent;
+    }
+
+    function getMinWeiForDInit() external view returns (uint) {
+        return minWeiForDInit;
     }
 
     /* payments stuff */
