@@ -7,13 +7,13 @@ pragma solidity 0.4.24;
  * which means most (ideally all) functions should be moved here.
  */
 
+
 import "./SVCommon.sol";
-import { IxIface } from "./IndexInterface.sol";
-import { BallotBoxIface } from "./BallotBoxIface.sol";
-import { MemArrApp } from "../libs/MemArrApp.sol";
-import { SVBallotConsts } from "./SVBallotConsts.sol";
-import { BPackedUtils } from "./BPackedUtils.sol";
-import { BytesLib } from "../libs/BytesLib.sol";
+import "./SVIndex.sol";
+import "./SVBallotConsts.sol";
+import "./BPackedUtils.sol";
+import "../libs/BytesLib.sol";
+
 
 library BBLib {
     using BytesLib for bytes;
@@ -124,7 +124,7 @@ library BBLib {
 
     /* Library meta */
 
-    function getVersion() external view returns (uint) {
+    function getVersion() external pure returns (uint) {
         // even though this is constant we want to make sure that it's actually
         // callable on Ethereum so we don't accidentally package the constant code
         // in with an SC using BBLib. This function _must_ be external.

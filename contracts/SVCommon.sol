@@ -1,4 +1,4 @@
-pragma solidity ^0.4.22;
+pragma solidity ^0.4.24;
 
 
 // Some common functions among SCs
@@ -32,14 +32,35 @@ contract safeSend {
 
 // just provides a payoutAll method that sends to
 contract payoutAllC is safeSend {
-    address _payTo;
+    address private _payTo;
 
-    constructor() public {
-        _payTo = msg.sender;
+    constructor(address initPayTo) public {
+        // DEV NOTE: you can overwrite _getPayTo if you want to reuse other storage vars
+        assert(initPayTo != address(0));
+    }
+
+    function _getPayTo() internal view returns (address) {
+        return _payTo;
+    }
+
+    function _setPayTo(address newPayTo) internal {
+        _payTo = newPayTo;
     }
 
     function payoutAll() external {
-        doSafeSend(_payTo, address(this).balance);
+        doSafeSend(_getPayTo(), address(this).balance);
+    }
+}
+
+
+// version of payoutAllC that requires getters and setters
+contract payoutAllCSettable is payoutAllC {
+    constructor (address initPayTo) payoutAllC(initPayTo) public {
+    }
+
+    function setPayTo(address) external;
+    function getPayTo() external view returns (address) {
+        return _getPayTo();
     }
 }
 
@@ -52,6 +73,11 @@ contract owned {
 
     modifier only_owner() {
         require(msg.sender == owner, "only_owner: forbidden");
+        _;
+    }
+
+    modifier owner_or(address addr) {
+        require(msg.sender == addr || msg.sender == owner, "!owner-or");
         _;
     }
 

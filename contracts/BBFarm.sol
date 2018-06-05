@@ -5,15 +5,76 @@ pragma solidity ^0.4.24;
  * SVLightBallotBox within a centralised container (like the Index).
  */
 
-import { BBLib } from "./BBLib.sol";
+import "./BBLib.sol";
 import { permissioned, payoutAllC } from "./SVCommon.sol";
-import { IxIface } from "./IndexInterface.sol";
+import "./hasVersion.sol";
+import { IxIface } from "./SVIndex.sol";
 import "./BPackedUtils.sol";
 import "./IxLib.sol";
-import "../libs/MemArrApp.sol";
-import "./BBFarmIface.sol";
 
-contract BBFarm is BBFarmIface, permissioned, payoutAllC {
+
+contract BBFarmEvents {
+    event BallotCreatedWithID(uint ballotId);
+    event BBFarmInit(bytes4 namespace);
+}
+
+
+contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
+    /* global bbfarm getters */
+
+    function getNamespace() external view returns (bytes4);
+    function getBBLibVersion() external view returns (uint256);
+    function getNBallots() external view returns (uint256);
+
+    /* init a ballot */
+
+    // note that the ballotId returned INCLUDES the namespace.
+    function initBallot( bytes32 specHash
+                       , uint256 packed
+                       , IxIface ix
+                       , address bbAdmin
+                       , bytes24 extraData
+                       ) external returns (uint ballotId);
+
+    /* Sponsorship of ballots */
+
+    function sponsor(uint ballotId) external payable;
+
+    /* Voting functions */
+
+    function submitVote(uint ballotId, bytes32 vote, bytes extra) external;
+    function submitProxyVote(bytes32[5] proxyReq, bytes extra) external;
+
+    /* Ballot Getters */
+
+    function getDetails(uint ballotId, address voter) external view returns
+            ( bool hasVoted
+            , uint nVotesCast
+            , bytes32 secKey
+            , uint16 submissionBits
+            , uint64 startTime
+            , uint64 endTime
+            , bytes32 specHash
+            , bool deprecated
+            , address ballotOwner
+            , bytes16 extraData);
+
+    function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra);
+    function getTotalSponsorship(uint ballotId) external view returns (uint);
+    function getSponsorsN(uint ballotId) external view returns (uint);
+    function getSponsor(uint ballotId, uint sponsorN) external view returns (address sender, uint amount);
+    function getCreationTs(uint ballotId) external view returns (uint);
+
+    /* Admin on ballots */
+    function revealSeckey(uint ballotId, bytes32 sk) external;
+    function setEndTime(uint ballotId, uint64 newEndTime) external;  // note: testing only
+    function setDeprecated(uint ballotId) external;
+    function setBallotOwner(uint ballotId, address newOwner) external;
+}
+
+
+
+contract BBFarm is BBFarmIface {
     using BBLib for BBLib.DB;
     using IxLib for IxIface;
 
@@ -29,9 +90,6 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
     // also gives us some space to play with low numbers if we want.
     uint nBallots = 0;
 
-    event BallotCreatedWithID(uint ballotId);
-    event BBFarmInit(bytes4 namespace);
-
     /* modifiers */
 
     modifier req_namespace(uint ballotId) {
@@ -42,19 +100,27 @@ contract BBFarm is BBFarmIface, permissioned, payoutAllC {
 
     /* Constructor */
 
-    constructor() public {
+    constructor() payoutAllC(msg.sender) public {
         // this bbFarm requires v5 of BBLib (note: v4 deprecated immediately due to insecure submitProxyVote)
         assert(BBLib.getVersion() == 5);
         // note: not sure if it's that important to have the above - does stop the operator accidentally deploying against the wrong BBLib tho
         emit BBFarmInit(NAMESPACE);
     }
 
-    function getNamespace() external view returns (bytes4) {
-        return NAMESPACE;
+    /* base SCs */
+
+    function _getPayTo() internal view returns (address) {
+        return owner;
     }
 
-    function getVersion() external view returns (uint) {
+    function getVersion() external pure returns (uint) {
         return VERSION;
+    }
+
+    /* global funcs */
+
+    function getNamespace() external view returns (bytes4) {
+        return NAMESPACE;
     }
 
     function getBBLibVersion() external view returns (uint256) {

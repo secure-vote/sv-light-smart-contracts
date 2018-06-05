@@ -1,6 +1,7 @@
 pragma experimental ABIEncoderV2;
+pragma solidity 0.4.24;
 
-import "./BBFarmIface.sol";
+import "./BBFarm.sol";
 import "../libs/MemArrApp.sol";
 
 contract BBFarmAux {

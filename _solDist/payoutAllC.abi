@@ -1,1 +1,1 @@
-[{"constant":false,"inputs":[],"name":"payoutAll","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"inputs":[],"payable":false,"stateMutability":"nonpayable","type":"constructor"}]
+[{"constant":false,"inputs":[],"name":"payoutAll","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"inputs":[{"name":"initPayTo","type":"address"}],"payable":false,"stateMutability":"nonpayable","type":"constructor"}]
