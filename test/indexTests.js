@@ -13,6 +13,7 @@ const BBFarm = artifacts.require("./BBFarm")
 const BBFarmTesting = artifacts.require("./BBFarmTesting")
 const CommunityAuctionSimple = artifacts.require("./CommunityAuctionSimple")
 const ControlledTest = artifacts.require("./ControlledTest")
+const payoutAllTest = artifacts.require("./payoutAllCSettableTest")
 
 const nh = require('eth-ens-namehash');
 
@@ -744,6 +745,16 @@ const testPayoutAll = async ({svIx, ixPayments, owner, doLog, accounts, ixBacken
     await ixPayments.payoutAll()
     assert.equal(await getBalance(ixPayments.address), 0, 'ixPayments has sent balance away')
     assert.deepEqual(await getBalance(newPayTo), balPre.plus(oneEth), 'u1 now has one extra ether due to payoutAll')
+
+
+    const testPayTo = async (asyncMkF) => {
+        const sender = accounts[2];
+        const payTo = accounts[3];
+
+        const c = await payoutAllTest.new(sender, {from: sender});
+
+    }
+
 
     // note - need to test via balances here :(
     // test also on Index, IndexBackend - but importantly we need to test changing the owner to make sure that part works

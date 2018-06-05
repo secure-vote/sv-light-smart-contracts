@@ -1,6 +1,10 @@
 const Permissioned = artifacts.require("./permissioned");
 const HasAdmins = artifacts.require("./hasAdmins");
 const EmitterTesting = artifacts.require("./EmitterTesting");
+const safeSend = artifacts.require("./safeSend")
+const payoutAllC = artifacts.require("./payoutAllC")
+const payoutAllCSettable = artifacts.require("./payoutAllCSettableTest")
+const TestHelper = artifacts.require("./TestHelper")
 
 const nh = require('eth-ens-namehash');
 
@@ -77,17 +81,19 @@ const testHasAdmins = async ({owner, accounts}) => {
 
 
 const testSafeSend = async({owner, accounts}) => {
-    await throwTodoAsync()
+
 }
 
 
 const testPayoutAllC = async({owner, accounts}) => {
     const [,u1,u2,u3] = accounts;
 
-    await assertRevert(payoutAllC(0), 'payoutAllC reverts on 0 addr')
+    await asyncAssertThrow(() => payoutAllC.new(0), 'payoutAllC assert-throws on 0 addr')
 
-    const c = await payoutAllCSettable(u1);
+    const c = await payoutAllCSettable.new(u1);
     assert.equal(await c.getPayTo(), u1, 'payoutAllCSettable returns owner on getPayTo')
+    await c.setPayTo(u2);
+    assert.equal(await c.getPayTo(), u2, 'payoutAllCSettable returns u2 on getPayTo (after setting)')
 }
 
 

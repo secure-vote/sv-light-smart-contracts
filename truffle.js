@@ -20,7 +20,7 @@ module.exports = {
       gas: 19000000,
       network_id: "*", // Match any network id
       gasPrice: 1,
-      solc: { optimizer: { enabled: true, runs: 1 } },  // runs=1 seems to give lowest gas usage for deploying ballots...
+      // solc: { optimizer: { enabled: true, runs: 1 } },  // runs=1 seems to give lowest gas usage for deploying ballots...
     },
     testrpc: {
       host: "localhost",
