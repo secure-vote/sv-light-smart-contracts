@@ -23,6 +23,7 @@ contract ixBackendEvents {
     event DemocCatAdded(bytes32 indexed democHash, uint catId);
     event DemocCatDeprecated(bytes32 indexed democHash, uint catId);
     event DemocCommunityBallotsEnabled(bytes32 indexed democHash, bool enabled);
+    event DemocErc20OwnerClaimDisabled(bytes32 indexed democHash);
 }
 
 
@@ -46,6 +47,9 @@ contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external;
     function dDeprecateCategory(bytes32 democHash, uint catId) external;
     function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) external;
+    function dDisableErc20OwnerClaim(bytes32 democHash) external;
+
+    /* actually add a ballot */
     function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed, bool countTowardsLimit) external;
 
     /* global democ getters */
@@ -62,6 +66,7 @@ contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC
     function getDCategoriesN(bytes32 democHash) external view returns (uint);
     function getDCategory(bytes32 democHash, uint catId) external view returns (bool deprecated, bytes32 name, bool hasParent, uint parent);
     function getDCommBallotsEnabled(bytes32 democHash) external view returns (bool);
+    function getDErc20OwnerClaimEnabled(bytes32 democHash) external view returns (bool);
 }
 
 
@@ -72,6 +77,7 @@ contract SVIndexBackend is IxBackendIface {
         address erc20;
         address owner;
         bool communityBallotsDisabled;
+        bool erc20OwnerClaimDisabled;
         uint editorEpoch;
         mapping (uint => mapping (address => bool)) editors;
         uint256[] allBallots;
@@ -165,7 +171,10 @@ contract SVIndexBackend is IxBackendIface {
     }
 
     function setDOwner(bytes32 democHash, address newOwner) only_editors() external {
-        democs[democHash].owner = newOwner;
+        Democ storage d = democs[democHash];
+        d.owner = newOwner;
+        // make them an editor too
+        d.editors[d.editorEpoch][newOwner] = true;
         emit DemocOwnerSet(democHash, newOwner);
     }
 
@@ -211,6 +220,11 @@ contract SVIndexBackend is IxBackendIface {
     function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) only_editors() external {
         democs[democHash].communityBallotsDisabled = !enabled;
         emit DemocCommunityBallotsEnabled(democHash, enabled);
+    }
+
+    function dDisableErc20OwnerClaim(bytes32 democHash) only_editors() external {
+        democs[democHash].erc20OwnerClaimDisabled = true;
+        emit DemocErc20OwnerClaimDisabled(democHash);
     }
 
     //* ADD BALLOT TO RECORD */
@@ -291,5 +305,9 @@ contract SVIndexBackend is IxBackendIface {
 
     function getDCommBallotsEnabled(bytes32 democHash) external view returns (bool) {
         return !democs[democHash].communityBallotsDisabled;
+    }
+
+    function getDErc20OwnerClaimEnabled(bytes32 democHash) external view returns (bool) {
+        return !democs[democHash].erc20OwnerClaimDisabled;
     }
 }

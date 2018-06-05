@@ -94,15 +94,7 @@ const sendSCMethod = async (sc, method, acct, silent = true) => {
 }
 
 
-const mkDeployFresh = () => S.Nothing;
-
-
-const mkDeploy = ({ dev, backend, payments, adminPxF, ballotBoxF, ensProxy, ensOwnerProxy
-                  , paymentsEmergencyAdmin, ensIxDomain }) => {
-
-
-
-}
+const mkDeployFresh = () => S.Nothing
 
 
 const mkPromise = (f, ...args) => {
@@ -178,22 +170,22 @@ const deployContract = async ({name, deployAcct, arguments = [], srcDir = DEFAUL
 
 
 
-const fullDeploy = async ({dev, deployAcct, index, backend, payments, adminPxF, bbFarm, deployOptions, globalConfig, paymentsEmergencyAdmin, ensProxy, ensOwnerProxy, ensIxDomain, ensProxyIsGen1, skipPermissions}) => {
+const fullDeploy = async ({dev, commAuction, deployAcct, index, backend, payments, adminPxF, bbFarm, deployOptions, globalConfig, paymentsEmergencyAdmin, ensProxy, ensOwnerProxy, ensIxDomain, ensProxyIsGen1, skipPermissions}) => {
     const _load = filename => loadDetails(filename, "_solDist");
 
     if (S.isNothing(deployOptions)) {
         backend = backend || await deployContract({deployAcct, name: 'SVIndexBackend'})
         payments = payments || await deployContract({deployAcct, name: 'SVPayments', arguments: [paymentsEmergencyAdmin]})
-        adminPxF = adminPxF || await deployContract({deployAcct, name: 'SVAdminPxFactory'})
         bbFarm = bbFarm || await deployContract({deployAcct, name: 'BBFarm'})
+        commAuction = commAuction || await deployContract({deployAcct, name: 'CommunityAuctionSimple'})
 
         if (!index) {
             logInfo('About to deploy Index\n')
 
             index = index || await deployContract({
                 deployAcct,
-                name: 'SVLightIndex',
-                arguments: [backend, payments, adminPxF, ensProxy, ensOwnerProxy, bbFarm]
+                name: 'SVIndex',
+                arguments: [backend, payments, ensOwnerProxy, bbFarm, commAuction]
             })
 
             logInfo(`Index deployed to ${index}!`)
@@ -375,7 +367,7 @@ const main = async () => {
         ...mkAddrArg("backend"),
         ...mkAddrArg("payments"),
         ...mkAddrArg("paymentsEmergencyAdmin"),
-        ...mkAddrArg("adminPxF"),
+        ...mkAddrArg("commAuction"),
         ...mkAddrArg("bbFarm"),
         ...mkAddrArg("ensProxy", true),
         ...mkAddrArg("ensOwnerProxy", true),

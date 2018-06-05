@@ -93,6 +93,16 @@ contract owned {
 }
 
 
+// just to give other contracts an ABI - should not be used / deployed
+contract controlled {
+    address public controller;
+
+    constructor() public {
+        revert();
+    }
+}
+
+
 // hasAdmins contract - allows for easy admin stuff
 contract hasAdmins is owned {
     mapping (uint => mapping (address => bool)) admins;
