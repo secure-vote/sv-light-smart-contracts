@@ -34,7 +34,7 @@
     "yargs": "^11.0.0"
   },
   "scripts": {
-    "test": "truffle test",
+    "test": "./doTests.sh",
     "test-watch": "reflex truffle test",
     "test-watch-s": "reflex -s truffle test",
     "reset-test": "truffle migrate --reset --compile-all",
