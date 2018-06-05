@@ -259,20 +259,19 @@ contract SVIndex is IxIface {
     }
 
     function dOwnerErc20Claim(bytes32 democHash) external {
-        require(backend.getDErc20OwnerClaimEnabled(democHash));
         address erc20 = backend.getDErc20(democHash);
         // test if we can call the erc20.owner() method, etc
         // also limit gas use to 3000 because we don't know what they'll do with it
         // during testing both owned and controlled could be called from other contracts for 2525 gas.
-        if (erc20.call.gas(3000)(abi.encodeWithSelector(OWNER_SIG))) {
+        if (erc20.call.gas(3000)(OWNER_SIG)) {
             require(msg.sender == owned(erc20).owner.gas(3000)(), "!erc20-owner");
-        } else if (erc20.call.gas(3000)(abi.encodeWithSelector(CONTROLLER_SIG))) {
+        } else if (erc20.call.gas(3000)(CONTROLLER_SIG)) {
             require(msg.sender == controlled(erc20).controller.gas(3000)(), "!erc20-controller");
         } else {
             revert();
         }
         // now we are certain the sender deployed or controls the erc20
-        backend.setDOwner(democHash, msg.sender);
+        backend.setDOwnerFromClaim(democHash, msg.sender);
     }
 
     function setDErc20(bytes32 democHash, address newErc20) onlyDemocOwner(democHash) external {

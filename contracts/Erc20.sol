@@ -149,9 +149,7 @@ contract FaucetErc20 is ERC20Interface {
 
     // Functions with this modifier can only be executed by the owner
     modifier onlyOwner() {
-        if (msg.sender != owner) {
-            revert();
-        }
+        require(msg.sender == owner);
         _;
     }
 

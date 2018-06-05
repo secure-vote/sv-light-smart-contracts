@@ -1,0 +1,27 @@
+
+    function _dOwnerClaim(bytes32 democHash, address newOwner) internal {
+        // now we are certain the sender deployed or controls the erc20
+        backend.setDOwner(democHash, msg.sender);
+        // now that it's been redeemed, disable forever
+        backend.dDisableErc20OwnerClaim(democHash);
+    }
+
+    function dOwnerErc20Claim(bytes32 democHash) external {
+        require(backend.getDErc20OwnerClaimEnabled(democHash));
+        address erc20 = backend.getDErc20(democHash);
+        // also limit gas use to 3000 because we don't know what they'll do with it
+        // during testing both owned and controlled could be called from other contracts for 2525 gas.
+        address erc20Owner = owned(erc20).owner.gas(3000)();
+        require(msg.sender == erc20Owner, "!erc20-owner");
+        _dOwnerClaim(msg.sender);
+    }
+
+    function dControllerErc20Claim(bytes32 democHash) external {
+        require(backend.getDErc20OwnerClaimEnabled(democHash));
+        address erc20 = backend.getDErc20(democHash);
+        // also limit gas use to 3000 because we don't know what they'll do with it
+        // during testing both owned and controlled could be called from other contracts for 2525 gas.
+        address erc20Controller = controlled(erc20).controller.gas(3000)();
+        require(msg.sender == erc20Controller, "!erc20-controller");
+        _dOwnerClaim(msg.sender);
+    }

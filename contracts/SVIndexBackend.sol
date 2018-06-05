@@ -24,6 +24,7 @@ contract ixBackendEvents {
     event DemocCatDeprecated(bytes32 indexed democHash, uint catId);
     event DemocCommunityBallotsEnabled(bytes32 indexed democHash, bool enabled);
     event DemocErc20OwnerClaimDisabled(bytes32 indexed democHash);
+    event DemocClaimed(bytes32 indexed democHash);
 }
 
 
@@ -40,6 +41,7 @@ contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC
     /* democ admin */
     function dInit(address defaultErc20) external returns (bytes32 democHash);
     function setDOwner(bytes32 democHash, address newOwner) external;
+    function setDOwnerFromClaim(bytes32 democHash, address newOwner) external;
     function setDEditor(bytes32 democHash, address editor, bool canEdit) external;
     function setDNoEditors(bytes32 democHash) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
@@ -178,6 +180,19 @@ contract SVIndexBackend is IxBackendIface {
         // make them an editor too
         d.editors[d.editorEpoch][newOwner] = true;
         emit DemocOwnerSet(democHash, newOwner);
+    }
+
+    function setDOwnerFromClaim(bytes32 democHash, address newOwner) only_editors() external {
+        Democ storage d = democs[democHash];
+        // make sure that the owner claim is enabled (i.e. the disabled flag is false)
+        require(d.erc20OwnerClaimDisabled == false, "!erc20-claim");
+        // set owner and editor
+        d.owner = newOwner;
+        d.editors[d.editorEpoch][newOwner] = true;
+        // disable the ability to claim now that it's done
+        d.erc20OwnerClaimDisabled = true;
+        emit DemocOwnerSet(democHash, newOwner);
+        emit DemocClaimed(democHash);
     }
 
     function setDEditor(bytes32 democHash, address editor, bool canEdit) only_editors() external {

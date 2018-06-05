@@ -210,7 +210,7 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
 
 
 const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner, ixBackend, doLog}) => {
-    const [user0, user1, user2] = accounts;
+    const [user0, user1, user2, u3, u4, u5, u6] = accounts;
 
     const {democHash, dOwner} = await mkDemoc({svIx, erc20, txOpts: {from: user1, value: oneEth}})
 
@@ -229,6 +229,7 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner,
     assert.equal(await ixBackend.isDEditor(democHash, user1), true, "user1 should be editor again 2345");
 
     // test ercOwnerClaim
+    await doLog("about to test owner erc20 claim")
     assert.equal(await ixBackend.isDEditor(democHash, owner), false, "erc20 owner not admin by default");
     await svIx.dOwnerErc20Claim(democHash, {from: owner});
 
@@ -236,6 +237,7 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner,
     assert.equal(await ixBackend.getDOwner(democHash), owner, "erc20 owner claim works");
     await assertRevert(svIx.dOwnerErc20Claim(democHash, {from: user2}), "erc20 owner can't claim if now actual owner")
 
+    await doLog("about to test owner erc20 claim while disabled")
     // test disable
     const {democHash: dh2} = await mkDemoc({svIx, erc20, txOpts: {from: user2, value: oneEth}})
 
@@ -246,12 +248,17 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner,
     await svIx.dInit(erc20.address, true, {value: 1})  // create a democ where erc20 owner claims prohibited
     assert.equal(await ixBackend.getDErc20OwnerClaimEnabled(dh2), false, 'erc20 owner claim can be disabled on dInit')
 
+    await doLog("about to test controller erc20 claim")
     // test controller
     const controlled = await ControlledTest.new({from: user1});
     assert.equal(await controlled.controller(), user1, 'user1 is controller')
+
     const {democHash: dh3} = await mkDemoc({svIx, erc20: controlled, txOpts: {from: user2, value: oneEth}})
     await doLog('about to claim owner for controlled token')
-    await svIx.dOwnerErc20Claim(dh2, {from: user1}) // "erc20 controller can claim"
+    await assertRevert(svIx.dOwnerErc20Claim(dh3, {from: u4}), 'not controller = no claim')
+    await svIx.dOwnerErc20Claim(dh3, {from: user1}) // "erc20 controller can claim"
+    await assertRevert(svIx.dOwnerErc20Claim(dh3, {from: user1}), 'disabled after use')
+    assert.equal(await ixBackend.getDOwner(dh3), user1, 'user1 is owner now!');
 }
 
 
