@@ -38,3 +38,11 @@ contract TestHelper is upgradePtr {
         selfdestruct(a);
     }
 }
+
+
+contract ControlledTest {
+    address public controller;
+    constructor() public {
+        controller = msg.sender;
+    }
+}

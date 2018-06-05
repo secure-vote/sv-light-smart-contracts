@@ -9,12 +9,12 @@ pragma solidity ^0.4.24;
 //
 
 
-import { owned, upgradePtr, payoutAllC } from "./SVCommon.sol";
+import { owned, upgradePtr, payoutAllC, controlled } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import "./EnsOwnerProxy.sol";
 import "./BPackedUtils.sol";
 import "./BBLib.sol";
-import { BBFarmIface } from "./BBFarm.sol";
+import { BBFarmIface, BBFarmEvents } from "./BBFarm.sol";
 import { CommAuctionIface } from "./CommunityAuction.sol";
 import "./SVBallotConsts.sol";
 import { IxBackendIface, ixBackendEvents } from "./SVIndexBackend.sol";
@@ -24,11 +24,14 @@ import { IxPaymentsIface, ixPaymentEvents } from "./SVPayments.sol";
 contract ixEvents {
     event PaymentMade(uint[2] valAndRemainder);
     event AddedBBFarm(uint8 bbFarmId);
-    event Emergency(bytes32 setWhat, address newSC);
-    event EmergencyBBFarm(uint8 bbFarmId, address bbFarm);
-    event EmergencyDemocAdmin(bytes32 democHash, address newAdmin);
+    event SetBackend(bytes32 setWhat, address newSC);
+    event DeprecatedBBFarm(uint8 bbFarmId);
+    event EmergencyDemocOwner(bytes32 democHash, address newOwner);
     event CommunityBallot(bytes32 democHash, uint256 ballotId);
     event ManuallyAddedBallot(bytes32 democHash, uint256 ballotId, uint256 packed);
+    // copied from BBFarm - unable to inherit from BBFarmEvents...
+    event BallotCreatedWithID(uint ballotId);
+    event BBFarmInit(bytes4 namespace);
 }
 
 
@@ -44,8 +47,8 @@ contract IxIface is hasVersion,
 
     /* owner functions */
     function addBBFarm(BBFarmIface bbFarm) external returns (uint8 bbFarmId);
-    function emergencySetABackend(bytes32 toSet, address newSC) external;
-    function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) external;
+    function setABackend(bytes32 toSet, address newSC) external;
+    function deprecateBBFarm(uint8 bbFarmId, BBFarmIface _bbFarm) external;
     function emergencySetDOwner(bytes32 democHash, address newOwner) external;
 
     /* global getters */
@@ -60,7 +63,8 @@ contract IxIface is hasVersion,
 
     /* democ owner / editor functions */
     function setDEditor(bytes32 democHash, address editor, bool canEdit) external;
-    function setDOwner(bytes32 democHash, address owner) external;
+    function setDOwner(bytes32 democHash, address newOwner) external;
+    function dOwnerErc20Claim(bytes32 democHash) external;
     function setDErc20(bytes32 democHash, address newErc20) external;
     function dAddCategory(bytes32 democHash, bytes32 categoryName, bool hasParent, uint parent) external;
     function dDeprecateCategory(bytes32 democHash, uint categoryId) external;
@@ -68,6 +72,7 @@ contract IxIface is hasVersion,
     function dDowngradeToBasic(bytes32 democHash) external;
     function dSetArbitraryData(bytes32 democHash, bytes key, bytes value) external;
     function dSetCommunityBallotsEnabled(bytes32 democHash, bool enabled) external;
+    function dDisableErc20OwnerClaim(bytes32 democHash) external;
 
     /* democ getters (that used to be here) should be called on either backend or payments directly */
     /* use IxLib for convenience functions from other SCs */
@@ -77,35 +82,16 @@ contract IxIface is hasVersion,
     function dAddBallot(bytes32 democHash, uint ballotId, uint256 packed) external;
     function dDeployCommunityBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint128 packedTimes) external payable;
     function dDeployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint256 packed) external payable;
-
-
-    /* events */
-    event PaymentMade(uint[2] valAndRemainder);
-    event AddedBBFarm(uint8 bbFarmId);
-    event Emergency(bytes32 setWhat, address newSC);
-    event EmergencyBBFarm(uint8 bbFarmId, address bbFarm);
-    event EmergencyDemocOwner(bytes32 democHash, address newOwner);
-    event CommunityBallot(bytes32 democHash, uint256 ballotId);
-    event ManuallyAddedBallot(bytes32 democHash, uint256 ballotId, uint256 packed);
-    // from backend
-    event NewDemoc(bytes32 democHash);
-    event ManuallyAddedDemoc(bytes32 democHash, address erc20);
-    event NewBallot(bytes32 indexed democHash, uint ballotN);
-    event DemocOwnerSet(bytes32 indexed democHash, address owner);
-    event DemocEditorSet(bytes32 indexed democHash, address editor, bool canEdit);
-    event DemocEditorsWiped(bytes32 indexed democHash);
-    event DemocErc20Set(bytes32 indexed democHash, address erc20);
-    event DemocDataSet(bytes32 indexed democHash, bytes32 keyHash);
-    event DemocCatAdded(bytes32 indexed democHash, uint catId);
-    event DemocCatDeprecated(bytes32 indexed democHash, uint catId);
-    event DemocCommunityBallotsEnabled(bytes32 indexed democHash, bool enabled);
-    // from BBFarm
-    event BallotCreatedWithID(uint ballotId);
 }
 
 
 contract SVIndex is IxIface {
     uint256 constant VERSION = 2;
+
+    // generated from: `address public owner;`
+    bytes4 constant OWNER_SIG = 0x8da5cb5b;
+    // generated from: `address public controller;`
+    bytes4 constant CONTROLLER_SIG = 0xf77c4791;
 
     /* backend & other SC storage */
 
@@ -116,6 +102,7 @@ contract SVIndex is IxIface {
     CommAuctionIface commAuction;
     // mapping from bbFarm namespace to bbFarmId
     mapping (bytes4 => uint8) bbFarmIdLookup;
+    mapping (uint8 => bool) deprecatedBBFarms;
 
     //* MODIFIERS /
 
@@ -178,18 +165,16 @@ contract SVIndex is IxIface {
 
     // adding a new BBFarm
     function addBBFarm(BBFarmIface bbFarm) only_owner() external returns (uint8 bbFarmId) {
-        // what a nonsense line of code below. bah.
         bytes4 bbNamespace = bbFarm.getNamespace();
+
         require(bbNamespace != bytes4(0), "bb-farm-namespace");
         require(bbFarmIdLookup[bbNamespace] == 0 && bbNamespace != bbFarms[0].getNamespace(), "bb-namespace-used");
 
         bbFarmId = _addBBFarm(bbNamespace, bbFarm);
     }
 
-    /* FOR EMERGENCIES - setting backends */
-
-    function emergencySetABackend(bytes32 toSet, address newSC) only_owner() external {
-        emit Emergency(toSet, newSC);
+    function setABackend(bytes32 toSet, address newSC) only_owner() external {
+        emit SetBackend(toSet, newSC);
         if (toSet == bytes32("payments")) {
             payments = IxPaymentsIface(newSC);
         } else if (toSet == bytes32("backend")) {
@@ -201,10 +186,14 @@ contract SVIndex is IxIface {
         }
     }
 
-    function emergencySetBBFarm(uint8 bbFarmId, address _bbFarm) only_owner() external {
-        bbFarms[bbFarmId] = BBFarmIface(_bbFarm);
-        emit EmergencyBBFarm(bbFarmId, _bbFarm);
+    function deprecateBBFarm(uint8 bbFarmId, BBFarmIface _bbFarm) only_owner() external {
+        require(address(_bbFarm) != address(0));
+        require(bbFarms[bbFarmId] == _bbFarm);
+        deprecatedBBFarms[bbFarmId] = true;
+        emit DeprecatedBBFarm(bbFarmId);
     }
+
+    /* Preferably for emergencies only */
 
     function emergencySetDOwner(bytes32 democHash, address newOwner) only_owner() external {
         backend.setDOwner(democHash, newOwner);
@@ -256,8 +245,25 @@ contract SVIndex is IxIface {
         backend.setDEditor(democHash, editor, canEdit);
     }
 
-    function setDOwner(bytes32 democHash, address owner) onlyDemocOwner(democHash) external {
-        backend.setDOwner(democHash, owner);
+    function setDOwner(bytes32 democHash, address newOwner) onlyDemocOwner(democHash) external {
+        backend.setDOwner(democHash, newOwner);
+    }
+
+    function dOwnerErc20Claim(bytes32 democHash) external {
+        require(backend.getDErc20OwnerClaimEnabled(democHash));
+        address erc20 = backend.getDErc20(democHash);
+        // test if we can call the erc20.owner() method, etc
+        // also limit gas use to 3000 because we don't know what they'll do with it
+        // during testing both owned and controlled could be called from other contracts for 2525 gas.
+        if (erc20.call.gas(3000)(OWNER_SIG)) {
+            require(msg.sender == owned(erc20).owner.gas(3000)(), "!erc20-owner");
+        } else if (erc20.call.gas(3000)(CONTROLLER_SIG)) {
+            require(msg.sender == controlled(erc20).controller.gas(3000)(), "!erc20-controller");
+        } else {
+            revert();
+        }
+        // now we are certain the sender deployed or controls the erc20
+        backend.setDOwner(democHash, msg.sender);
     }
 
     function setDErc20(bytes32 democHash, address newErc20) onlyDemocOwner(democHash) external {
@@ -288,6 +294,11 @@ contract SVIndex is IxIface {
         backend.dSetCommunityBallotsEnabled(democHash, enabled);
     }
 
+    // this is one way only!
+    function dDisableErc20OwnerClaim(bytes32 democHash) onlyDemocOwner(democHash) external {
+        backend.dDisableErc20OwnerClaim(democHash);
+    }
+
     /* Democ Getters - deprecated */
     // NOTE: the getters that used to live here just proxied to the backend.
     // this has been removed to reduce gas costs + size of Ix contract
@@ -315,6 +326,7 @@ contract SVIndex is IxIface {
 
         // the most significant byte of extraData signals the bbFarm to use.
         uint8 bbFarmId = uint8(extraData[0]);
+        require(deprecatedBBFarms[bbFarmId] == false, "bb-dep");
         BBFarmIface _bbFarm = bbFarms[bbFarmId];
 
         // anything that isn't a community ballot counts towards the basic limit.

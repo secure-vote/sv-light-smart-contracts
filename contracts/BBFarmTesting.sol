@@ -1,6 +1,9 @@
 pragma solidity ^0.4.24;
 
 
+import { IxIface } from "./SVIndex.sol";
+
+
 contract BBFarmTesting {
     // namespaces should be unique for each bbFarm
     bytes4 NAMESPACE;
@@ -14,5 +17,14 @@ contract BBFarmTesting {
 
     function getNamespace() external view returns (bytes4) {
         return NAMESPACE;
+    }
+
+    function initBallot( bytes32 specHash
+                       , uint256 packed
+                       , IxIface ix
+                       , address bbAdmin
+                       , bytes24 extraData) external returns (uint) {
+        // return some dummy data with the right namespace
+        return uint224(blockhash(block.number - 1)) ^ (uint256(NAMESPACE) << 224);
     }
 }

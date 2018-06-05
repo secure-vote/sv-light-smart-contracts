@@ -136,6 +136,8 @@ library BBLib {
     // "Constructor" function - init core params on deploy
     // timestampts are uint64s to give us plenty of room for millennia
     function init(DB storage db, bytes32 _specHash, uint256 _packed, IxIface ix, address ballotOwner, bytes16 extraData) external {
+        require(db.specHash == bytes32(0), "b-exists");
+
         db.index = ix;
         db.ballotOwner = ballotOwner;
 
@@ -164,7 +166,6 @@ library BBLib {
             // (which someone might be able to do if they could set the timestamp in the past)
             startTs = startTs > now ? startTs : uint64(now);
         }
-        require(db.specHash == bytes32(0), "b-exists");
         require(_specHash != bytes32(0), "null-specHash");
         db.specHash = _specHash;
 

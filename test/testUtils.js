@@ -11,6 +11,8 @@ module.exports = function () {
     this.throwTodoAsync = async (doLog) => {
         if (doLog && doLog.log)
             await doLog.log("throwing unimplemented")
+        else if (doLog)
+            await doLog("throwing unimplemented")
         throw Error("Unimplemented")
     }
 
