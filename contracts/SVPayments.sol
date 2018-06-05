@@ -142,7 +142,7 @@ contract SVPayments is IxPaymentsIface {
     /* END BREAK GLASS */
 
 
-    constructor(address payTo, address _emergencyAdmin) payoutAllCSettable(payTo) public {
+    constructor(address _emergencyAdmin) payoutAllCSettable(msg.sender) public {
         emergencyAdmin = _emergencyAdmin;
         assert(_emergencyAdmin != address(0));
     }

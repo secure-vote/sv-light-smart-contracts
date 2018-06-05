@@ -37,6 +37,7 @@ contract payoutAllC is safeSend {
     constructor(address initPayTo) public {
         // DEV NOTE: you can overwrite _getPayTo if you want to reuse other storage vars
         assert(initPayTo != address(0));
+        _payTo = initPayTo;
     }
 
     function _getPayTo() internal view returns (address) {
