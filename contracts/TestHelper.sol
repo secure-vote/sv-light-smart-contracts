@@ -1,6 +1,6 @@
 pragma solidity ^0.4.24;
 
-import {upgradePtr} from "./SVCommon.sol";
+import {upgradePtr, payoutAllCSettable} from "./SVCommon.sol";
 
 contract TestHelper is upgradePtr {
 
@@ -44,5 +44,24 @@ contract ControlledTest {
     address public controller;
     constructor() public {
         controller = msg.sender;
+    }
+}
+
+
+contract payoutAllCSettableTest is payoutAllCSettable {
+    constructor (address initPayTo) payoutAllCSettable(initPayTo) {
+
+    }
+
+    function() payable public {
+        // do nothing
+    }
+
+    function setPayTo(address a) external {
+        _setPayTo(a);
+    }
+
+    function selfdestruct(address a) external {
+        selfdestruct(a);
     }
 }
