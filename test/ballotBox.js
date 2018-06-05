@@ -268,7 +268,7 @@ async function testDeprecation({accounts, BB, bbaux}) {
 const testVersion = async ({BB, bbaux}) => {
     const [startTime, endTime] = await genStartEndTimes();
     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC), zeroAddr);
-    assert.deepEqual(await bb.farm.getBBLibVersion(), toBigNumber(5), "version (BBLib) should be 5");
+    assert.deepEqual(await bb.farm.getBBLibVersion(), toBigNumber(6), "version (BBLib) should be 5");
     assert.deepEqual(await bb.farm.getVersion(), toBigNumber(2), "version (bbfarm) should be 2");
 }
 

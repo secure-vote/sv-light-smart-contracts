@@ -19,7 +19,11 @@ library BBLib {
     using BytesLib for bytes;
 
     // ballot meta
-    uint256 constant BB_VERSION = 5;
+    uint256 constant BB_VERSION = 6;
+    /* 4 deprecated due to insecure vote by proxy
+       5 deprecated to
+        - add `returns (address)` to submitProxyVote
+    */
 
     // voting settings
     uint16 constant USE_ETH = 1;          // 2^0
@@ -224,7 +228,7 @@ library BBLib {
     }
 
     // Boundaries for constructing the msg we'll validate the signature of
-    function submitProxyVote(DB storage db, bytes32[5] proxyReq, bytes extra) external {
+    function submitProxyVote(DB storage db, bytes32[5] proxyReq, bytes extra) external returns (address voter) {
         // a proxy vote (where the vote is submitted (i.e. tx fee paid by someone else)
         // docs for datastructs: https://github.com/secure-vote/tokenvote/blob/master/Docs/DataStructs.md
 
@@ -232,6 +236,7 @@ library BBLib {
         bytes32 s = proxyReq[1];
         uint8 v = uint8(proxyReq[2][0]);
         // converting to uint248 will truncate the first byte, and we can then convert it to a bytes31.
+        // we truncate the first byte because it's the `v` parm used above
         bytes31 proxyReq2 = bytes31(uint248(proxyReq[2]));
         // proxyReq[3] is ballotId - required for verifying sig but not used for anything else
         bytes32 ballotId = proxyReq[3];
@@ -241,7 +246,7 @@ library BBLib {
         bytes memory signed = abi.encodePacked(proxyReq2, ballotId, voteData, extra);
         bytes32 msgHash = keccak256(signed);
         // need to be sure we are signing the entire ballot and any extra data that comes with it
-        address voter = ecrecover(msgHash, v, r, s);
+        voter = ecrecover(msgHash, v, r, s);
 
         // we need to make sure that this is the most recent vote the voter made, and that it has
         // not been seen before. NOTE: we've already validated the BBFarm namespace before this, so
