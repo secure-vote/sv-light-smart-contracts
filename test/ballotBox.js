@@ -1,5 +1,5 @@
 var EmitterTesting = artifacts.require("./EmitterTesting");
-var SvIndex = artifacts.require("./SVLightIndex");
+var SvIndex = artifacts.require("./SVIndex");
 var SvPayments = artifacts.require("./SVPayments");
 var BallotAux = artifacts.require("./BallotAux");
 var BBFarm = artifacts.require("./BBFarm")
@@ -54,24 +54,6 @@ async function testEarlyBallot({accounts, BB}) {
 
     const vc = await BB.new(specHash, mkPacked(startTime + 60, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitVote(hexPk, hexPk, { from: accounts[5] }), "should throw on early ballot");
-}
-
-
-async function testSetOwner({accounts, BB}) {
-    const acc = accounts;
-    const [start] = await genStartEndTimes();
-    const vc = await BB.new(specHash, mkPacked(start, start + 60, USE_ETH | USE_NO_ENC), zeroAddr);
-    const owner1 = await vc.owner();
-    assert.equal(acc[0], owner1, "owner should be acc[0]");
-
-    // fraud set owner
-    await assert403(vc.setOwner(acc[2], {from: acc[1]}), "should throw if setOwner called by non-owner");
-
-    // good set owner
-    const soTxr = await vc.setOwner(acc[1]);
-    assertNoErr(soTxr);
-    const owner2 = await vc.owner();
-    assert.equal(acc[1], owner2, "owner should change when legit req");
 }
 
 
@@ -152,6 +134,24 @@ async function testInstantiation({accounts, BB, bbaux, log, farm}) {
     assert.equal(await aux.getEncSeckey(), hexSk, "secret key should match");
 
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitVote(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
+}
+
+
+async function testSetOwner({accounts, BB}) {
+    const acc = accounts;
+    const [start] = await genStartEndTimes();
+    const vc = await BB.new(specHash, mkPacked(start, start + 60, USE_ETH | USE_NO_ENC), zeroAddr);
+    const owner1 = await vc.owner();
+    assert.equal(acc[0], owner1, "owner should be acc[0]");
+
+    // fraud set owner
+    await assert403(vc.setOwner(acc[2], {from: acc[1]}), "should throw if setOwner called by non-owner");
+
+    // good set owner
+    const soTxr = await vc.setOwner(acc[1]);
+    assertNoErr(soTxr);
+    const owner2 = await vc.owner();
+    assert.equal(acc[1], owner2, "owner should change when legit req");
 }
 
 
@@ -274,19 +274,23 @@ const testVersion = async ({BB, bbaux}) => {
 
 
 const testSponsorship = async ({accounts, BB, bbaux}) => {
+    const [owner, u1, u2, u3, u4, u5, u6, u7, u8, emergencyAdmin] = accounts;
+
     const [startTime, endTime] = await genStartEndTimes();
-    const payments = await SvPayments.new(accounts[9]);
-    const ix = await SvIndex.new(zeroAddr, payments.address, zeroAddr, zeroAddr, zeroAddr, zeroAddr);
+    const payments = await SvPayments.new(emergencyAdmin);
+    assert.equal(await payments.getPayTo(), owner, 'payto as expected')
+    // don't need to include the farm address here bc we inject ix.address into BB
+    const ix = await SvIndex.new(zeroAddr, payments.address, zeroAddr, zeroAddr, zeroAddr);
     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), ix.address);
 
     assert.deepEqual(toBigNumber(0), await bb.getTotalSponsorship(), "sponsorship should be 0 atm");
 
-    const balPre = await getBalance(accounts[0]);
+    const balPre = await getBalance(owner);
     await bb.sendTransaction({
-        from: accounts[1],
+        from: u1,
         value: toBigNumber(oneEth)
     });
-    const balPost = await getBalance(accounts[0]);
+    const balPost = await getBalance(owner);
     assert.deepEqual(balPost, toBigNumber(oneEth).plus(balPre), "sponsorship balance (payTo) should match expected");
 
     assert.deepEqual(await bb.getTotalSponsorship(), toBigNumber(oneEth), "getTotalSponsorship should match expected");
@@ -297,7 +301,7 @@ const testSponsorship = async ({accounts, BB, bbaux}) => {
     await payments.setPayTo(testHelper.address);
 
     await assertRevert(bb.sendTransaction({
-        from: accounts[1],
+        from: u1,
         value: 1999  // special value that will cause testHelper to throw
     }), 'should throw if payTo tx fails');
 }
@@ -624,6 +628,7 @@ const _wrapTest = ({accounts, bbName, mkFarm}, f) => {
 contract("BallotBox", function(accounts) {
     const tests = [
         ["should instantiate correctly", testInstantiation],
+        ["test sponsorship", testSponsorship],
         ["test revert conditions", testRevertConditions],
         ["test proxy vote", testProxyVote],
         ["test proxy vote replay attacks", testProxyVoteReplayProtection],
@@ -634,7 +639,6 @@ contract("BallotBox", function(accounts) {
         ["should throw on early ballot", testEarlyBallot],
         ["should allow deprecation", testDeprecation],
         ["should have correct version", testVersion],
-        ["test sponsorship", testSponsorship],
         ["test bad submission bits", testBadSubmissionBits],
         ["test community status", testCommStatus],
         ["test owner", testOwner],
