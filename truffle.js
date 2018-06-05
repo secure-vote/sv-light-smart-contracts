@@ -20,7 +20,7 @@ module.exports = {
       gas: 19000000,
       network_id: "*", // Match any network id
       gasPrice: 1,
-      // solc: { optimizer: { enabled: true, runs: 200 } },
+      solc: { optimizer: { enabled: true, runs: 1 } },  // runs=1 seems to give lowest gas usage for deploying ballots...
     },
     testrpc: {
       host: "localhost",
@@ -31,3 +31,44 @@ module.exports = {
     }
   }
 };
+
+
+/*
+    - unknown settings no solc params, runs 200 and 1 all produced this - though build artifacts existed
+    Deploy Ballot Gas Costs:
+    BBF1st: 263014
+    BBFarm: 218014
+    CommB:  286379
+
+    Init Democ Gas Cost:
+    241068
+
+    - disabled
+    Deploy Ballot Gas Costs:
+    BBF1st: 263078
+    BBFarm: 218078
+    CommB:  286379
+
+    Init Democ Gas Cost:
+    241068
+
+    - runs = 1
+    Deploy Ballot Gas Costs:
+    BBF1st: 262950
+    BBFarm: 217950
+    CommB:  286315
+
+    Init Democ Gas Cost:
+    241068
+
+    - runs = 200
+    Deploy Ballot Gas Costs:
+    BBF1st: 263014
+    BBFarm: 218014
+    CommB:  286379
+
+    Init Democ Gas Cost:
+    241068
+
+
+*/
