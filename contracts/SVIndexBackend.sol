@@ -161,6 +161,7 @@ contract SVIndexBackend is IxBackendIface {
         assert(democPrefixToHash[bytes13(democHash)] == bytes32(0));
         democPrefixToHash[bytes13(democHash)] = democHash;
         erc20ToDemocs[erc20].push(democHash);
+        _setDOwner(democHash, initOwner);
         emit NewDemoc(democHash);
     }
 
@@ -178,7 +179,6 @@ contract SVIndexBackend is IxBackendIface {
         // (particularly because prevBlockHash and now are part of the hash)
         democHash = keccak256(abi.encodePacked(democList.length, blockhash(block.number-1), defaultErc20, now));
         _addDemoc(democHash, defaultErc20, initOwner, disableErc20OwnerClaim);
-        _setDOwner(democHash, initOwner);
     }
 
     function _setDOwner(bytes32 democHash, address newOwner) internal {
