@@ -4,8 +4,7 @@ pragma solidity ^0.4.24;
 //
 // The Index by which democracies and ballots are tracked (and optionally deployed).
 // Author: Max Kaye <max@secure.vote>
-// License: MIT
-// version: v1.2.0 [WIP]
+// version: v2.0.0
 //
 
 
