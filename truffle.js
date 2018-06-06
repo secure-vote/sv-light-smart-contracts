@@ -3,12 +3,34 @@ var TestRPC = require("ethereumjs-testrpc");
 const { create, env } = require("sanctuary");
 const S = create({ checkTypes: true, env });
 
-// upgrading to ganache-cli seems to have broken this >.< - use ethereumjs-testrpc for now
-var provider = TestRPC.provider({
+var ganache = require("ganache-cli");
+
+let provider = ganache.provider({
   port: 34839,
   accounts: S.map(_ => ({ balance: "0xffffffffffffffffff" }), S.range(0, 20)),
   gasLimit: 20000000
-});
+})
+
+// needed to make ganache-cli work...
+// curiously, if you don't have this AND don't have gasLimit high, then truffle
+// crashes with "exceeds block gas limit", so some communication must be going
+// on earlier. If you do have the gas limit, then the error msg becomes
+// "this.provider.sendAsync is not a function"
+provider = new Proxy(provider, {
+  get: (obj, method) => {
+    if(method in obj) {
+      return obj[method]
+    }
+    if(method === "sendAsync"){
+        return (...args) => new Promise((resolve, reject) => {
+        provider.send(...args, (err, val) => {
+          err ? reject(err) : resolve(val);
+        })
+      })
+    }
+    return obj[method]
+  }
+})
 
 module.exports = {
   networks: {
@@ -31,44 +53,3 @@ module.exports = {
     }
   }
 };
-
-
-/*
-    - unknown settings no solc params, runs 200 and 1 all produced this - though build artifacts existed
-    Deploy Ballot Gas Costs:
-    BBF1st: 263014
-    BBFarm: 218014
-    CommB:  286379
-
-    Init Democ Gas Cost:
-    241068
-
-    - disabled
-    Deploy Ballot Gas Costs:
-    BBF1st: 263078
-    BBFarm: 218078
-    CommB:  286379
-
-    Init Democ Gas Cost:
-    241068
-
-    - runs = 1
-    Deploy Ballot Gas Costs:
-    BBF1st: 262950
-    BBFarm: 217950
-    CommB:  286315
-
-    Init Democ Gas Cost:
-    241068
-
-    - runs = 200
-    Deploy Ballot Gas Costs:
-    BBF1st: 263014
-    BBFarm: 218014
-    CommB:  286379
-
-    Init Democ Gas Cost:
-    241068
-
-
-*/
