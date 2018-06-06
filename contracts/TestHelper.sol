@@ -3,6 +3,7 @@ pragma solidity ^0.4.24;
 import {upgradePtr, payoutAllCSettable} from "./SVCommon.sol";
 
 contract TestHelper is upgradePtr {
+    // note: a test relies on this contract having no owner or controller method / public var
 
     struct DataAndValue {
         bytes data;
