@@ -152,7 +152,11 @@ contract SVIndexBackend is IxBackendIface {
 
     function _addDemoc(bytes32 democHash, address erc20, address initOwner, bool disableErc20OwnerClaim) internal {
         democList.push(democHash);
-        democs[democHash].erc20 = erc20;
+        Democ storage d = democs[democHash];
+        d.erc20 = erc20;
+        if (disableErc20OwnerClaim) {
+            d.erc20OwnerClaimDisabled = true;
+        }
         // this should never trigger if we have a good security model - entropy for 13 bytes ~ 2^(8*13) ~ 10^31
         assert(democPrefixToHash[bytes13(democHash)] == bytes32(0));
         democPrefixToHash[bytes13(democHash)] = democHash;

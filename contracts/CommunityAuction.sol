@@ -41,6 +41,7 @@ contract CommunityAuctionSimple is owned {
     }
 
     function upgradeMe(address newSC) external {
+        require(upgrades[msg.sender] == address(0));
         upgrades[msg.sender] = newSC;
     }
 
