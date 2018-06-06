@@ -120,7 +120,8 @@ const wrapTestIx = ({accounts}, f) => {
 
 const mkDemoc = async ({svIx, txOpts, erc20}) => {
     assert.equal(txOpts.value && txOpts.value > 0, true, "must have value when making democ")
-    const createTx = await svIx.dInit(erc20.address, false, txOpts);
+    const addr = erc20.address || erc20;
+    const createTx = await svIx.dInit(addr, false, txOpts);
     const {args: {democHash}} = getEventFromTxR("NewDemoc", createTx);
     const {args: {owner: dOwner}} = getEventFromTxR("DemocOwnerSet", createTx);
     return {democHash, dOwner};
@@ -255,14 +256,14 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner,
     assert.equal(await controlled.controller(), u1, 'user1 is controller')
 
     const {democHash: dh3} = await mkDemoc({svIx, erc20: controlled, txOpts: {from: u2, value: oneEth}})
-    await doLog('about to claim owner for controlled token')
-    await assertRevert(svIx.dOwnerErc20Claim(dh3, {from: u4}), 'not controller = no claim')
+    await doLog(`about to claim owner for controlled token with u1 ${u1}`)
+    await assertRevertF(() => svIx.dOwnerErc20Claim(dh3, {from: u4}), 'not controller = no claim')
     await svIx.dOwnerErc20Claim(dh3, {from: u1}) // "erc20 controller can claim"
-    await assertRevert(svIx.dOwnerErc20Claim(dh3, {from: u1}), 'disabled after use')
+    await assertRevertF(() => svIx.dOwnerErc20Claim(dh3, {from: u1}), 'disabled after use')
     assert.equal(await ixBackend.getDOwner(dh3), u1, 'user1 is owner now!');
 
-    const {democHash: dh4} = await mkDemoc({svIx, erc20: u1, txOpts: {from: u2, value: oneEth}})
-    await assertRevert(svIx.dOwnerErc20Claim(dh4, {from: u4}), 'no owner or controller method = no claim')
+    const d4 = await mkDemoc({svIx, erc20: {address: u1}, txOpts: {from: u2, value: oneEth}})
+    await assertRevertF(() => svIx.dOwnerErc20Claim(d4.democHash, {from: u4}), 'no owner or controller method = no claim')
 }
 
 
@@ -564,7 +565,7 @@ const testAllAdminFunctionsAndCategories = async ({owner, accounts, svIx, erc20,
 
     // backend
     await Promise.all(R.map(testArgs => testOnlyAdminBackend(...testArgs),
-        [ [ 'dAdd', [zeroHash, zeroAddr] ]
+        [ [ 'dAdd', [zeroHash, zeroAddr, false] ]
         ]))
 }
 
@@ -752,27 +753,55 @@ const testPayoutAll = async ({svIx, ixPayments, owner, doLog, accounts, ixBacken
     assert.equal(await getBalance(ixPayments.address), 0, 'ixPayments has sent balance away')
     assert.deepEqual(await getBalance(newPayTo), balPre.plus(oneEth), 'u1 now has one extra ether due to payoutAll')
 
-
-    const testPayTo = async (asyncMkF) => {
-        const sender = accounts[2];
-        const payTo = accounts[3];
+    // shouldn't have used these above
+    const [sender, payTo, u6] = accounts.slice(4);
+    await doLog(`setup testPayTo with sender:${sender}, payTo:${payTo}, u6:${u6}`)
+    const testPayTo = async (cToTest, name) => {
+        // general way we test this is:
+        //      (before this function) set up some contract to test
+        //      selfdestruct at the contract to test (pointed at cToTest)
+        //      get balance of payTo
+        //      call cToTest.payoutAll()
+        //      get balance of payTo again
+        //      assert the difference
+        await doLog(`Testing payoutAll for ${name}`)
 
         const c = await payoutAllTest.new(sender, {from: sender});
+        const amt = oneEth.div(5);
+        await c.sendTransaction({from: sender, value: amt})
 
+        const balCPre = await getBalance(cToTest.address)
+        await c.selfdestruct(cToTest.address)
+        const balCPost = await getBalance(cToTest.address)
+
+        assert.deepEqual(balCPre.plus(amt), balCPost, `Bal for cToTest ${name},${cToTest.address} post testHelper.selfdestruct match expectations (bal increases by ${amt.toFixed()}`)
+
+        const balPTPre = await getBalance(payTo)
+        const payoutAllTxr = await cToTest.payoutAll({from: u6})
+        const balPTPost = await getBalance(payTo)
+
+        assert.deepEqual(balPTPre.plus(amt), balPTPost, `Bal for payTo (${payTo}; testing ${name}) post payoutAll() match expectations (bal increases by ${amt.toFixed()}\nTxr:\n${toJson(payoutAllTxr)}`)
+
+        await doLog(`Test payoutAll for ${name} okay`)
     }
 
 
-    // note - need to test via balances here :(
-    // test also on Index, IndexBackend - but importantly we need to test changing the owner to make sure that part works
-    // assert.equal(await svIx.getPayTo(), newPayTo, 'svIx should get their payTo from payments')
-    // assert.equal(await ixBackend.getPayTo(), owner, 'ixBackend should be set to owner')
-    // assert.equal(await bbFarm.getPayTo(), owner, 'ixBackend should be set to owner')
-    // await ixBackend.setOwner(u4)
-    // assert.equal(await ixBackend.getPayTo(), u4, 'ixBackend owner set to u4, so payTo should now be u4')
-    // assert.equal(await bbFarm.getPayTo(), owner, 'ixBackend should be set to owner')
-    // await bbFarm.setOwner(u3)
-    // assert.equal(await bbFarm.getPayTo(), u3, 'ixBackend should be set to owner')
-    console.log("DONT FORGET TO FIX THESE")
+    // index payto - note: index should pay to payments payTo
+    // init payTo always set to msg.sender which is owner
+    await ixPayments.setPayTo(payTo)
+    await testPayTo(svIx, 'svIx')
+
+    // test ixBackend - should pay to owner
+    const ixBackendTest = await SVIxBackend.new({from: sender})
+    assert.equal(await ixBackendTest.owner(), sender, 'ixBackend owner init')
+    await ixBackendTest.setOwner(payTo, {from: sender})
+    assert.equal(await ixBackendTest.owner(), payTo, 'ixBackend owner set correctly')
+    await testPayTo(ixBackendTest, 'ixbackend')
+
+    // test bbfarm - should pay owner
+    const bbFarmTest = await BBFarm.new({from: sender})
+    await bbFarmTest.setOwner(payTo, {from: sender})
+    await testPayTo(bbFarmTest, 'bbfarm')
 }
 
 
@@ -1169,7 +1198,9 @@ const testGasOfBallots = async ({svIx, owner, erc20, ixBackend}) => {
 contract("SVLightIndex", function (accounts) {
     const skipOnEnvVar = (testStr, testF, envVarStr) => {
         const eVar = process.env[envVarStr]
-        const cond = (eVar && eVar.toString().toLowerCase() === "true") === true
+        const allT = process.env.RUN_ALL_TESTS
+        const condAll = (allT && allT.toLowerCase() === "true")
+        const cond = (eVar && eVar.toLowerCase() === "true") || condAll
         console.log(`Test (${testStr}) will be skipped if the following env var is present:\n${envVarStr}=true`)
         console.log(cond ? "running this time" : "skipping this time")
         const defaultF = async () => { return true; }

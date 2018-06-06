@@ -34,6 +34,8 @@ contract safeSend {
 contract payoutAllC is safeSend {
     address private _payTo;
 
+    event PayoutAll(address payTo, uint value);
+
     constructor(address initPayTo) public {
         // DEV NOTE: you can overwrite _getPayTo if you want to reuse other storage vars
         assert(initPayTo != address(0));
@@ -49,7 +51,10 @@ contract payoutAllC is safeSend {
     }
 
     function payoutAll() external {
-        doSafeSend(_getPayTo(), address(this).balance);
+        address a = _getPayTo();
+        uint bal = address(this).balance;
+        doSafeSend(a, bal);
+        emit PayoutAll(a, bal);
     }
 }
 
