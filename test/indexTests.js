@@ -597,7 +597,7 @@ const testRevertCases = async ({svIx, accounts, owner, doLog, erc20, ixPayments,
 
     // trigger commBSimple upgrade revert
     await commBSimple.upgradeMe(u2, {from: u1})
-    await assertRevert(commBSimple.upgradeMe(u3, {from : u1}), 'cant upgrade same acct twice')
+    await assertRevertF(() => commBSimple.upgradeMe(u3, {from : u1}), 'cant upgrade same acct twice')
 }
 
 

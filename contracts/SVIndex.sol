@@ -9,7 +9,7 @@ pragma solidity ^0.4.24;
 //
 
 
-import { owned, upgradePtr, payoutAllC, controlled } from "./SVCommon.sol";
+import { owned, upgradePtr, payoutAllC, controlledIface } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import "./EnsOwnerProxy.sol";
 import "./BPackedUtils.sol";
@@ -259,7 +259,7 @@ contract SVIndex is IxIface {
         if (erc20.call.gas(3000)(OWNER_SIG)) {
             require(msg.sender == owned(erc20).owner.gas(3000)(), "!erc20-owner");
         } else if (erc20.call.gas(3000)(CONTROLLER_SIG)) {
-            require(msg.sender == controlled(erc20).controller.gas(3000)(), "!erc20-controller");
+            require(msg.sender == controlledIface(erc20).controller.gas(3000)(), "!erc20-controller");
         } else {
             revert();
         }
@@ -327,9 +327,8 @@ contract SVIndex is IxIface {
     }
 
 
-    function _deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint packed, bool checkLimit) internal returns (uint ballotId) {
-        uint16 submissionBits = BPackedUtils.packedToSubmissionBits(packed);
-        require(BBLib.isTesting(submissionBits) == false, "b-testing");
+    function _deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint packed, bool checkLimit, bool alreadySentTx) internal returns (uint ballotId) {
+        require(BBLib.isTesting(BPackedUtils.packedToSubmissionBits(packed)) == false, "b-testing");
 
         // the most significant byte of extraData signals the bbFarm to use.
         uint8 bbFarmId = uint8(extraData[0]);
@@ -349,7 +348,8 @@ contract SVIndex is IxIface {
             _accountOkayChecks(democHash, endTime);
         }
 
-        if (!performedSend && msg.value > 0) {
+        if (!performedSend && msg.value > 0 && alreadySentTx == false) {
+            // refund if we haven't send value anywhere (which might happen if someone accidentally pays us)
             doSafeSend(msg.sender, msg.value);
         }
 
@@ -379,7 +379,7 @@ contract SVIndex is IxIface {
 
         uint256 packed = BPackedUtils.setSB(uint256(packedTimes), (USE_ETH | USE_NO_ENC));
 
-        uint ballotId = _deployBallot(democHash, specHash, extraData, packed, false);
+        uint ballotId = _deployBallot(democHash, specHash, extraData, packed, false, true);
         commAuction.noteBallotDeployed(democHash);
 
         emit CommunityBallot(democHash, ballotId);
@@ -390,7 +390,7 @@ contract SVIndex is IxIface {
                           onlyDemocEditor(democHash)
                           external payable {
 
-        _deployBallot(democHash, specHash, extraData, packed, true);
+        _deployBallot(democHash, specHash, extraData, packed, true, false);
     }
 
     // internal logic around adding a ballot
@@ -452,10 +452,10 @@ contract SVIndex is IxIface {
             doSafeSend(address(payments), extraBallotFee);
             doSafeSend(msg.sender, remainder);
             emit PaymentMade([extraBallotFee, remainder]);
-
-            // only in this case do we want to return false - don't count towards the
+            // only in this case (for basic) do we want to return false - don't count towards the
             // limit because it's been paid for here.
             return (false, true);
+
         } else {  // if we're premium we don't count ballots
             return (false, false);
         }

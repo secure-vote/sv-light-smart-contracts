@@ -157,8 +157,12 @@ module.exports = function () {
     })
 
     this.assertRevert = async (doTx, msg) => {
+        await this.assertRevertF(() => doTx, msg);
+    }
+
+    this.assertRevertF = async (doF, msg) => {
         try {
-            const r = await doTx
+            const r = await doF()
             throw Error(`Expected error but did not get one!\n    Msg: ${msg}`)
         } catch (e) {
             if (e.message.indexOf("VM Exception while processing transaction: revert") == -1) {

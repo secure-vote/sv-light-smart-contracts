@@ -94,7 +94,7 @@ contract owned {
 
 
 // just to give other contracts an ABI - should not be used / deployed
-contract controlled {
+contract controlledIface {
     function controller() external view returns (address);
 }
 
