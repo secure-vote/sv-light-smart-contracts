@@ -39,6 +39,9 @@ contract ixPaymentEvents {
     event SetBallotsPer30Days(uint amount);
     event SetFreeExtension(bytes32 democHash, bool hasFreeExt);
     event SetDenyPremium(bytes32 democHash, bool isPremiumDenied);
+    event SetPayTo(address payTo);
+    event SetMinorEditsAddr(address minorEditsAddr);
+    event SetMinWeiForDInit(uint amount);
 }
 
 
@@ -291,10 +294,12 @@ contract SVPayments is IxPaymentsIface {
 
     function setPayTo(address newPayTo) only_owner() external {
         _setPayTo(newPayTo);
+        emit SetPayTo(newPayTo);
     }
 
     function setMinorEditsAddr(address a) only_owner() external {
         minorEditsAddr = a;
+        emit SetMinorEditsAddr(a);
     }
 
     function setBasicCentsPricePer30Days(uint amount) only_owner() external {
@@ -329,6 +334,7 @@ contract SVPayments is IxPaymentsIface {
 
     function setMinWeiForDInit(uint amount) owner_or(minorEditsAddr) external {
         minWeiForDInit = amount;
+        emit SetMinWeiForDInit(amount);
     }
 
     /* global getters */

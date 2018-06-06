@@ -44,7 +44,7 @@
     "truffle-compile": "truffle compile --all",
     "compile-sv-light": "./compileAllSvLight.sh",
     "compile-ens": "for f in $(ls ./ens | grep sol); do ./bin/compile.sh -d ens -c $f -o _distEns; done",
-    "coverage": "solidity-coverage",
+    "coverage": "RUN_ALL_TESTS=true solidity-coverage",
     "c": "./bin/compile.sh -c",
     "diff": "git diff -- . ':(exclude)_solDist/*'"
   }

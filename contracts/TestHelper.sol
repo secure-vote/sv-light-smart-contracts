@@ -49,6 +49,8 @@ contract ControlledTest {
 
 
 contract payoutAllCSettableTest is payoutAllCSettable {
+    // you can use this to send balances to a contract by first sending eth then calling selfdestruct
+    // in this case _this_ contracts payTo doesn't matter
     constructor (address initPayTo) payoutAllCSettable(initPayTo) {
 
     }

@@ -126,7 +126,7 @@ contract SVIndexBackend is IxBackendIface {
 
     /* base contract overloads */
 
-    function _getPayoutTo() internal view returns (address) {
+    function _getPayTo() internal view returns (address) {
         return owner;
     }
 
