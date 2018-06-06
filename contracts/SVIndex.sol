@@ -232,6 +232,7 @@ contract SVIndex is IxIface {
     //* DEMOCRACY FUNCTIONS - INDIVIDUAL */
 
     function dInit(address defaultErc20, bool disableErc20OwnerClaim) not_upgraded() external payable returns (bytes32) {
+        require(msg.value >= payments.getMinWeiForDInit());
         bytes32 democHash = backend.dInit(defaultErc20, msg.sender, disableErc20OwnerClaim);
         payments.payForDemocracy.value(msg.value)(democHash);
         return democHash;

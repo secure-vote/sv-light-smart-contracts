@@ -211,7 +211,7 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
 }
 
 
-const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner, ixBackend, doLog}) => {
+const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner, ixBackend, doLog, ixPayments}) => {
     const [user0, u1, u2, u3, u4, u5, u6] = accounts;
 
     const {democHash, dOwner} = await mkDemoc({svIx, erc20, txOpts: {from: u1, value: oneEth}})
@@ -262,8 +262,16 @@ const testCreateDemoc = async ({accounts, svIx, erc20, tld, ensPR, scLog, owner,
     await assertRevertF(() => svIx.dOwnerErc20Claim(dh3, {from: u1}), 'disabled after use')
     assert.equal(await ixBackend.getDOwner(dh3), u1, 'user1 is owner now!');
 
-    const d4 = await mkDemoc({svIx, erc20: {address: u1}, txOpts: {from: u2, value: oneEth}})
+    const th = await TestHelper.new()  // use this bc it has no controller or owner method
+    const d4 = await mkDemoc({svIx, erc20: th, txOpts: {from: u2, value: oneEth}})
     await assertRevertF(() => svIx.dOwnerErc20Claim(d4.democHash, {from: u4}), 'no owner or controller method = no claim')
+
+    // test minWeiForDInit
+    const newMinWei = toBigNumber(100);
+    await ixPayments.setMinWeiForDInit(newMinWei);
+    assert.deepEqual(await ixPayments.getMinWeiForDInit(), newMinWei, 'new min wei for d init works')
+    await assertRevert(mkDemoc({svIx, erc20, txOpts: {value: newMinWei.minus(1)}}), 'fails if value sent below minWei')
+    await mkDemoc({svIx, erc20, txOpts: {value: newMinWei}}) // this works
 }
 
 
@@ -599,6 +607,7 @@ const testRevertCases = async ({svIx, accounts, owner, doLog, erc20, ixPayments,
     // trigger commBSimple upgrade revert
     await commBSimple.upgradeMe(u2, {from: u1})
     await assertRevertF(() => commBSimple.upgradeMe(u3, {from : u1}), 'cant upgrade same acct twice')
+    await assertRevertF(() => commBSimple.noteBallotDeployed("0x00", {from : u1}), 'reverted due to upgrade')
 }
 
 
