@@ -19,11 +19,11 @@ contract BBFarmTesting {
         return NAMESPACE;
     }
 
-    function initBallot( bytes32 specHash
-                       , uint256 packed
-                       , IxIface ix
-                       , address bbAdmin
-                       , bytes24 extraData) external returns (uint) {
+    function initBallot( bytes32
+                       , uint256
+                       , IxIface
+                       , address
+                       , bytes24) external returns (uint) {
         // return some dummy data with the right namespace
         return uint224(blockhash(block.number - 1)) ^ (uint256(NAMESPACE) << 224);
     }

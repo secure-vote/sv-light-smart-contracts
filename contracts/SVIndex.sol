@@ -19,6 +19,7 @@ import { CommAuctionIface } from "./CommunityAuction.sol";
 import "./SVBallotConsts.sol";
 import { IxBackendIface, ixBackendEvents } from "./SVIndexBackend.sol";
 import { IxPaymentsIface, ixPaymentEvents } from "./SVPayments.sol";
+import {CanReclaimToken} from "./CanReclaimToken.sol";
 
 
 contract ixEvents {
@@ -42,6 +43,7 @@ contract IxIface is hasVersion,
                     ixEvents,
                     SVBallotConsts,
                     owned,
+                    CanReclaimToken,
                     upgradePtr,
                     payoutAllC {
 
