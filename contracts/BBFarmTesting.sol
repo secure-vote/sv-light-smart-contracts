@@ -23,7 +23,7 @@ contract BBFarmTesting {
                        , uint256
                        , IxIface
                        , address
-                       , bytes24 ) external returns (uint) {
+                       , bytes24) external returns (uint) {
         // return some dummy data with the right namespace
         return uint224(blockhash(block.number - 1)) ^ (uint256(NAMESPACE) << 224);
     }

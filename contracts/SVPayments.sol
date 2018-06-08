@@ -11,7 +11,7 @@ pragma solidity ^0.4.24;
 
 import { permissioned, payoutAllCSettable } from "./SVCommon.sol";
 import "./hasVersion.sol";
-// import "./SVIndex.sol";
+import {CanReclaimToken} from "./CanReclaimToken.sol";
 
 
 // local library just to give us a safe subtraction (usually for calculating time remaining)
@@ -46,7 +46,7 @@ contract ixPaymentEvents {
 
 
 // this should really be an interface, but alas solidity is ... immature
-contract IxPaymentsIface is hasVersion, ixPaymentEvents, permissioned, payoutAllCSettable {
+contract IxPaymentsIface is hasVersion, ixPaymentEvents, permissioned, CanReclaimToken, payoutAllCSettable {
     /* in emergency break glass */
     function emergencySetOwner(address newOwner) external;
 
