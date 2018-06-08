@@ -1162,6 +1162,25 @@ const testArbitraryData = async ({svIx, owner, ixBackend, erc20, accounts: [, u1
 }
 
 
+const testReclaimToken = async ({svIx, owner, erc20, doLog, ixPayments}) => {
+    assert.deepEqual(await erc20.balanceOf(owner), toBigNumber(0), 'token balance owner 0 init')
+    assert.deepEqual(await erc20.balanceOf(svIx.address), toBigNumber(0), 'token balance ix 0 init')
+    await erc20.faucet({from: owner});
+    const tokenBalance = await erc20.balanceOf(owner);
+    await doLog(`Token balance is ${tokenBalance.toFixed()}`)
+
+    // transfer tokens to index
+    await erc20.transfer(svIx.address, tokenBalance)
+    assert.deepEqual(await erc20.balanceOf(owner), toBigNumber(0), 'token balance owner 0 after tfer')
+    assert.deepEqual(await erc20.balanceOf(svIx.address), tokenBalance, `token balance ix ${tokenBalance.toFixed()} after tfer`)
+
+    await svIx.relcaimToken(erc20.address);
+    await erc20.transferFrom(svIx.address, owner, tokenBalance);
+    assert.deepEqual(await erc20.balanceOf(owner), tokenBalance, `token balance ix ${tokenBalance.toFixed()} after reclaim`)
+    assert.deepEqual(await erc20.balanceOf(svIx.address), toBigNumber(0), `token balance ix 0 after reclaim`)
+}
+
+
 /* bb farm won - by a lot
     Std:  1392871
     Lib:  1310372
@@ -1217,30 +1236,31 @@ contract("SVLightIndex", function (accounts) {
     }
 
     tests = [
-        ["test instantiation", testInit],
-        ["test gas ballots", testGasOfBallots],
-        ["test payments setting values", testPaymentsSettingValues],
-        ["test granting self time", testGrantingSelfTime],
-        ["test deprecation of bbfarms", testDeprecateBBFarm],
-        ["test refund on accidental tfer to paybale methods", testRefundIfAccidentalValueTfer],
-        ["test nfp tier", testNFPTierAndPayments],
-        ["test owner add ballot", testOwnerAddBallot],
-        ["test paying for extra ballots (basic)", testBasicExtraBallots],
-        ["test revert cases", testRevertCases],
-        ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
-        ["test payout all", testPayoutAll],
-        ["test arbitrary data", testArbitraryData],
-        ["test democ prefix stuff", testPrefix],
-        ["test all admin functions and categories (crud)", testAllAdminFunctionsAndCategories],
-        ["test currency conversion", testCurrencyConversion],
-        ["test payments backup admin", testPaymentsEmergencySetOwner],
-        ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
-        ["test emergency methods", testEmergencyMethods],
-        ["test community ballots (default)", testCommunityBallots],
-        ["test version", testVersion],
-        ["test upgrade", testUpgrade],
-        ["test creating democ and permissions", testCreateDemoc],
-        ["test payments for democ", testPaymentsForDemoc],
+        // ["test instantiation", testInit],
+        // ["test gas ballots", testGasOfBallots],
+        // ["test payments setting values", testPaymentsSettingValues],
+        // ["test granting self time", testGrantingSelfTime],
+        // ["test deprecation of bbfarms", testDeprecateBBFarm],
+        // ["test refund on accidental tfer to paybale methods", testRefundIfAccidentalValueTfer],
+        // ["test nfp tier", testNFPTierAndPayments],
+        // ["test owner add ballot", testOwnerAddBallot],
+        // ["test paying for extra ballots (basic)", testBasicExtraBallots],
+        // ["test revert cases", testRevertCases],
+        // ["test premium upgrade and downgrade", testPremiumUpgradeDowngrade],
+        // ["test payout all", testPayoutAll],
+        // ["test arbitrary data", testArbitraryData],
+        // ["test democ prefix stuff", testPrefix],
+        // ["test all admin functions and categories (crud)", testAllAdminFunctionsAndCategories],
+        // ["test currency conversion", testCurrencyConversion],
+        // ["test payments backup admin", testPaymentsEmergencySetOwner],
+        // ["test sponsorship of community ballots", testSponsorshipOfCommunityBallots],
+        // ["test emergency methods", testEmergencyMethods],
+        // ["test community ballots (default)", testCommunityBallots],
+        // ["test version", testVersion],
+        // ["test upgrade", testUpgrade],
+        // ["test creating democ and permissions", testCreateDemoc],
+        // ["test payments for democ", testPaymentsForDemoc],
+        ["test reclaiming tokens", testReclaimToken],
         skipOnEnvVar("test adding BBFarm", testAddingBBFarm, "TEST_ADD_BBFARMS"),
 
     ];
