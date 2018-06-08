@@ -26,7 +26,6 @@ contract ixEvents {
     event AddedBBFarm(uint8 bbFarmId);
     event SetBackend(bytes32 setWhat, address newSC);
     event DeprecatedBBFarm(uint8 bbFarmId);
-    event EmergencyDemocOwner(bytes32 democHash, address newOwner);
     event CommunityBallot(bytes32 democHash, uint256 ballotId);
     event ManuallyAddedBallot(bytes32 democHash, uint256 ballotId, uint256 packed);
     // copied from BBFarm - unable to inherit from BBFarmEvents...
@@ -50,7 +49,6 @@ contract IxIface is hasVersion,
     function addBBFarm(BBFarmIface bbFarm) external returns (uint8 bbFarmId);
     function setABackend(bytes32 toSet, address newSC) external;
     function deprecateBBFarm(uint8 bbFarmId, BBFarmIface _bbFarm) external;
-    function emergencySetDOwner(bytes32 democHash, address newOwner) external;
 
     /* global getters */
     function getPayments() external view returns (IxPaymentsIface);
@@ -193,13 +191,6 @@ contract SVIndex is IxIface {
         require(bbFarms[bbFarmId] == _bbFarm);
         deprecatedBBFarms[bbFarmId] = true;
         emit DeprecatedBBFarm(bbFarmId);
-    }
-
-    /* Preferably for emergencies only */
-
-    function emergencySetDOwner(bytes32 democHash, address newOwner) only_owner() external {
-        backend.setDOwner(democHash, newOwner);
-        emit EmergencyDemocOwner(democHash, newOwner);
     }
 
     /* Getters for backends */

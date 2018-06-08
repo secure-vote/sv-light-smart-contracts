@@ -25,6 +25,7 @@ contract ixBackendEvents {
     event DemocCommunityBallotsEnabled(bytes32 indexed democHash, bool enabled);
     event DemocErc20OwnerClaimDisabled(bytes32 indexed democHash);
     event DemocClaimed(bytes32 indexed democHash);
+    event EmergencyDemocOwner(bytes32 indexed democHash, address newOwner);
 }
 
 
@@ -37,6 +38,7 @@ contract IxBackendIface is hasVersion, ixBackendEvents, permissioned, payoutAllC
 
     /* owner functions */
     function dAdd(bytes32 democHash, address erc20, bool disableErc20OwnerClaim) external;
+    function emergencySetDOwner(bytes32 democHash, address newOwner) external;
 
     /* democ admin */
     function dInit(address defaultErc20, address initOwner, bool disableErc20OwnerClaim) external returns (bytes32 democHash);
@@ -170,6 +172,13 @@ contract SVIndexBackend is IxBackendIface {
     function dAdd(bytes32 democHash, address erc20, bool disableErc20OwnerClaim) only_owner() external {
         _addDemoc(democHash, erc20, msg.sender, disableErc20OwnerClaim);
         emit ManuallyAddedDemoc(democHash, erc20);
+    }
+
+    /* Preferably for emergencies only */
+
+    function emergencySetDOwner(bytes32 democHash, address newOwner) only_owner() external {
+        _setDOwner(democHash, newOwner);
+        emit EmergencyDemocOwner(democHash, newOwner);
     }
 
     /* user democ admin functions */
