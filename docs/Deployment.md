@@ -12,6 +12,10 @@ Initial prep needed:
 
 ## Main Deploy
 
+**WARNING:** if you would like to deploy the index in such a way that the code can be verified through etherscan you should use `solidity_flattener` to generate the `.sol` file, use `solc` to compile that with whatever flags, and then deploy _that_ code, not the code provided to you when deploying the index below. Note, however, that you will need to ensure the constructor arguments are correctly attached to the index when deploying.
+
+**Actual Deployment**
+
 You can use `./bin/deploy-ix-full.js` to deploy the contract. Be sure to check `--help`. Be sure to provide:
 * emergency payments addr
 * the owner addr if deploying manually
