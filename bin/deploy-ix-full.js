@@ -74,7 +74,7 @@ const sendSCMethod = async (sc, method, acct, silent = true) => {
 
     const data = method.encodeABI()
     const to = sc.options.address
-    if (acct) {
+    if (acct.justAddress !== true) {
         const gas = await method.estimateGas({from: acct.address})
         const tx = {data, gas, to, value: 0}
         const {rawTransaction: signedTx} = await acct.signTransaction(tx)
@@ -113,7 +113,7 @@ const deployContract = async ({name, deployAcct, arguments = [], srcDir = DEFAUL
     const [abi, bin] = loadDetails(name, srcDir)
 
     // prep deployment
-    const sendParams = {data: "0x" + bin, from: deployAcct ? deployAcct.address : SV.const.zeroAddr}
+    const sendParams = {data: "0x" + bin, from: deployAcct.address}
     const contract = new web3.eth.Contract(abi, sendParams);
 
     const deployObj = contract.deploy({...sendParams, arguments})
@@ -132,7 +132,7 @@ const deployContract = async ({name, deployAcct, arguments = [], srcDir = DEFAUL
     }
 
     let addr;
-    if (deployAcct) {
+    if (deployAcct.justAddress !== true) {
         logInfo (`Deploying ${name} now.`)
         const signed = await deployAcct.signTransaction(sendParamsFinal);
 
@@ -170,20 +170,20 @@ const deployContract = async ({name, deployAcct, arguments = [], srcDir = DEFAUL
 
 
 
-const fullDeploy = async ({dev, commAuction, deployAcct, index, backend, payments, adminPxF, bbFarm, deployOptions, globalConfig, paymentsEmergencyAdmin, ensProxy, ensOwnerProxy, ensIxDomain, ensProxyIsGen1, skipPermissions}) => {
-    const _load = filename => loadDetails(filename, "_solDist");
+const fullDeploy = async ({dev, ownerAddr, commAuction, deployAcct, index, backend, payments, adminPxF, bbFarm, deployOptions, globalConfig, paymentsEmergencyAdmin, ensProxy, ensOwnerProxy, ensIxDomain, ensProxyIsGen1, skipPermissions}) => {
 
     if (S.isNothing(deployOptions)) {
-        backend = backend || await deployContract({deployAcct, name: 'SVIndexBackend'})
-        payments = payments || await deployContract({deployAcct, name: 'SVPayments', arguments: [paymentsEmergencyAdmin]})
-        bbFarm = bbFarm || await deployContract({deployAcct, name: 'BBFarm'})
-        commAuction = commAuction || await deployContract({deployAcct, name: 'CommunityAuctionSimple'})
+        backend = backend || await deployContract({deployAcct, name: 'SVIndexBackend', ownerAddr})
+        payments = payments || await deployContract({deployAcct, name: 'SVPayments', ownerAddr, arguments: [paymentsEmergencyAdmin]})
+        bbFarm = bbFarm || await deployContract({deployAcct, name: 'BBFarm', ownerAddr})
+        commAuction = commAuction || await deployContract({deployAcct, name: 'CommunityAuctionSimple', ownerAddr})
 
         if (!index) {
             logInfo('About to deploy Index\n')
 
             index = index || await deployContract({
                 deployAcct,
+                ownerAddr,
                 name: 'SVIndex',
                 arguments: [backend, payments, ensOwnerProxy, bbFarm, commAuction]
             })
@@ -201,9 +201,9 @@ const fullDeploy = async ({dev, commAuction, deployAcct, index, backend, payment
         }
         logInfo(`Next we need to configure the ens stuff.`)
 
-        logBreak()
+        // logBreak()
 
-        await addIndexToEnsPx({deployAcct, ensIxDomain, ensProxy, index, ensProxyIsGen1})
+        // await addIndexToEnsPx({deployAcct, ensIxDomain, ensProxy, index, ensProxyIsGen1})
 
         logBreak()
 
@@ -366,10 +366,10 @@ const main = async () => {
         },
         ...mkAddrArg("backend"),
         ...mkAddrArg("payments"),
-        ...mkAddrArg("paymentsEmergencyAdmin"),
+        ...mkAddrArg("paymentsEmergencyAdmin", true),
         ...mkAddrArg("commAuction"),
         ...mkAddrArg("bbFarm"),
-        ...mkAddrArg("ensProxy", true),
+        // ...mkAddrArg("ensProxy", true),
         ...mkAddrArg("ensOwnerProxy", true),
         ...mkAddrArg("index"),
     }).version(false).argv;
@@ -381,6 +381,8 @@ const main = async () => {
         logInfo(`Detected private key.`)
         args.deployAcct = await web3.eth.accounts.privateKeyToAccount(args.privkey);
         logInfo(`Deploying from ${args.deployAcct.address}`);
+    } else {
+        args.deployAcct = {address: args. ownerAddr, justAddress: true}
     }
 
     if (networkVersion !== args.network) {
@@ -391,70 +393,6 @@ const main = async () => {
     const deployOptions = args.fresh ? mkDeployFresh() : mkDeploy(args)
     exitIf(args.fresh == false, 'Can only do a --fresh deploy atm')
     return await fullDeploy({...args, deployOptions})
-
-    const deployF = async () => {
-
-        // set the contract deployment arguments
-        const contractArgs = JSON.parse(args.argsJson);
-
-        if (args.deploy && args.privkey) {
-            log("About to deploy...")
-            log("NOTE:".yellow + " The cli will become unresponsive until the transaction confirms. Please be patient. \n\n")
-            log("\nContract Deploying!\n".green);
-
-
-            // const deployCallback = (err, deployed) => {
-            //     if (err) {
-            //         log("WARNING:".red + " Ran into an error while deploying contract:")
-            //         log(err);
-            //         log("\nStringified error: " + JSON.stringify(err));
-            //         process.exit(1);
-            //     } else {
-            //         log("Tx Hash: " + deployed.transactionHash.green);
-            //         if (deployed.address) {
-            //             log("Contract Addr: " + deployed.address.green + "\n\n");
-            //             log("          >>> Job Done - Exiting <<<          ".bgGreen.black)
-            //             process.exit(0);
-            //         } else {
-            //             log("Awaiting a confirmation...\n".cyan);
-            //         }
-            //     }
-            // };
-
-            // organise our final arguments and deploy!
-            const signed = await deployAcct.signTransaction(compiledSendParams);
-            const r = web3.eth.sendSignedTransaction(signed.rawTransaction);
-            r.on("transactionHash", hash => {
-                console.log("Got Tx Hash".green, hash.yellow);
-            })
-            r.on("receipt", receipt => {
-                console.log("Got Tx Receipt!".green);
-                console.log("Contract Addr:".green, receipt.contractAddress.yellow);
-            })
-            return r;
-        } else {
-            log("Contract to deploy:\n".green.bold);
-            log(JSON.stringify(compiledSendParams, null, 2))
-            log("\n\n^^^ Contract parameters to deploy are above ^^^\n".green.bold)
-
-            console.log("Gas estimate: ", estGas);
-        }
-    }
-
-    // if (!args.unsafeSkipChecks) {
-    //     return correctDetails.run()
-    //         .then(async isCorrect => {
-    //             if (!isCorrect) {
-    //                 log("Exiting: details not correct.")
-    //                 process.exit(0);
-    //             } else {
-    //                 await deployF();
-    //                 return
-    //             }
-    //         })
-    // } else {
-    //     return await deployF();
-    // }
 }
 
 

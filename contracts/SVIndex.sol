@@ -4,8 +4,7 @@ pragma solidity ^0.4.24;
 //
 // The Index by which democracies and ballots are tracked (and optionally deployed).
 // Author: Max Kaye <max@secure.vote>
-// License: MIT
-// version: v1.2.0 [WIP]
+// version: v2.0.0
 //
 
 
@@ -19,6 +18,7 @@ import { CommAuctionIface } from "./CommunityAuction.sol";
 import "./SVBallotConsts.sol";
 import { IxBackendIface, ixBackendEvents } from "./SVIndexBackend.sol";
 import { IxPaymentsIface, ixPaymentEvents } from "./SVPayments.sol";
+import {CanReclaimToken} from "./CanReclaimToken.sol";
 
 
 contract ixEvents {
@@ -26,7 +26,6 @@ contract ixEvents {
     event AddedBBFarm(uint8 bbFarmId);
     event SetBackend(bytes32 setWhat, address newSC);
     event DeprecatedBBFarm(uint8 bbFarmId);
-    event EmergencyDemocOwner(bytes32 democHash, address newOwner);
     event CommunityBallot(bytes32 democHash, uint256 ballotId);
     event ManuallyAddedBallot(bytes32 democHash, uint256 ballotId, uint256 packed);
     // copied from BBFarm - unable to inherit from BBFarmEvents...
@@ -42,6 +41,7 @@ contract IxIface is hasVersion,
                     ixEvents,
                     SVBallotConsts,
                     owned,
+                    CanReclaimToken,
                     upgradePtr,
                     payoutAllC {
 
@@ -49,7 +49,6 @@ contract IxIface is hasVersion,
     function addBBFarm(BBFarmIface bbFarm) external returns (uint8 bbFarmId);
     function setABackend(bytes32 toSet, address newSC) external;
     function deprecateBBFarm(uint8 bbFarmId, BBFarmIface _bbFarm) external;
-    function emergencySetDOwner(bytes32 democHash, address newOwner) external;
 
     /* global getters */
     function getPayments() external view returns (IxPaymentsIface);
@@ -192,13 +191,6 @@ contract SVIndex is IxIface {
         require(bbFarms[bbFarmId] == _bbFarm);
         deprecatedBBFarms[bbFarmId] = true;
         emit DeprecatedBBFarm(bbFarmId);
-    }
-
-    /* Preferably for emergencies only */
-
-    function emergencySetDOwner(bytes32 democHash, address newOwner) only_owner() external {
-        backend.setDOwner(democHash, newOwner);
-        emit EmergencyDemocOwner(democHash, newOwner);
     }
 
     /* Getters for backends */

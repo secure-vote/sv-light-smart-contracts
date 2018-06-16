@@ -7,3 +7,5 @@ coverageEnv
 coverage.json
 scTopics
 deploy*.log
+tmp*
+_solDist

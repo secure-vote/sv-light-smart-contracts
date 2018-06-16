@@ -292,6 +292,11 @@ const testRealV1OnMainnet = async ({accounts: acc}) => {
 
 
 const testKovanBackwardsCompat = async ({accounts: acc}) => {
+    if (process.env.DO_KOVAN_DELEGATION_TEST !== "true") {
+        console.warn("WARNING: Skipping kovan backwards compatibility test, use 'DO_KOVAN_DELEGATION_TEST=true' to perform this test");
+        return;
+    }
+
     const tc = "0xAA62468E0668Dc9f2d5A145093cdbfa7D84E1668";
     const v1 = "0xc45797d1A7acCc9FB2DcB054Aa907f303A0a08f8";
     const v2 = "0xB4bE49829B7f70711B399c6cBfC05FcF33ff7AbE";

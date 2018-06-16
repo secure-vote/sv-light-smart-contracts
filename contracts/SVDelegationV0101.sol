@@ -8,9 +8,6 @@ pragma solidity ^0.4.24;
 // the most up-to-date version of the contract lives at delegate.secvote.eth
 
 
-import "./SVCommon.sol";  // particularly for ERC20Interface
-
-
 // Main delegation contract v1.1
 contract SVDelegationV0101 {
 

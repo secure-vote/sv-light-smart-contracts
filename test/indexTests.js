@@ -27,6 +27,19 @@ const S = create({checkTypes: true, env});
 
 const wrapTestIx = ({accounts}, f) => {
     return async () => {
+        if (process.env.TEST_ONE_ONLY) {
+            if (f.name === process.env.TEST_ONE_ONLY) {
+                console.log(`running ${f.name}`)
+            } else {
+                return;
+            }
+        }
+
+        if (f.name === "defaultF") {
+            return;
+        }
+
+
         const owner = accounts[0];
         const backupOwner = accounts[accounts.length - 1];
 
@@ -1003,7 +1016,7 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
 
     /* setDAdmin */
 
-    await doLog(`testing emergencySetDAdmin`)
+    await doLog(`testing emergencySetDOwner`)
     // test emergency set for democ - need to do this BEFORE setting backend to bad addr...
     const democAdmin = accounts[1];
     const badActor = accounts[4];
@@ -1013,10 +1026,10 @@ const testEmergencyMethods = async ({svIx, accounts, owner, bbFarm, erc20, doLog
     assert.equal(await ixBackend.getDOwner(democHash), democAdmin, "d admin should match")
 
     await doLog(`running emergencySetDAdmin`)
-    await svIx.emergencySetDOwner(democHash, setTo)
+    await ixBackend.emergencySetDOwner(democHash, setTo)
     assert.equal(await ixBackend.getDOwner(democHash), setTo, "d admin should match after emergency")
 
-    await assertRevert(svIx.emergencySetDOwner(democHash, badActor, {from: badActor}), 'cannot emergency set admin for democ from bad acct')
+    await assertRevert(ixBackend.emergencySetDOwner(democHash, badActor, {from: badActor}), 'cannot emergency set admin for democ from bad acct')
 
     /* Other emergency methods */
 
@@ -1162,6 +1175,25 @@ const testArbitraryData = async ({svIx, owner, ixBackend, erc20, accounts: [, u1
 }
 
 
+const testReclaimToken = async ({svIx, owner, erc20, doLog, ixPayments}) => {
+    assert.deepEqual(await erc20.balanceOf(owner), toBigNumber(0), 'token balance owner 0 init')
+    assert.deepEqual(await erc20.balanceOf(svIx.address), toBigNumber(0), 'token balance ix 0 init')
+    await erc20.faucet({from: owner});
+    const tokenBalance = await erc20.balanceOf(owner);
+    await doLog(`Token balance is ${tokenBalance.toFixed()}`)
+
+    // transfer tokens to index
+    await erc20.transfer(svIx.address, tokenBalance)
+    assert.deepEqual(await erc20.balanceOf(owner), toBigNumber(0), 'token balance owner 0 after tfer')
+    assert.deepEqual(await erc20.balanceOf(svIx.address), tokenBalance, `token balance ix ${tokenBalance.toFixed()} after tfer`)
+
+    await svIx.reclaimToken(erc20.address);
+    await erc20.transferFrom(svIx.address, owner, tokenBalance);
+    assert.deepEqual(await erc20.balanceOf(owner), tokenBalance, `token balance ix ${tokenBalance.toFixed()} after reclaim`)
+    assert.deepEqual(await erc20.balanceOf(svIx.address), toBigNumber(0), `token balance ix 0 after reclaim`)
+}
+
+
 /* bb farm won - by a lot
     Std:  1392871
     Lib:  1310372
@@ -1216,6 +1248,11 @@ contract("SVLightIndex", function (accounts) {
         return [testStr, cond ? testF : defaultF]
     }
 
+    if (process.env.TEST_ONE_ONLY) {
+        console.log(`TEST_ONE_ONLY=${process.env.TEST_ONE_ONLY} present...`)
+        console.log('most tests will be skipped')
+    }
+
     tests = [
         ["test instantiation", testInit],
         ["test gas ballots", testGasOfBallots],
@@ -1241,6 +1278,7 @@ contract("SVLightIndex", function (accounts) {
         ["test upgrade", testUpgrade],
         ["test creating democ and permissions", testCreateDemoc],
         ["test payments for democ", testPaymentsForDemoc],
+        ["test reclaiming tokens", testReclaimToken],
         skipOnEnvVar("test adding BBFarm", testAddingBBFarm, "TEST_ADD_BBFARMS"),
 
     ];
