@@ -5,7 +5,7 @@ pragma solidity ^0.4.24;
  * SVLightBallotBox within a centralised container (like the Index).
  */
 
-import "./BBLib.sol";
+import "./BBLib.v7.sol";
 import { permissioned, payoutAllC } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import { IxIface } from "./SVIndex.sol";
@@ -22,7 +22,7 @@ library CalcBallotId {
                  , bytes24 extraData
             ) internal pure returns (uint256 ballotId) {
         bytes32 midHash = keccak256(abi.encodePacked(specHash, packed, proposer, extraData));
-        ballotId = (uint256(namespace) << 224) & uint256(midHash);
+        ballotId = (uint256(namespace) << 224) | uint256(uint224(midHash));
     }
 }
 
@@ -31,16 +31,70 @@ library CalcBallotId {
  * This contract is on mainnet - should not take votes but should
  * deterministically calculate ballotId
  */
-contract BBFarmProxy is BBFarmIface {
+contract RemoteBBFarmProxy is BBFarmIface, BBFarmForeignPx {
     bytes4 namespace;
-    bytes32 foreignNetworkId;
+    bytes32 foreignNetworkDetails;
     uint constant VERSION = 3;
-    uint nBallots = 0;
 
-    constructor(bytes4 _namespace, bytes32 _foreignNetworkId) payoutAllC(msg.sender) public {
-        namespace = _namespace;
-        foreignNetworkId = _foreignNetworkId;
+    /* storing info about ballots */
+
+    struct BallotPx {
+        bytes32 specHash;
+        uint256 packed;
+        IxIface index;
+        address bbAdmin;
+        bytes16 extraData;
+        uint creationTs;
     }
+
+    BallotPx[] ballots;
+    mapping(uint => uint) ballotIdToN;
+
+    /* constructor */
+
+    constructor(bytes4 _namespace, uint32 fChainId, uint32 fNetworkId, address fBBFarm) payoutAllC(msg.sender) public {
+        namespace = _namespace;
+        // foreignNetworkDetails has the following format:
+        //   [uint32 - unallocated]
+        //   [uint32 - chain id; 0 for curr chainId]
+        //   [uint32 - network id; 0 for curr network]
+        //   [uint160 - address of bbFarm on target network]
+        // eth mainnet is: [0][1][1][<addr>]
+        // eth classic is: [0][61][1][<addr>]
+        // ropsten is: [0][3][3][<addr>]  -- TODO confirm
+        // kovan is: [0][42][42][<addr>]  -- TODO confirm
+        // morden is: [0][62][2][<addr>] -- https://github.com/ethereumproject/go-ethereum/blob/74ab56ba00b27779b2bdbd1c3aef24bdeb941cd8/core/config/morden.json
+        // rinkeby is: [0][4][4][<addr>] -- todo confirm
+        foreignNetworkDetails = bytes32(uint(fChainId) << 192 | uint(fNetworkId) << 160 | uint(fBBFarm));
+    }
+
+    /* global getters */
+
+    function getNamespace() external view returns (bytes4) {
+        return namespace;
+    }
+
+    function getBBLibVersion() external view returns (uint256) {
+        return BBLib.getVersion();
+    }
+
+    function getNBallots() external view returns (uint256) {
+        return ballots.length;
+    }
+
+    function getVersion() external pure returns (uint256) {
+        return VERSION;
+    }
+
+    /* foreign integration */
+
+    function getVotingNetworkDetails() external view returns (bytes32) {
+        // this is given during construction; format is:
+        // [32b unallocated][32b chainId][32b networkId][160b bbFarm addr on foreign network]
+        return foreignNetworkDetails;
+    }
+
+    /* init of ballots */
 
     function initBallot( bytes32 specHash
                        , uint256 packed
@@ -50,12 +104,112 @@ contract BBFarmProxy is BBFarmIface {
                 ) only_editors() external returns (uint ballotId) {
         // calculate the ballotId based on the last 224 bits of the specHash.
         ballotId = ballotId = CalcBallotId.calc(namespace, specHash, packed, bbAdmin, extraData);
-        // we need to call the init functions on our libraries
-        // getDb(ballotId).init(specHash, packed, ix, bbAdmin, bytes16(uint128(extraData)));
-        nBallots += 1;
+        // we just store a log of the ballot here; no additional logic
+        ballotIdToN[ballotId] = ballots.length;
+        ballots.push(BallotPx(specHash, packed, ix, bbAdmin, bytes16(uint128(extraData)), now));
 
         emit BallotCreatedWithID(ballotId);
         emit BallotOnForeignNetwork(foreignNetworkId, ballotId);
+    }
+
+    function initBallotProxy(uint8 v, bytes32 r, bytes32 s, bytes32[4] params) external returns (uint256 ballotId) {
+        // we don't support initBallotProxy on mainnet
+        revert();
+    }
+
+    /* Sponsorship */
+
+    function sponsor(uint ballotId) external payable {
+        // no sponsorship support for remote ballots
+        revert();
+    }
+
+    /* Voting */
+
+    function submitVote(uint ballotId, bytes32 vote, bytes extra) req_namespace(ballotId) external {
+        revert();  // no voting support for px
+    }
+
+    function submitProxyVote(bytes32[5] proxyReq, bytes extra) req_namespace(uint256(proxyReq[3])) external {
+        revert();  // no voting support for px
+    }
+
+    /* Getters */
+
+    function getDetails(uint ballotId, address _voter) external view returns
+            ( bool hasVoted
+            , uint nVotesCast
+            , bytes32 secKey
+            , uint16 submissionBits
+            , uint64 startTime
+            , uint64 endTime
+            , bytes32 specHash
+            , bool deprecated
+            , address ballotOwner
+            , bytes16 extraData) {
+        uint n = ballotIdToN[ballotId];
+        uint packed = ballots[n].packed;
+        return (
+            false,
+            uint(0)-1,
+            bytes32(0),
+            BPackedUtils.packedToSubmissionBits(packed),
+            BPackedUtils.packedToStartTime(packed),
+            BPackedUtils.packedToEndTime(packed),
+            ballots[n].specHash,
+            false,
+            ballots[n].bbAdmin,
+            ballots[n].extraData
+        );
+    }
+
+
+    function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra) {
+        revert();
+    }
+
+    function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs) {
+        revert();
+    }
+
+    function getSequenceNumber(uint ballotId, address voter) external view returns (uint32 sequence) {
+        revert();
+    }
+
+    function getTotalSponsorship(uint ballotId) external view returns (uint) {
+        revert();
+    }
+
+    function getSponsorsN(uint ballotId) external view returns (uint) {
+        revert();
+    }
+
+    function getSponsor(uint ballotId, uint sponsorN) external view returns (address sender, uint amount) {
+        revert();
+    }
+
+    function getCreationTs(uint ballotId) external view returns (uint) {
+        return ballots[ballotIdToN[ballotId]].creationTs;
+    }
+
+    /* ADMIN */
+
+    // Allow the owner to reveal the secret key after ballot conclusion
+    function revealSeckey(uint ballotId, bytes32 sk) external {
+        revert();
+    }
+
+    // note: testing only.
+    function setEndTime(uint ballotId, uint64 newEndTime) external {
+        revert();
+    }
+
+    function setDeprecated(uint ballotId) external {
+        revert();
+    }
+
+    function setBallotOwner(uint ballotId, address newOwner) external {
+        revert();
     }
 }
 
@@ -65,13 +219,11 @@ contract BBFarmProxy is BBFarmIface {
  * (often / always by proxy) and calculates the same ballotId as
  * above.
  */
-contract BBFarmRemote is BBFarmIface {
-    using BBLib for BBLib.DB;
-    using IxLib for IxIface;
+contract RemoteBBFarm is BBFarmIface {
+    using BBLibV7 for BBLibV7.DB;
 
     // namespaces should be unique for each bbFarm
     bytes4 namespace;
-    IxIface index;
 
     uint constant VERSION = 3;
 
@@ -88,10 +240,9 @@ contract BBFarmRemote is BBFarmIface {
 
     /* Constructor */
 
-    constructor(bytes4 _namespace, IxIface ix) payoutAllC(msg.sender) public {
-        assert(BBLib.getVersion() == 6);
+    constructor(bytes4 _namespace) payoutAllC(msg.sender) public {
+        assert(BBLib.getVersion() == 7);
         namespace = _namespace;
-        index = ix;
         emit BBFarmInit(_namespace);
     }
 
@@ -139,6 +290,8 @@ contract BBFarmRemote is BBFarmIface {
     }
 
     function initBallotProxy(uint8 v, bytes32 r, bytes32 s, bytes32[4] params) external returns (uint256 ballotId) {
+        // do not allow proxy ballots either atm
+        revert();
         // params is a bytes32[4] of [specHash, packed, proposer, extraData]
         bytes32 specHash = params[0];
         uint256 packed = uint256(params[1]);
@@ -161,16 +314,18 @@ contract BBFarmRemote is BBFarmIface {
     /* Sponsorship */
 
     function sponsor(uint ballotId) external payable {
-        BBLib.DB storage db = getDb(ballotId);
-        db.logSponsorship(msg.value);
-        doSafeSend(db.index.getPayTo(), msg.value);
-        emit Sponsorship(ballotId, msg.value);
+        // no sponsorship on foreign networks
+        revert();
+        // BBLib.DB storage db = getDb(ballotId);
+        // db.logSponsorship(msg.value);
+        // doSafeSend(db.index.getPayTo(), msg.value);
+        // emit Sponsorship(ballotId, msg.value);
     }
 
     /* Voting */
 
     function submitVote(uint ballotId, bytes32 vote, bytes extra) req_namespace(ballotId) external {
-        getDb(ballotId).submitVote(vote, extra);
+        getDb(ballotId).submitVoteAlways(vote, extra);
         emit Vote(ballotId, vote, msg.sender, extra);
     }
 
@@ -178,7 +333,7 @@ contract BBFarmRemote is BBFarmIface {
         // see https://github.com/secure-vote/tokenvote/blob/master/Docs/DataStructs.md for breakdown of params
         // pr[3] is the ballotId, and pr[4] is the vote
         uint ballotId = uint256(proxyReq[3]);
-        address voter = getDb(ballotId).submitProxyVote(proxyReq, extra);
+        address voter = getDb(ballotId).submitProxyVoteAlways(proxyReq, extra);
         bytes32 vote = proxyReq[4];
         emit Vote(ballotId, vote, voter, extra);
     }
@@ -216,6 +371,10 @@ contract BBFarmRemote is BBFarmIface {
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra) {
         (voteData, sender, extra, ) = getDb(ballotId).getVote(voteId);
+    }
+
+    function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs) {
+        return getDb(ballotId).getVote(voteId);
     }
 
     function getSequenceNumber(uint ballotId, address voter) external view returns (uint32 sequence) {

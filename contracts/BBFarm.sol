@@ -32,7 +32,7 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
     /* foreign network integration */
 
     // requires version >= 3;
-    function getNetworkId() external view returns (bytes32);
+    function getVotingNetworkDetails() external view returns (uint);
 
     /* init a ballot */
 
@@ -69,6 +69,7 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
             , bytes16 extraData);
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra);
+    function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs);
     function getTotalSponsorship(uint ballotId) external view returns (uint);
     function getSponsorsN(uint ballotId) external view returns (uint);
     function getSponsor(uint ballotId, uint sponsorN) external view returns (address sender, uint amount);
@@ -140,8 +141,9 @@ contract BBFarm is BBFarmIface {
         return nBallots;
     }
 
-    function getNetworkId() external view returns (bytes32) {
-        return bytes32("mainnet");
+    function getVotingNetworkDetails() external view returns (bytes32) {
+        // 0 in either chainId or networkId spot indicate the local chain
+        return bytes32(uint(0) << 192 | uint(0) << 160 | uint160(address(this)));
     }
 
     /* db lookup helper */
@@ -231,6 +233,10 @@ contract BBFarm is BBFarmIface {
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra) {
         (voteData, sender, extra, ) = getDb(ballotId).getVote(voteId);
+    }
+
+    function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs) {
+        return getDb(ballotId).getVote(voteId);
     }
 
     function getSequenceNumber(uint ballotId, address voter) external view returns (uint32 sequence) {

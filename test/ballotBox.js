@@ -135,6 +135,9 @@ async function testInstantiation({accounts, BB, bbaux, log, farm}) {
     assert.equal(await aux.getEncSeckey(), hexSk, "secret key should match");
 
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitVote(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
+
+    // for bbfarm on mainnet
+    assert.deepEqual(await farm.getVotingNetworkDetails(), toBigNumber(farm.address), 'bbfarm should report voting network details which match its address')
 }
 
 

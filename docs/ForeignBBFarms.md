@@ -10,7 +10,7 @@ So we'll need a proxy BBFarm set up on mainnet to populate and link up with ix, 
 
 We can use the namespace to indicate a foreign network (first byte).
 
-* `0x00------` namespaces are on Eth mainnet
+* `0x00------` namespaces are on Eth mainnet (or host network if testnet)
 * `0x01------` namespaces are on Eth classic
 
 BBFarms (the proxy on mainnet and real one on classic) should have the same namespace (duh).
@@ -24,7 +24,7 @@ BBFarms (the proxy on mainnet and real one on classic) should have the same name
     * BBFarm returns a ballotId that can be deterministically generated on both networks.
 
 * Classic (or foreign)
-    * User manually inits a ballot by calling the appropriate function on the BBFarm (`initBallot`)
+    * User manually inits a ballot by calling the appropriate function on the BBFarm (`initBallot`) -- TODO: why do this? Why not just allow referring to any BallotId?
     * Classic BBFarm deterministically generates same ballotId as mainnet BBFarm proxy.
 
 ### Deterministic ballotId gen
@@ -33,6 +33,8 @@ BBFarms (the proxy on mainnet and real one on classic) should have the same name
 
 Choice: allow BBFarm to edit startTime in this case?
 - perhaps order should be: deploy ballot to classic (allowing the alteration of startTime to avoid manipulation), then _alter_ the startTime (submitted to the main BBFarm) to match that in classic.
+- or deploy ballot + info to mainnet and just submit votes to foreign?
+- foreign bbfarm allows _all_ votes to be submitted at all times, and just up to a bbaux or auditor to filter? (bbaux could filter out votes on-chain).
 
 Params that need to be included in the calculation of the ballotId:
 * user's address (note: this means the _same_ address must be used for both classic and mainnet - safe way feels like: do this via proxy and use ecrecover)
