@@ -8,6 +8,7 @@ var RemoteBBFarm = artifacts.require("RemoteBBFarm")
 
 module.exports = function(deployer) {
     deployer.deploy(BBLib)
+    deployer.deploy(BBLibV7)
     // deployer.deploy(BPackedUtils);
 
     // deployer.link(BPackedUtils, SVIndex);
