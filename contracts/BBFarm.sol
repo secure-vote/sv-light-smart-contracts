@@ -5,7 +5,7 @@ pragma solidity ^0.4.24;
  * SVLightBallotBox within a centralised container (like the Index).
  */
 
-import "./BBLib.sol";
+import "./BBLib.v6.sol";
 import { permissioned, payoutAllC } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import { IxIface } from "./SVIndex.sol";
@@ -32,7 +32,7 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
     /* foreign network integration */
 
     // requires version >= 3;
-    function getVotingNetworkDetails() external view returns (uint);
+    function getVotingNetworkDetails() external view returns (bytes32);
 
     /* init a ballot */
 

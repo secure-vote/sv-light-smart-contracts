@@ -10,7 +10,7 @@ pragma solidity 0.4.24;
  */
 
 
-import "./BBLib.sol";
+import "./BBLib.v6.sol";
 import "./BPackedUtils.sol";
 import { BBFarmIface } from "./BBFarm.sol";
 

@@ -12,7 +12,7 @@ import { owned, upgradePtr, payoutAllC, controlledIface } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import "./EnsOwnerProxy.sol";
 import "./BPackedUtils.sol";
-import "./BBLib.sol";
+import "./BBLib.v6.sol";
 import { BBFarmIface, BBFarmEvents } from "./BBFarm.sol";
 import { CommAuctionIface } from "./CommunityAuction.sol";
 import "./SVBallotConsts.sol";
