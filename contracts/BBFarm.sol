@@ -170,7 +170,7 @@ contract BBFarm is BBFarmIface {
         emit BallotCreatedWithID(ballotId);
     }
 
-    function initBallotProxy(uint8 v, bytes32 r, bytes32 s, bytes32[4] params) external returns (uint256 ballotId) {
+    function initBallotProxy(uint8, bytes32, bytes32, bytes32[4]) external returns (uint256) {
         // this isn't supported on the deployed BBFarm
         revert();
     }

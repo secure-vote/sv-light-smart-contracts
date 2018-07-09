@@ -137,7 +137,7 @@ async function testInstantiation({accounts, BB, bbaux, log, farm}) {
     await assertErrStatus(ERR_BALLOT_CLOSED, vc.submitVote(hexPk, hexPk, { from: accounts[4] }), "late ballot throws");
 
     // for bbfarm on mainnet
-    assert.deepEqual(await farm.getVotingNetworkDetails(), toBigNumber(farm.address), 'bbfarm should report voting network details which match its address')
+    assert.deepEqual(await farm.getVotingNetworkDetails(), w3.utils.padLeft(farm.address, 64, '0'), 'bbfarm should report voting network details which match its address')
 }
 
 
