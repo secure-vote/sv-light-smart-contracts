@@ -10,5 +10,4 @@ deploy*.log
 tmp*
 _solDist
 .DS_Store
-package-lock.json
 yarn-error.log
