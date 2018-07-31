@@ -9,3 +9,5 @@ scTopics
 deploy*.log
 tmp*
 _solDist
+.DS_Store
+yarn-error.log
