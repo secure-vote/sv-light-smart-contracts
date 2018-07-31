@@ -92,7 +92,7 @@ contract UnsafeEd25519SelfDelegation {
     }
 
     // Get all recorded delegations between a start date and end date
-    function getAllForPubKeyBetween (bytes32 pubKey, uint startDate, uint endDate) public view returns (
+    function getAllForPubKeyBetween(bytes32 pubKey, uint startDate, uint endDate) public view returns (
         bytes32[] memory dlgtRequests,
         bytes32[] memory sig1s,
         bytes32[] memory sig2s,

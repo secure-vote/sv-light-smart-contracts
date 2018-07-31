@@ -105,7 +105,17 @@ const testDelegation = async ({selfDelegation, doLog, owner, accounts}) => {
     assert.deepEqual(d1Dlgtions.slice(0,3), expectedD1, 'dlgation 1 match, sans timestamp')
 
     // do another delegation
+    const d2 = mkDelegation(d1.toAddr, w3.utils.genRandomHex(3), d1.kp)
+    const d2Dlgtions = await selfDelegation.getAllForPubKey(d2.data[1])
+    const expectedD2 = R.compose(R.map(R.concat), R.zip)([[d2.data[0]], [d2.data[2][0]], [d2.data[2][1]]])
+
+    assert.equal(await selfDelegation.dLogN(), 1, '1 pk - dlgtion')
+    assert.equal(await selfDelegation.nDelegations(d1.data[1]), 2, '2 dlgtion for pk')
+    assert.equal(await selfDelegation.nAddressLog(), 1, '1 addr - dlgtion')
+    assert.deepEqual(d2Dlgtions.slice(0,3), expectedD2, 'dlgation 2 match, sans timestamp')
+
     // do test with silly time range to get 0 results
+    assert.deepEqual(await selfDelegation.getAllForPubKeyBetween(d2.data[1], 0, 1), [[],[],[],[]], 'dlgation get with silly timestamps returns empty')
 }
 
 
