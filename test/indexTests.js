@@ -1242,7 +1242,7 @@ contract("SVLightIndex", function (accounts) {
         const allT = process.env.RUN_ALL_TESTS
         const condAll = (allT && allT.toLowerCase() === "true")
         const cond = (eVar && eVar.toLowerCase() === "true") || condAll
-        console.log(`Test (${testStr}) will be skipped if the following env var is present:\n${envVarStr}=true`)
+        console.log(`Test (${testStr}) will be skipped unless the following env var is present:\n${envVarStr}=true`)
         console.log(cond ? "running this time" : "skipping this time")
         const defaultF = async () => { return true; }
         return [testStr, cond ? testF : defaultF]

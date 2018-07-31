@@ -18,7 +18,7 @@
     "eth-lib": "^0.2.8",
     "ethereumjs-testrpc": "^6.0.3",
     "ethereumjs-util": "^5.1.5",
-    "ganache-cli": "^6.1.0",
+    "ganache-cli": "^6.1.6",
     "graceful-fs": "^4.1.11",
     "jq": "^1.7.2",
     "js-nacl": "^1.2.2",
@@ -28,8 +28,10 @@
     "sanctuary": "^0.14.1",
     "solidity-coverage": "^0.5.1",
     "solium": "^1.1.6",
-    "sv-lib": "^0.1.2",
+    "sv-lib": "^0.2.1",
     "truffle": "trufflesuite/truffle",
+    "truffle-fast-compile": "^0.0.3",
+    "tweetnacl": "^1.0.0",
     "web3": "^1.0.0-beta.33",
     "yargs": "^11.0.0"
   },
@@ -46,6 +48,8 @@
     "compile-ens": "for f in $(ls ./ens | grep sol); do ./bin/compile.sh -d ens -c $f -o _distEns; done",
     "coverage": "RUN_ALL_TESTS=true solidity-coverage",
     "c": "./bin/compile.sh -c",
-    "diff": "git diff -- . ':(exclude)_solDist/*'"
+    "diff": "git diff -- . ':(exclude)_solDist/*'",
+    "manage-nodes:dev": "scripts/manage-nodes.sh",
+    "test:geth": "export GETH_CLIENT=geth; yarn manage-nodes:dev && truffle test --network rpc"
   }
 }

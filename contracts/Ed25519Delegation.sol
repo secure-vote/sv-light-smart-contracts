@@ -87,7 +87,7 @@ contract UnsafeEd25519SelfDelegation {
         return getAllForPubKeyBetween(pubKey, 0, 2**64-1);
     }
 
-    function _delegationInRange(Delegation storage d, uint start, uint end) internal returns (bool) {
+    function _delegationInRange(Delegation storage d, uint start, uint end) internal view returns (bool) {
         return d.recordedTs >= start && d.recordedTs <= end;
     }
 
@@ -96,14 +96,14 @@ contract UnsafeEd25519SelfDelegation {
         bytes32[] memory dlgtRequests,
         bytes32[] memory sig1s,
         bytes32[] memory sig2s,
-        uint[] recordedTimeStamps
+        uint[] timestamps
     ) {
         for (uint i = 0; i < delegations[pubKey].length; i++) {
             if (_delegationInRange(delegations[pubKey][i], startDate, endDate)) {
                 dlgtRequests = M.appendBytes32(dlgtRequests, delegations[pubKey][i].dlgtRequest);
                 sig1s = M.appendBytes32(sig1s, delegations[pubKey][i].sig1);
                 sig2s = M.appendBytes32(sig2s, delegations[pubKey][i].sig2);
-                recordedTimeStamps = M.appendUint256(recordedTimeStamps, delegations[pubKey][i].recordedTs);
+                timestamps = M.appendUint256(timestamps, delegations[pubKey][i].recordedTs);
             }
         }
     }

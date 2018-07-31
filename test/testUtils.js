@@ -233,6 +233,12 @@ module.exports = function () {
         return Web3.utils.bytesToHex(Web3.utils.hexToBytes(bytes32Addr).slice(0, 12));
     }
 
+
+    this.hexToUint8Array = hex => {
+        return Uint8Array.from(w3.utils.hexToBytes(hex))
+    }
+
+
     // this is from the bech32 spec (Bitcoin)
     const B32_ALPHA = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
     const toAlphabet = arr => {
