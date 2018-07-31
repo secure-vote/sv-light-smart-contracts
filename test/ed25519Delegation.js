@@ -29,6 +29,22 @@ const mkDelegation = (toAddr, nonce, kp) => {
     return {data: [dlgtReq, pk, [sig1, sig2]], kp, toAddr}
 }
 
+const mkBadHdrDelegation = (toAddr, nonce, kp) => {
+    let dlgtReq = prepareEd25519Delegation(toAddr, nonce);
+
+    // corrupt the header - this part is constant so 0 always invalid
+    dlgtReq = "0x00" + dlgtReq.slice(4)
+    console.log(dlgtReq)
+
+    const sigRaw = nacl.sign.detached(hexToUint8Array(dlgtReq), kp.secretKey)
+
+    const sig1 = w3.utils.bytesToHex(sigRaw.slice(0, 32))
+    const sig2 = w3.utils.bytesToHex(sigRaw.slice(32))
+    const pk = w3.utils.bytesToHex(kp.publicKey)
+
+    return {data: [dlgtReq, pk, [sig1, sig2]], kp, toAddr}
+}
+
 
 const wrapTest = ({accounts}, f) => {
     console.log("wrapTest called")
@@ -87,11 +103,28 @@ const testDelegation = async ({selfDelegation, doLog, owner, accounts}) => {
     assert.equal(await selfDelegation.nDelegations(d1.data[1]), 1, '1 dlgtion for pk')
     assert.equal(await selfDelegation.nAddressLog(), 1, '1 addr - dlgtion')
     assert.deepEqual(d1Dlgtions.slice(0,3), expectedD1, 'dlgation 1 match, sans timestamp')
+
+    // do another delegation
+    // do test with silly time range to get 0 results
 }
 
 
 const testReverts = async ({selfDelegation, doLog, owner, accounts}) => {
     const [_, u1, u2, u3, u4, u5] = accounts;
+
+    const kp = nacl.sign.keyPair()
+    const addr = w3.utils.randomHex(20)
+    const nonce = w3.utils.randomHex(3)
+
+    const d1 = mkBadHdrDelegation(addr, nonce, kp)
+
+    // bad header
+    await asyncAssertThrow(() => selfDelegation.addUntrustedSelfDelegation(...d1.data), 'bad header fails')
+    // do replay
+
+    const d2 = genDelegation()
+    await selfDelegation.addUntrustedSelfDelegation(...d2.data)
+    await asyncAssertThrow(() => selfDelegation.addUntrustedSelfDelegation(...d2.data), 'replay fails')
 }
 
 

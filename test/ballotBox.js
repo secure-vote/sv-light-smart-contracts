@@ -11,7 +11,7 @@ require("./testUtils")();
 
 const naclJs = require("js-nacl")
 const crypto = require("crypto")
-const svLib = require("sv-lib")
+const { mkSignedBallotForProxy } = require("sv-lib/lib/ballotBox")
 const Account = require("eth-lib/lib/account")
 
 const R = require('ramda')
@@ -466,7 +466,7 @@ const mkProxyVote = async ({ballotId, sequence = 4919, extra = '0x', privKey = n
     const _ballotId = w3.utils.toBN(ballotId)
     const vote = genRandomBytes(32)
 
-    const {proxyReq} = svLib.ballotBox.mkSignedBallotForProxy(_ballotId, sequence, vote, extra, privKey, {skipSequenceSizeCheck: true})
+    const {proxyReq} = mkSignedBallotForProxy(_ballotId, sequence, vote, extra, privKey, {skipSequenceSizeCheck: true})
 
     return {proxyReq, extra, vote, sequence, address, privKey}
 }
