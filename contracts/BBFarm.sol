@@ -5,7 +5,7 @@ pragma solidity ^0.4.24;
  * SVLightBallotBox within a centralised container (like the Index).
  */
 
-import "./BBLib.v6.sol";
+import { BBLibV7 as BBLib } from "./BBLib.v7.sol";
 import { permissioned, payoutAllC } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import { IxIface } from "./SVIndex.sol";
@@ -43,6 +43,7 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
                        , address bbAdmin
                        , bytes24 extraData
                        ) external returns (uint ballotId);
+    // requires v3+; also isn't supported on all networks
     function initBallotProxy(uint8 v, bytes32 r, bytes32 s, bytes32[4] params) external returns (uint256 ballotId);
 
     /* Sponsorship of ballots */
@@ -69,6 +70,7 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
             , bytes16 extraData);
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra);
+    // getVoteAndTime requires v3+
     function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs);
     function getTotalSponsorship(uint ballotId) external view returns (uint);
     function getSponsorsN(uint ballotId) external view returns (uint);
@@ -93,7 +95,7 @@ contract BBFarm is BBFarmIface {
     // last 48 bits
     uint256 constant BALLOT_ID_MASK = 0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
-    uint constant VERSION = 2;
+    uint constant VERSION = 3;
 
     mapping (uint224 => BBLib.DB) dbs;
     // note - start at 100 to avoid any test for if 0 is a valid ballotId
@@ -113,7 +115,7 @@ contract BBFarm is BBFarmIface {
     constructor() payoutAllC(msg.sender) public {
         // this bbFarm requires v5 of BBLib (note: v4 deprecated immediately due to insecure submitProxyVote)
         // note: even though we can't test for this in coverage, this has stopped me deploying to kovan with the wrong version tho, so I consider it tested :)
-        assert(BBLib.getVersion() == 6);
+        assert(BBLib.getVersion() == 7);
         emit BBFarmInit(NAMESPACE);
     }
 

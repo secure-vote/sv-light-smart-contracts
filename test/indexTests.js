@@ -223,7 +223,7 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
     assert.deepEqual(await svIx.getVersion(), toBigNumber(2), 'ix ver')
     assert.deepEqual(await ixBackend.getVersion(), toBigNumber(2), 'ixBackend ver')
     assert.deepEqual(await ixPayments.getVersion(), toBigNumber(2), 'ixPayments ver')
-    assert.deepEqual(await bbFarm.getVersion(), toBigNumber(2), 'bbFarm ver')
+    assert.deepEqual(await bbFarm.getVersion(), toBigNumber(3), 'bbFarm ver')
 
     // test BBFarmAux2 w/ the ballot we created above
     const aux = await BBFarmAux2.new()

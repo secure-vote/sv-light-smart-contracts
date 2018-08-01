@@ -295,7 +295,7 @@ contract RemoteBBFarm is BBFarmIface {
 
     /*uint8 v, bytes32 r, bytes32 s, bytes32[4] params*/
     function initBallotProxy(uint8, bytes32, bytes32, bytes32[4]) external returns (uint256 /*ballotId*/) {
-        // do not allow proxy ballots either atm
+        // do not allow proxy ballots either atm -- planned for future versions
         revert();
         // // params is a bytes32[4] of [specHash, packed, proposer, extraData]
         // bytes32 specHash = params[0];

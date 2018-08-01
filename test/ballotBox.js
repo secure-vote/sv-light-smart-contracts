@@ -180,13 +180,15 @@ async function testEncryptionBranching({accounts, BB, bbaux}) {
 
     const tempPk = specHash;
     const _wEnc = await vcEnc.submitVote(bData, tempPk);
+    const castTime = (await getBlock('latest')).timestamp
     assertNoErr(_wEnc);
     assert.equal(await aux.getNVotesCast(), 1, "1 vote");
     assertOnlyEvent("SuccessfulVote", _wEnc);
-    const ballot = await vcEnc.getVote(0);
+    const ballot = await vcEnc.getVoteAndTime(0);
     assert.equal(ballot[0], bData, "ballot data stored");
     assert.equal(ballot[1], accounts[0], "voter stored correctly");
     assert.equal(ballot[2], tempPk, "pk stored matches");
+    assert.reallyClose(ballot[3], toBigNumber(castTime), 'vote cast time matches expected')
 
     /* NO ENCRYPTION */
 
@@ -272,8 +274,8 @@ async function testDeprecation({accounts, BB, bbaux}) {
 const testVersion = async ({BB, bbaux}) => {
     const [startTime, endTime] = await genStartEndTimes();
     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC), zeroAddr);
-    assert.deepEqual(await bb.farm.getBBLibVersion(), toBigNumber(6), "version (BBLib) should be 5");
-    assert.deepEqual(await bb.farm.getVersion(), toBigNumber(2), "version (bbfarm) should be 2");
+    assert.deepEqual(await bb.farm.getBBLibVersion(), toBigNumber(7), "version (BBLib) should be 7");
+    assert.deepEqual(await bb.farm.getVersion(), toBigNumber(3), "version (bbfarm) should be 3");
 }
 
 
@@ -576,6 +578,7 @@ const testRevertConditions = async ({BB, farm, accounts, doLog}) => {
     const bb1 = await BB.new(specHash1, await genStdPacked(), zeroAddr);
     await assertRevert(BB.new(specHash1, await genStdPacked(), zeroAddr), 'cannot create ballot with same specHash')
     await assertRevert(BB.new(zeroHash, await genStdPacked(), zeroAddr), 'cannot create ballot with zero specHash')
+    await assertRevert(farm.initBallotProxy(27, zeroHash, zeroAddr, Array(4).fill(zeroHash)), 'initBallotProxy reverts on std bbfarm')
 }
 
 
