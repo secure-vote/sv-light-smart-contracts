@@ -8,4 +8,4 @@ if [ -n "$TRAVIS" ] || [ -n "$RUN_ALL_TESTS" ]; then
   set +x
 fi
 
-yarn run truffle test $1 --migrations-directory migrations_null
+yarn run truffle test $1

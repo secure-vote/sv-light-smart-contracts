@@ -1,14 +1,25 @@
-var TestRPC = require("ethereumjs-testrpc");
+console.log("Loading truffle.js")
+
+// var TestRPC = require("ethereumjs-testrpc");
 
 const { create, env } = require("sanctuary");
 const S = create({ checkTypes: true, env });
+console.log("truffle.js: init'd sactuary")
+
+const w3Utils = require('web3-utils')
 
 var ganache = require("ganache-cli");
 
+console.log("truffle.js: Loaded ganache; declaring provider")
+
+const accounts = S.map(i => ({ balance: "0xffffffffffffffffffffff", secretKey: w3Utils.padLeft(w3Utils.toHex(i+10), 64)}), S.range(0, 20))
+// console.log("Development network accounts: ", accounts)
+
 let provider = ganache.provider({
   port: 34839,
-  accounts: S.map(_ => ({ balance: "0xffffffffffffffffff" }), S.range(0, 20)),
-  gasLimit: 20000000
+  accounts,
+  gasLimit: 20000000,
+  db_path: "./db",
 })
 
 // needed to make ganache-cli work...
@@ -22,15 +33,21 @@ provider = new Proxy(provider, {
       return obj[method]
     }
     if(method === "sendAsync"){
-        return (...args) => new Promise((resolve, reject) => {
-        provider.send(...args, (err, val) => {
-          err ? reject(err) : resolve(val);
-        })
-      })
+        return provider.send
+        // // this pattern started breaking with ganache 6.1.6
+        // return (...args) => new Promise((resolve, reject) => {
+        // provider.send(...args, (err, val) => {
+        //   err ? reject(err) : resolve(val);
+        // })
+        // })
     }
     return obj[method]
   }
 })
+
+
+console.log("truffle.js: Created provider")
+
 
 module.exports = {
   networks: {
@@ -59,3 +76,5 @@ module.exports = {
     },
   }
 };
+
+console.log("truffle.js: declared exports")

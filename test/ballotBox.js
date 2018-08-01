@@ -454,7 +454,6 @@ const testBBFarmAux2 = async ({accounts, BB, bbaux, doLog, owner}) => {
     const [_, u1, u2, u3, u4] = accounts
 
     let [s, e] = await genStartEndTimes();
-    s += 1
     const _ballot1 = genRandomBytes32();
     const _ballot2 = genRandomBytes32();
 
@@ -470,13 +469,17 @@ const testBBFarmAux2 = async ({accounts, BB, bbaux, doLog, owner}) => {
 
     await doLog(`submitting votes now`)
     await bb.submitVote(_ballot1, "", {from: u1});
+    await doLog(`voted once`)
     await bb.submitVote(_ballot2, "", {from: u2});
+    await doLog(`voted twice`)
 
+    await doLog(`getting ballot details`)
     const expGetBallotDetails = [true, toBigNumber(2), zeroHash, toBigNumber(sb), toBigNumber(s), toBigNumber(e), specHash, false, owner, zeroHash.slice(0, 34)]
     const getBallotDetails = await aux.getBallotDetails(bb.farm.address, bb.ballotId, u1)
     assert.deepEqual(expGetBallotDetails, getBallotDetails, 'getBallotDetails after 2 votes matches')
 
     // note: getBBFarmAddressAndBallotId and ballotIdToDetails tested in indexTests
+    await doLog("done")
 }
 
 
