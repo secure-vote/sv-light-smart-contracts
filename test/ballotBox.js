@@ -5,13 +5,14 @@ var BallotAux = artifacts.require("./BallotAux");
 var BBFarm = artifacts.require("./BBFarm")
 var BBFarmPx = artifacts.require("./BBFarmProxy")
 var BBFarmAux = artifacts.require("./BBFarmAux")
+var BBFarmAux2 = artifacts.require("./BBFarmAux2")
 var TestHelper = artifacts.require("./TestHelper")
 
 require("./testUtils")();
 
 const naclJs = require("js-nacl")
 const crypto = require("crypto")
-const svLib = require("sv-lib")
+const { mkSignedBallotForProxy } = require("sv-lib/lib/ballotBox")
 const Account = require("eth-lib/lib/account")
 
 const R = require('ramda')
@@ -402,10 +403,7 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
     const bbNoEnc = await BB.new(genRandomBytes32(), mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
     const bbEnc = await BB.new(genRandomBytes32(), mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
 
-    // const bb2NoEnc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
-    // const bb2Enc = await BB.new(specHash, mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
-
-    const getBallotsTest = async ({bb, useEnc}) => {
+    const testBBFarmAux = async ({bb, useEnc}) => {
         let aux, getVotesFrom, getVotes;
         aux = await BBFarmAux.new();
         getVotesFrom = acct => aux.getVotesFrom(bb.farm.address, bb.ballotId, acct)
@@ -447,8 +445,41 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
         assert.deepEqual(await bb.getVote(1), [_ballot2, accounts[1], useEnc ? _pk2 : "0x"], 'vote 1 should match')
     }
 
-    await getBallotsTest({bb: bbNoEnc, useEnc: false});
-    await getBallotsTest({bb: bbEnc, useEnc: true});
+    await testBBFarmAux({bb: bbNoEnc, useEnc: false});
+    await testBBFarmAux({bb: bbEnc, useEnc: true});
+}
+
+
+const testBBFarmAux2 = async ({accounts, BB, bbaux, doLog, owner}) => {
+    const [_, u1, u2, u3, u4] = accounts
+
+    let [s, e] = await genStartEndTimes();
+    const _ballot1 = genRandomBytes32();
+    const _ballot2 = genRandomBytes32();
+
+    const sb = (USE_ETH | USE_NO_ENC)
+    const packed = mkPacked(s, e, sb)
+    const specHash = genRandomBytes32();
+    const bb = await BB.new(specHash, packed, owner);
+    const aux = await BBFarmAux2.new()
+
+    const expInitGetBallotDetails = [false, toBigNumber(0), zeroHash, toBigNumber(sb), toBigNumber(s), toBigNumber(e), specHash, false, owner, zeroHash.slice(0, 34)]
+    const initGetBallotDetails = await aux.getBallotDetails(bb.farm.address, bb.ballotId, u1)
+    assert.deepEqual(initGetBallotDetails, expInitGetBallotDetails, 'init getBallotDetails matches')
+
+    await doLog(`submitting votes now`)
+    await bb.submitVote(_ballot1, "", {from: u1});
+    await doLog(`voted once`)
+    await bb.submitVote(_ballot2, "", {from: u2});
+    await doLog(`voted twice`)
+
+    await doLog(`getting ballot details`)
+    const expGetBallotDetails = [true, toBigNumber(2), zeroHash, toBigNumber(sb), toBigNumber(s), toBigNumber(e), specHash, false, owner, zeroHash.slice(0, 34)]
+    const getBallotDetails = await aux.getBallotDetails(bb.farm.address, bb.ballotId, u1)
+    assert.deepEqual(expGetBallotDetails, getBallotDetails, 'getBallotDetails after 2 votes matches')
+
+    // note: getBBFarmAddressAndBallotId and ballotIdToDetails tested in indexTests
+    await doLog("done")
 }
 
 
@@ -466,7 +497,7 @@ const mkProxyVote = async ({ballotId, sequence = 4919, extra = '0x', privKey = n
     const _ballotId = w3.utils.toBN(ballotId)
     const vote = genRandomBytes(32)
 
-    const {proxyReq} = svLib.ballotBox.mkSignedBallotForProxy(_ballotId, sequence, vote, extra, privKey, {skipSequenceSizeCheck: true})
+    const {proxyReq} = mkSignedBallotForProxy(_ballotId, sequence, vote, extra, privKey, {skipSequenceSizeCheck: true})
 
     return {proxyReq, extra, vote, sequence, address, privKey}
 }
@@ -474,7 +505,7 @@ const mkProxyVote = async ({ballotId, sequence = 4919, extra = '0x', privKey = n
 
 const testProxyVote = async ({BB, accounts, doLog, farm}) => {
     const [u0, u1, u2, u3] = accounts;
-    const bb = await BB.new(genRandomBytes32(), await genStdPacked(), u0)
+    const bb = await BB.new(genRandomBytes32(), await genStdPacked(), zeroAddr, u0)
 
     const {proxyReq, extra, vote, sequence, address} = await mkProxyVote({ballotId: bb.ballotId})
 
@@ -555,15 +586,22 @@ const _wrapTest = ({accounts, bbName, mkFarm}, f) => {
         const Emitter = await EmitterTesting.new();
         const log = m => Emitter.log(m);
         const doLog = log;
+
+        await log("Starting test wrap")
+
         const bbaux = await BallotAux.new();
         const farm = await BBFarm.new();
 
         await farm.setPermissions(accounts[0], true)
 
+        await log("Finished wrap contract deployment")
+
         const mkNewBB = async function(specHash, packed, index, lastArg) {
+            await log(`Deploying new BB with args: ${[specHash, packed, index, lastArg]}`)
+
             const from = (lastArg && lastArg.from) ? lastArg.from : accounts[0];
             const txOpts = isTxOpts(lastArg) ? {...lastArg, from: accounts[0]} : {}
-            const _initBBEvent = await farm.initBallot(specHash, packed, index, from, genRandomBytes(31) + "01", txOpts)
+            const _initBBEvent = await farm.initBallot(specHash, packed, index, from, zeroHash.slice(0, 2+24*2), txOpts)
             const {args: {ballotId}} = getEventFromTxR("BallotCreatedWithID", _initBBEvent)
 
             await doLog(`wrapper: Created ballot with ID: ${ballotId.toFixed()}`);
@@ -620,7 +658,9 @@ const _wrapTest = ({accounts, bbName, mkFarm}, f) => {
             farm
         }
 
-        return await f({accounts, BB, log, doLog, bbaux, bbName, farm});
+        await log("Finished test wrapping - starting test now")
+
+        return await f({owner: accounts[0], accounts, BB, log, doLog, bbaux, bbName, farm});
     };
 }
 
@@ -628,6 +668,7 @@ const _wrapTest = ({accounts, bbName, mkFarm}, f) => {
 contract("BallotBox", function(accounts) {
     const tests = [
         ["should instantiate correctly", testInstantiation],
+        ["test bbFarmAux2", testBBFarmAux2],
         ["test sponsorship", testSponsorship],
         ["test revert conditions", testRevertConditions],
         ["test proxy vote", testProxyVote],

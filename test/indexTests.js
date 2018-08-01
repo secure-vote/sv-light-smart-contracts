@@ -10,6 +10,7 @@ const EmitterTesting = artifacts.require("./EmitterTesting");
 const TestHelper = artifacts.require("./TestHelper");
 const FaucetErc20 = artifacts.require("./FaucetErc20");
 const BBFarm = artifacts.require("./BBFarm")
+const BBFarmAux2 = artifacts.require("./BBFarmAux2")
 const BBFarmTesting = artifacts.require("./BBFarmTesting")
 const CommunityAuctionSimple = artifacts.require("./CommunityAuctionSimple")
 const ControlledTest = artifacts.require("./ControlledTest")
@@ -211,7 +212,9 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
 
     assert.deepEqual(await ixBackend.getDInfo(democHash), [erc20.address, owner, toBigNumber(0)], 'getDInfo works as expected (0)')
     const specHash = genRandomBytes32()
-    await svIx.dDeployBallot(democHash, specHash, zeroHash, await mkStdPacked())
+    const packed = await mkStdPacked()
+    const deployBTxr = await svIx.dDeployBallot(democHash, specHash, zeroAddr + w3.utils.randomHex(12).slice(2), packed)
+    const {args: {ballotId}} = getEventFromTxR('BallotCreatedWithID', deployBTxr)
     assert.deepEqual(await ixBackend.getDInfo(democHash), [erc20.address, owner, toBigNumber(1)], 'getDInfo works as expected (1)')
 
     await assertRevert(svIx.dDeployBallot(democHash, specHash, zeroHash, await mkStdPacked()), 'deploying a ballot with same spechash should revert')
@@ -221,6 +224,19 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
     assert.deepEqual(await ixBackend.getVersion(), toBigNumber(2), 'ixBackend ver')
     assert.deepEqual(await ixPayments.getVersion(), toBigNumber(2), 'ixPayments ver')
     assert.deepEqual(await bbFarm.getVersion(), toBigNumber(2), 'bbFarm ver')
+
+    // test BBFarmAux2 w/ the ballot we created above
+    const aux = await BBFarmAux2.new()
+
+    await doLog("checking bIDToDetails")
+    const bIdToDetails = await aux.ballotIdToDetails(svIx.address, ballotId)
+    const expBIdToDetails = [toBigNumber(0), zeroHash, getSB(packed), getStartTS(packed), getEndTS(packed), specHash, false]
+    assert.deepEqual(bIdToDetails, expBIdToDetails, 'bIdToDetails init matches')
+
+    await doLog("checking getBBFarmAddressAndBallotId")
+    const expGetBBFarmAddrAndBId = [bbFarm.address, ballotId]
+    const getBBFarmAddrAndBID = await aux.getBBFarmAddressAndBallotId(svIx.address, democHash, 0)
+    assert.deepEqual(getBBFarmAddrAndBID, expGetBBFarmAddrAndBId, 'getBBFarmAddrAndBId matches init')
 }
 
 
@@ -1242,7 +1258,7 @@ contract("SVLightIndex", function (accounts) {
         const allT = process.env.RUN_ALL_TESTS
         const condAll = (allT && allT.toLowerCase() === "true")
         const cond = (eVar && eVar.toLowerCase() === "true") || condAll
-        console.log(`Test (${testStr}) will be skipped if the following env var is present:\n${envVarStr}=true`)
+        console.log(`Test (${testStr}) will be skipped unless the following env var is present:\n${envVarStr}=true`)
         console.log(cond ? "running this time" : "skipping this time")
         const defaultF = async () => { return true; }
         return [testStr, cond ? testF : defaultF]

@@ -56,7 +56,7 @@ module.exports = function () {
 
     this.genStartEndTimes = async () => {
         const {timestamp} = await this.getBlock('latest')
-        var startTime = timestamp - 1;
+        var startTime = timestamp;
         var endTime = startTime + 600;
         return [startTime, endTime];
     }
@@ -79,6 +79,20 @@ module.exports = function () {
     this.mkStdPacked = async () => {
         const [s,e] = await this.genStartEndTimes()
         return mkPacked(s, e, this.USE_NO_ENC | this.USE_ETH)
+    }
+
+    this.getSB = (packed) => {
+        return toBigNumber(toBN(packed).shrn(128).and(toBN(0xFFFF)))
+    }
+
+    this.getStartTS = packed => {
+        // we and with 5 bytes of 1's b/c that's enough to ensure we get the right timestamp for like another 10k years
+        return toBigNumber(toBN(packed).shrn(64).and(toBN(0xFFFFFFFFFF)))
+    }
+
+    this.getEndTS = packed => {
+        // we and with 5 bytes of 1's b/c that's enough to ensure we get the right timestamp for like another 10k years
+        return toBigNumber(toBN(packed).and(toBN(0xFFFFFFFFFF)))
     }
 
     this.wrapTest = (accounts, f) => {
@@ -232,6 +246,12 @@ module.exports = function () {
         }
         return Web3.utils.bytesToHex(Web3.utils.hexToBytes(bytes32Addr).slice(0, 12));
     }
+
+
+    this.hexToUint8Array = hex => {
+        return Uint8Array.from(w3.utils.hexToBytes(hex))
+    }
+
 
     // this is from the bech32 spec (Bitcoin)
     const B32_ALPHA = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
