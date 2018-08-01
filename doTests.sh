@@ -1,5 +1,7 @@
 #!/bin/bash
 
+mkdir -p db
+
 echo "Use RUN_ALL_TESTS=true to run all tests."
 if [ -n "$TRAVIS" ] || [ -n "$RUN_ALL_TESTS" ]; then
   echo "Loading all env vars"
