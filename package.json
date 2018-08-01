@@ -30,7 +30,6 @@
     "solium": "^1.1.6",
     "sv-lib": "^0.2.1",
     "truffle": "trufflesuite/truffle",
-    "truffle-fast-compile": "^0.0.3",
     "tweetnacl": "^1.0.0",
     "web3": "^1.0.0-beta.33",
     "yargs": "^11.0.0"

@@ -213,7 +213,7 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
     assert.deepEqual(await ixBackend.getDInfo(democHash), [erc20.address, owner, toBigNumber(0)], 'getDInfo works as expected (0)')
     const specHash = genRandomBytes32()
     const packed = await mkStdPacked()
-    const deployBTxr = await svIx.dDeployBallot(democHash, specHash, zeroHash, packed)
+    const deployBTxr = await svIx.dDeployBallot(democHash, specHash, zeroAddr + w3.utils.randomHex(12).slice(2), packed)
     const {args: {ballotId}} = getEventFromTxR('BallotCreatedWithID', deployBTxr)
     assert.deepEqual(await ixBackend.getDInfo(democHash), [erc20.address, owner, toBigNumber(1)], 'getDInfo works as expected (1)')
 
