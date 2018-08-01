@@ -1,16 +1,19 @@
-console.log("Loading truffle.js")
+const ts = () => (new Date().getTime() / 1000)
+console.log(ts(), "Loading truffle.js")
 
 // var TestRPC = require("ethereumjs-testrpc");
 
 const { create, env } = require("sanctuary");
 const S = create({ checkTypes: true, env });
-console.log("truffle.js: init'd sactuary")
+console.log(ts(), "truffle.js: init'd sactuary")
 
 const w3Utils = require('web3-utils')
 
+console.log(ts(), "truffle.js: loaded web3 utils")
+
 var ganache = require("ganache-cli");
 
-console.log("truffle.js: Loaded ganache; declaring provider")
+console.log(ts(), "truffle.js: Loaded ganache; declaring provider")
 
 const accounts = S.map(i => ({ balance: "0xffffffffffffffffffffff", secretKey: w3Utils.padLeft(w3Utils.toHex(i+10), 64)}), S.range(0, 20))
 // console.log("Development network accounts: ", accounts)
@@ -19,7 +22,7 @@ let provider = ganache.provider({
   port: 34839,
   accounts,
   gasLimit: 20000000,
-  db_path: "./db",
+  db_path: "./db/ganache.db",
 })
 
 // needed to make ganache-cli work...
@@ -46,7 +49,7 @@ provider = new Proxy(provider, {
 })
 
 
-console.log("truffle.js: Created provider")
+console.log(ts(), "truffle.js: Created provider w/ sendAsync shim")
 
 
 module.exports = {
@@ -77,4 +80,4 @@ module.exports = {
   }
 };
 
-console.log("truffle.js: declared exports")
+console.log(ts(), "truffle.js: declared exports")
