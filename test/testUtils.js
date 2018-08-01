@@ -56,7 +56,7 @@ module.exports = function () {
 
     this.genStartEndTimes = async () => {
         const {timestamp} = await this.getBlock('latest')
-        var startTime = timestamp - 1;
+        var startTime = timestamp;
         var endTime = startTime + 600;
         return [startTime, endTime];
     }
@@ -79,6 +79,20 @@ module.exports = function () {
     this.mkStdPacked = async () => {
         const [s,e] = await this.genStartEndTimes()
         return mkPacked(s, e, this.USE_NO_ENC | this.USE_ETH)
+    }
+
+    this.getSB = (packed) => {
+        return toBigNumber(toBN(packed).shrn(128).and(toBN(0xFFFF)))
+    }
+
+    this.getStartTS = packed => {
+        // we and with 5 bytes of 1's b/c that's enough to ensure we get the right timestamp for like another 10k years
+        return toBigNumber(toBN(packed).shrn(64).and(toBN(0xFFFFFFFFFF)))
+    }
+
+    this.getEndTS = packed => {
+        // we and with 5 bytes of 1's b/c that's enough to ensure we get the right timestamp for like another 10k years
+        return toBigNumber(toBN(packed).and(toBN(0xFFFFFFFFFF)))
     }
 
     this.wrapTest = (accounts, f) => {
