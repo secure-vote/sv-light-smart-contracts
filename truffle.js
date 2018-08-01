@@ -1,16 +1,17 @@
-console.log("Loading truffle.js")
+const l = str => console.log(new Date().getTime() / 1000, 'truffle.js:', str)
+l("Loading truffle.js")
 
 // var TestRPC = require("ethereumjs-testrpc");
 
 const { create, env } = require("sanctuary");
 const S = create({ checkTypes: true, env });
-console.log("truffle.js: init'd sactuary")
+l("init'd sactuary")
 
 const w3Utils = require('web3-utils')
 
 var ganache = require("ganache-cli");
 
-console.log("truffle.js: Loaded ganache; declaring provider")
+l("Loaded ganache; declaring provider")
 
 const accounts = S.map(i => ({ balance: "0xffffffffffffffffffffff", secretKey: w3Utils.padLeft(w3Utils.toHex(i+10), 64)}), S.range(0, 20))
 // console.log("Development network accounts: ", accounts)
@@ -21,6 +22,8 @@ let provider = ganache.provider({
   gasLimit: 20000000,
   db_path: "./db",
 })
+
+l("provider init'd")
 
 // needed to make ganache-cli work...
 // curiously, if you don't have this AND don't have gasLimit high, then truffle
@@ -45,8 +48,7 @@ provider = new Proxy(provider, {
   }
 })
 
-
-console.log("truffle.js: Created provider")
+l("Created provider + sendAsync shim")
 
 
 module.exports = {
@@ -77,4 +79,4 @@ module.exports = {
   }
 };
 
-console.log("truffle.js: declared exports")
+l("declared exports")
