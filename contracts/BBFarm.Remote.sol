@@ -3,6 +3,8 @@ pragma solidity ^0.4.24;
 /**
  * BBFarm is a contract to use BBLib to replicate the functionality of
  * SVLightBallotBox within a centralised container (like the Index).
+ *
+ * (c) 2018 SecureVote
  */
 
 import "./BBLib.v7.sol";
@@ -12,6 +14,8 @@ import { IxIface } from "./SVIndex.sol";
 import "./BPackedUtils.sol";
 import "./IxLib.sol";
 import { BBFarmIface } from "./BBFarm.sol";
+import "../libs/MemArrApp.sol";
+import "../libs/RLPEncode.sol";
 
 
 library CalcBallotId {
@@ -52,20 +56,20 @@ contract RemoteBBFarmProxy is BBFarmIface {
 
     /* constructor */
 
-    constructor(bytes4 _namespace, uint32 fChainId, uint32 fNetworkId, address fBBFarm) payoutAllC(msg.sender) public {
+    constructor(bytes4 _namespace, uint32 fNetworkId, uint32 fChainId, address fBBFarm) payoutAllC(msg.sender) public {
         namespace = _namespace;
         // foreignNetworkDetails has the following format:
         //   [uint32 - unallocated]
-        //   [uint32 - chain id; 0 for curr chainId]
         //   [uint32 - network id; 0 for curr network]
+        //   [uint32 - chain id; 0 for curr chainId]
         //   [uint160 - address of bbFarm on target network]
         // eth mainnet is: [0][1][1][<addr>]
-        // eth classic is: [0][61][1][<addr>]
+        // eth classic is: [0][1][61][<addr>]
         // ropsten is: [0][3][3][<addr>]  -- TODO confirm
         // kovan is: [0][42][42][<addr>]  -- TODO confirm
-        // morden is: [0][62][2][<addr>] -- https://github.com/ethereumproject/go-ethereum/blob/74ab56ba00b27779b2bdbd1c3aef24bdeb941cd8/core/config/morden.json
+        // morden is: [0][2][62][<addr>] -- https://github.com/ethereumproject/go-ethereum/blob/74ab56ba00b27779b2bdbd1c3aef24bdeb941cd8/core/config/morden.json
         // rinkeby is: [0][4][4][<addr>] -- todo confirm
-        foreignNetworkDetails = bytes32(uint(fChainId) << 192 | uint(fNetworkId) << 160 | uint(fBBFarm));
+        foreignNetworkDetails = bytes32(uint(fNetworkId) << 192 | uint(fChainId) << 160 | uint(fBBFarm));
     }
 
     /* global getters */
@@ -75,7 +79,7 @@ contract RemoteBBFarmProxy is BBFarmIface {
     }
 
     function getBBLibVersion() external view returns (uint256) {
-        return BBLib.getVersion();
+        return BBLibV7.getVersion();
     }
 
     function getNBallots() external view returns (uint256) {
@@ -217,10 +221,14 @@ contract RemoteBBFarmProxy is BBFarmIface {
 /**
  * This BBFarm lives on classic (or wherever) and does take votes
  * (often / always by proxy) and calculates the same ballotId as
- * above.
+ * above. Does _not_ require init'ing the ballot first
  */
 contract RemoteBBFarm is BBFarmIface {
     using BBLibV7 for BBLibV7.DB;
+    using MemArrApp for bytes32[];
+    using MemArrApp for bytes[];
+    using MemArrApp for address[];
+    using MemArrApp for uint[];
 
     // namespaces should be unique for each bbFarm
     bytes4 namespace;
@@ -241,7 +249,7 @@ contract RemoteBBFarm is BBFarmIface {
     /* Constructor */
 
     constructor(bytes4 _namespace) payoutAllC(msg.sender) public {
-        assert(BBLib.getVersion() == 7);
+        assert(BBLibV7.getVersion() == 7);
         namespace = _namespace;
         emit BBFarmInit(_namespace);
     }
@@ -263,7 +271,7 @@ contract RemoteBBFarm is BBFarmIface {
     }
 
     function getBBLibVersion() external view returns (uint256) {
-        return BBLib.getVersion();
+        return BBLibV7.getVersion();
     }
 
     function getNBallots() external view returns (uint256) {
@@ -377,6 +385,48 @@ contract RemoteBBFarm is BBFarmIface {
 
     function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs) {
         return getDb(ballotId).getVote(voteId);
+    }
+
+    function _getVotes(uint ballotId, uint startTs, uint endTs, address _voter) internal view returns (
+        bytes32[] memory voteDatas,
+        address[] memory voters,
+        bytes memory extrasRLP,
+        uint[] memory castTss
+    ) {
+        address voter;
+        uint castTs;
+        bytes[] memory extrasEncoded;
+        BBLibV7.DB storage db = getDb(ballotId);
+        uint nVotes = db.nVotesCast;
+        for (uint i = 0; i < nVotes; i++) {
+            // add vote to return list if times are okay and _either_ we didn't get
+            // a voter's address passed in, or the vote matches the supplied voter
+            (, voter,, castTs) = db.getVote(i);
+            if (startTs <= castTs && castTs <= endTs && (_voter == address(0) || voter == _voter)) {
+                voteDatas = voteDatas.appendBytes32(db.votes[i].voteData);
+                extrasEncoded = extrasEncoded.appendBytes(RLPEncode.encodeBytes(db.votes[i].extra));
+                voters = voters.appendAddress(voter);
+                castTss = castTss.appendUint256(castTs);
+            }
+        }
+        extrasRLP = RLPEncode.encodeList(extrasEncoded);
+    }
+
+    function getVotesBetween(uint ballotId, uint startTs, uint endTs) external view returns (
+        bytes32[] memory voteDatas,
+        address[] memory voters,
+        bytes memory extrasRLP,
+        uint[] memory castTss
+    ) {
+        return _getVotes(ballotId, startTs, endTs, address(0));
+    }
+
+    function getVotesBetweenFor(uint ballotId, uint startTs, uint endTs, address voter) external view returns (
+        bytes32[] memory voteDatas,
+        bytes memory extrasRLP,
+        uint[] memory castTss
+    ) {
+        (voteDatas, , extrasRLP, castTss) = _getVotes(ballotId, startTs, endTs, voter);
     }
 
     function getSequenceNumber(uint ballotId, address voter) external view returns (uint32 sequence) {
