@@ -20,6 +20,7 @@ module.exports = function () {
         // BigNumber as in Web3 0.20.x
         return web3.toBigNumber(i.toFixed ? i.toFixed() : i.toString());
     }
+    this.toBigN = this.toBigNumber
 
     this.R = R;
 

@@ -23,6 +23,7 @@
     "jq": "^1.7.2",
     "js-nacl": "^1.2.2",
     "node-clip": "^0.1.1",
+    "prompt": "^1.0.0",
     "prompt-confirm": "^1.2.0",
     "ramda": "^0.25.0",
     "sanctuary": "^0.14.1",
@@ -32,6 +33,7 @@
     "truffle": "trufflesuite/truffle",
     "tweetnacl": "^1.0.0",
     "web3": "^1.0.0-beta.33",
+    "web3-eth-contract": "^1.0.0-beta.35",
     "yargs": "^11.0.0"
   },
   "scripts": {

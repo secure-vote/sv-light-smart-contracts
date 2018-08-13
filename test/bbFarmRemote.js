@@ -485,12 +485,34 @@ const testProxyVoteReplayProtection = async ({BB, farm, accounts, doLog}) => {
 }
 
 
-const testRevertConditions = async ({BB, farm, accounts, doLog}) => {
-    const specHash1 = genRandomBytes32();
-    const bb1 = await BB.new(specHash1, await genStdPacked(), zeroAddr);
-    await assertRevert(BB.new(specHash1, await genStdPacked(), zeroAddr), 'cannot create ballot with same specHash')
-    await assertRevert(BB.new(zeroHash, await genStdPacked(), zeroAddr), 'cannot create ballot with zero specHash')
-    await assertRevert(farm.initBallotProxy(27, zeroHash, zeroAddr, Array(4).fill(zeroHash)), 'initBallotProxy reverts on std bbfarm')
+const testRevertConditions = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+    await doLog("checking init ballots")
+    await assertRevert(farmPx.initBallotProxy(toBigN(0), zeroHash, zeroHash, R.repeat(zeroHash, 4)), 'no initBallotProxy on farmPx')
+    await assertRevert(farmRemote.initBallotProxy(toBigN(0), zeroHash, zeroHash, R.repeat(zeroHash, 4)), 'no initBallotProxy on farmRemote')
+    await assertRevert(farmRemote.initBallot(zeroHash, toBigN(0), zeroAddr, zeroAddr, zeroAddr + "00000000"), 'no initBallot on farmRemote')
+
+    await doLog("checking sponsor reverts")
+    await assertRevert(farmPx.sponsor(toBigN(0)), 'no sponsor on farmPx')
+    await assertRevert(farmRemote.sponsor(toBigN(0)), 'no sponsor on farmRemote')
+
+    await doLog("checking submit vote reverts")
+    await assertRevert(farmPx.submitVote(toBigN(0), zeroHash, "0x"), 'no submitVote on farmPx')
+    await assertRevert(farmPx.submitProxyVote(R.repeat(zeroHash, 5), "0x"), 'no submitProxyVote on farmPx')
+
+    await doLog("checking get vote/sponsor reverts")
+    await assertRevert(farmRemote.getVote(0, 0), 'no getVote on remote farm due to not returning casting time')
+    await assertRevert(farmPx.getVote(0, 0), 'no votes in farmPx 1')
+    await assertRevert(farmPx.getVoteAndTime(0, 0), 'no votes in farmPx 2')
+    await assertRevert(farmPx.getSequenceNumber(0, zeroAddr), 'no seqNums in farmPx')
+    await assertRevert(farmPx.getTotalSponsorship(0), 'no sponsorship in farmPx 1')
+    await assertRevert(farmPx.getSponsorsN(0), 'no sponsorship in farmPx 2')
+    await assertRevert(farmPx.getSponsor(0, 0), 'no sponsorship in farmPx 3')
+
+    await doLog("checking set methods")
+    await assertRevert(farmRemote.setBallotOwner(0, zeroAddr), 'cannot set owner on farmRemote')
+    await assertRevert(farmRemote.setDeprecated(0), 'cannot set deprecated on farmRemote')
+    await assertRevert(farmRemote.setEndTime(0, 0), 'cannot set endTime on farmRemote')
+    await assertRevert(farmRemote.revealSeckey(0, zeroHash), 'cannot set secKey on farmRemote')
 }
 
 
@@ -528,7 +550,6 @@ contract("BallotBox", function(accounts) {
         ["should instantiate correctly", testInstantiation],
         // ["test bbFarmAux2", testBBFarmAux2],
         // ["test sponsorship", testSponsorship],
-        // ["test revert conditions", testRevertConditions],
         // ["test proxy vote", testProxyVote],
         // ["test proxy vote replay attacks", testProxyVoteReplayProtection],
         // ["test getBallots*From", testGetVotes],
@@ -542,6 +563,7 @@ contract("BallotBox", function(accounts) {
         // ["test community status", testCommStatus],
         // ["test owner", testOwner],
         // ["test end time must be in future", testEndTimeFuture],
+        ["test revert conditions", testRevertConditions],
     ]
     R.map(([desc, f]) => {
         it("BBFarm: " + desc, _wrapTest({accounts}, f))

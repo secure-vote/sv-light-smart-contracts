@@ -38,7 +38,7 @@ library BPackedUtils {
     //     return (packed & startTimeMask) | uint256(startTime) << 64;
     // }
 
-    // function setEndTime(uint256 packed, uint64 endTime) internal pure returns (uint256) {
-    //     return (packed & endTimeMask) | uint256(endTime);
-    // }
+    function setEndTime(uint256 packed, uint64 endTime) internal pure returns (uint256) {
+        return (packed & endTimeMask) | uint256(endTime);
+    }
 }

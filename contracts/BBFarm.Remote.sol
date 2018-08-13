@@ -40,19 +40,33 @@ contract RemoteBBFarmProxy is BBFarmIface {
     bytes32 foreignNetworkDetails;
     uint constant VERSION = 3;
 
+    // error strings
+    string constant noSponsorship = "BBFarm proxy doesn't support sponsorship";
+    string constant noVotes = "BBFarm proxy has no knowledge of votes";
+
     /* storing info about ballots */
 
     struct BallotPx {
         bytes32 specHash;
         uint256 packed;
         IxIface index;
-        address bbAdmin;
+        address bbOwner;
         bytes16 extraData;
         uint creationTs;
+        bool deprecated;
+        bytes32 secKey;
     }
 
-    BallotPx[] ballots;
-    mapping(uint => uint) ballotIdToN;
+    mapping(uint => BallotPx) ballots;
+    mapping(uint => uint) ballotNToId;
+    uint nBallots = 0;
+
+    /* ballot owner modifier */
+
+    modifier bOwner(uint ballotId) {
+        require(ballots[ballotId].bbOwner == msg.sender, "!owner");
+        _;
+    }
 
     /* constructor */
 
@@ -83,7 +97,7 @@ contract RemoteBBFarmProxy is BBFarmIface {
     }
 
     function getNBallots() external view returns (uint256) {
-        return ballots.length;
+        return nBallots;
     }
 
     function getVersion() external pure returns (uint256) {
@@ -103,14 +117,21 @@ contract RemoteBBFarmProxy is BBFarmIface {
     function initBallot( bytes32 specHash
                        , uint256 packed
                        , IxIface ix
-                       , address bbAdmin
+                       , address bbOwner
                        , bytes24 extraData
                 ) only_editors() external returns (uint ballotId) {
         // calculate the ballotId based on the last 224 bits of the specHash.
-        ballotId = ballotId = CalcBallotId.calc(namespace, specHash, packed, bbAdmin, extraData);
+        ballotId = ballotId = CalcBallotId.calc(namespace, specHash, packed, bbOwner, extraData);
         // we just store a log of the ballot here; no additional logic
-        ballotIdToN[ballotId] = ballots.length;
-        ballots.push(BallotPx(specHash, packed, ix, bbAdmin, bytes16(uint128(extraData)), now));
+        uint bN = nBallots;
+        nBallots = bN + 1;
+        ballotNToId[bN] = ballotId;
+        ballots[ballotId].specHash = specHash;
+        ballots[ballotId].packed = packed;
+        ballots[ballotId].index = ix;
+        ballots[ballotId].bbOwner = bbOwner;
+        ballots[ballotId].extraData = bytes16(uint128(extraData));
+        ballots[ballotId].creationTs = now;
 
         emit BallotCreatedWithID(ballotId);
         emit BallotOnForeignNetwork(foreignNetworkDetails, ballotId);
@@ -118,24 +139,24 @@ contract RemoteBBFarmProxy is BBFarmIface {
 
     function initBallotProxy(uint8, bytes32, bytes32, bytes32[4]) external returns (uint256) {
         // we don't support initBallotProxy on mainnet
-        revert();
+        revert("no ballot-proxy support");
     }
 
     /* Sponsorship */
 
     function sponsor(uint) external payable {
         // no sponsorship support for remote ballots
-        revert();
+        revert(noSponsorship);
     }
 
     /* Voting */
 
     function submitVote(uint, bytes32, bytes) /*req_namespace(ballotId)*/ external {
-        revert();  // no voting support for px
+        revert(noVotes);  // no voting support for px
     }
 
     function submitProxyVote(bytes32[5], bytes) /*req_namespace(uint256(proxyReq[3]))*/ external {
-        revert();  // no voting support for px
+        revert(noVotes);  // no voting support for px
     }
 
     /* Getters */
@@ -151,69 +172,76 @@ contract RemoteBBFarmProxy is BBFarmIface {
             , bool deprecated
             , address ballotOwner
             , bytes16 extraData) {
-        uint n = ballotIdToN[ballotId];
-        uint packed = ballots[n].packed;
+        BallotPx storage b = ballots[ballotId];
+        uint packed = b.packed;
         return (
             false,
-            uint(0)-1,
-            bytes32(0),
+            // this is a very big number (>2^255) that is obviously non arbitrary
+            // - idea is to deliberately cause a failure case if using bbFarmPx incorrectly.
+            113370313370313370313370313370313370313370313370313370313370313370313370313370,
+            b.secKey,
             BPackedUtils.packedToSubmissionBits(packed),
             BPackedUtils.packedToStartTime(packed),
             BPackedUtils.packedToEndTime(packed),
-            ballots[n].specHash,
-            false,
-            ballots[n].bbAdmin,
-            ballots[n].extraData
+            b.specHash,
+            b.deprecated,
+            b.bbOwner,
+            b.extraData
         );
     }
 
-
     function getVote(uint, uint) external view returns (bytes32, address, bytes) {
-        revert();
+        revert(noVotes);
     }
 
     function getVoteAndTime(uint, uint) external view returns (bytes32, address, bytes, uint) {
-        revert();
+        revert(noVotes);
     }
 
     function getSequenceNumber(uint, address) external pure returns (uint32) {
-        revert();
+        revert(noVotes);
     }
 
     function getTotalSponsorship(uint) external view returns (uint) {
-        revert();
+        revert(noSponsorship);
     }
 
     function getSponsorsN(uint) external view returns (uint) {
-        revert();
+        revert(noSponsorship);
     }
 
     function getSponsor(uint, uint) external view returns (address, uint) {
-        revert();
+        revert(noSponsorship);
     }
 
     function getCreationTs(uint ballotId) external view returns (uint) {
-        return ballots[ballotIdToN[ballotId]].creationTs;
+        return ballots[ballotId].creationTs;
     }
 
     /* ADMIN */
 
     // Allow the owner to reveal the secret key after ballot conclusion
-    function revealSeckey(uint, bytes32) external {
-        revert();
+    function revealSeckey(uint ballotId, bytes32 secKey) external bOwner(ballotId) {
+        BallotPx storage b = ballots[ballotId];
+        require(BPackedUtils.packedToEndTime(b.packed) < now, "!ended");
+        b.secKey = secKey;
     }
 
     // note: testing only.
-    function setEndTime(uint, uint64) external {
-        revert();
+    function setEndTime(uint ballotId, uint64 newEndTime) external bOwner(ballotId) {
+        BallotPx storage b = ballots[ballotId];
+        require(BBLibV7.isTesting(BPackedUtils.packedToSubmissionBits(b.packed)), "!testing");
+        b.packed = BPackedUtils.setEndTime(b.packed, newEndTime);
     }
 
-    function setDeprecated(uint) external {
-        revert();
+    function setDeprecated(uint ballotId) external bOwner(ballotId) {
+        BallotPx storage b = ballots[ballotId];
+        b.deprecated = true;
     }
 
-    function setBallotOwner(uint, address) external {
-        revert();
+    function setBallotOwner(uint ballotId, address newOwner) external bOwner(ballotId) {
+        BallotPx storage b = ballots[ballotId];
+        b.bbOwner = newOwner;
     }
 }
 
@@ -224,11 +252,16 @@ contract RemoteBBFarmProxy is BBFarmIface {
  * above. Does _not_ require init'ing the ballot first
  */
 contract RemoteBBFarm is BBFarmIface {
+    // libs
     using BBLibV7 for BBLibV7.DB;
     using MemArrApp for bytes32[];
     using MemArrApp for bytes[];
     using MemArrApp for address[];
     using MemArrApp for uint[];
+
+    // error messages
+    string constant noInitBallot = "Initing ballots not supported on remote";
+    string constant noSponsorship = "BBFarm remote doesn't support sponsorship";
 
     // namespaces should be unique for each bbFarm
     bytes4 namespace;
@@ -296,15 +329,15 @@ contract RemoteBBFarm is BBFarmIface {
                        , IxIface
                        , address
                        , bytes24
-                ) only_editors() external returns (uint) {
-        // we cannot call initBallot on a BBFarmRemote (since it should only be called by editors)
-        revert();
+                ) /*only_editors()*/ external returns (uint) {
+        // we cannot call initBallot on a BBFarmRemote (since it should only be called by editors, and they don't exist here)
+        revert(noInitBallot);
     }
 
     /*uint8 v, bytes32 r, bytes32 s, bytes32[4] params*/
     function initBallotProxy(uint8, bytes32, bytes32, bytes32[4]) external returns (uint256 /*ballotId*/) {
         // do not allow proxy ballots either atm -- planned for future versions
-        revert();
+        revert(noInitBallot);
         // // params is a bytes32[4] of [specHash, packed, proposer, extraData]
         // bytes32 specHash = params[0];
         // uint256 packed = uint256(params[1]);
@@ -328,7 +361,7 @@ contract RemoteBBFarm is BBFarmIface {
 
     function sponsor(uint) external payable {
         // no sponsorship on foreign networks
-        revert();
+        revert(noSponsorship);
     }
 
     /* Voting */
@@ -380,7 +413,7 @@ contract RemoteBBFarm is BBFarmIface {
 
     function getVote(uint, uint) external view returns (bytes32, address, bytes) {
         // don't let users use getVote since it's unsafe without taking the casting time into account
-        revert();
+        revert("getVote unsafe due to no casting time returned");
     }
 
     function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs) {
@@ -451,31 +484,23 @@ contract RemoteBBFarm is BBFarmIface {
 
     /* ADMIN */
 
+    string constant noOwner = "remote BBFarm doesn't know about ballot owners";
+
     // Allow the owner to reveal the secret key after ballot conclusion
-    function revealSeckey(uint ballotId, bytes32 sk) external {
-        BBLibV7.DB storage db = getDb(ballotId);
-        db.requireBallotOwner();
-        db.requireBallotClosed();
-        db.revealSeckey(sk);
+    function revealSeckey(uint, bytes32) external {
+        revert(noOwner);
     }
 
     // note: testing only.
-    function setEndTime(uint ballotId, uint64 newEndTime) external {
-        BBLibV7.DB storage db = getDb(ballotId);
-        db.requireBallotOwner();
-        db.requireTesting();
-        db.setEndTime(newEndTime);
+    function setEndTime(uint, uint64) external {
+        revert(noOwner);
     }
 
-    function setDeprecated(uint ballotId) external {
-        BBLibV7.DB storage db = getDb(ballotId);
-        db.requireBallotOwner();
-        db.deprecated = true;
+    function setDeprecated(uint) external {
+        revert(noOwner);
     }
 
-    function setBallotOwner(uint ballotId, address newOwner) external {
-        BBLibV7.DB storage db = getDb(ballotId);
-        db.requireBallotOwner();
-        db.ballotOwner = newOwner;
+    function setBallotOwner(uint, address) external {
+        revert(noOwner);
     }
 }
