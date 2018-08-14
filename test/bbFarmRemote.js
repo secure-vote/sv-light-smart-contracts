@@ -24,8 +24,18 @@ var hexSk = "0xcd9d715f05a4fce8acf3339fd5ee8549c1899c52e4b32da07cffcd91a29ad976"
 var hexPk = "0xba781ed1006bd7694282a210485265f1c503f4e6721858b4269ae6d745f7bb4b";
 var specHash = "0x418781fb172c2a30c072d58628f5df3f12052a0b785450fb0105f1b98b504561";
 
-const genStdBB = async BB => {
-    return await BB.new(genRandomBytes32(), await genStdPacked(), zeroAddr);
+
+const genPxBB = async bbPx => {
+    const specHash = genRandomBytes32()
+    const txr = await bbPx.initBallot(specHash, await genStdPacked(), zeroAddr, zeroAddr, zeroAddr);
+    const {args: {ballotId}} = getEventFromTxR('BallotCreatedWithID', txr)
+    return ballotId
+}
+
+const genStdPacked = async () => {
+    const [s,e] = await genStartEndTimes();
+    const p = mkPacked(s, e, USE_ETH | USE_NO_ENC);
+    return p;
 }
 
 
@@ -41,8 +51,8 @@ async function testInstantiation({owner, accounts, farmPx, farmRemote, doLog}) {
     assert.deepEqual(await farmPx.getBBLibVersion(), toBigNumber(7), "bblib v - farm px");
     assert.deepEqual(await farmRemote.getBBLibVersion(), toBigNumber(7), "bblib v - farm remote");
 
-    assert.equal(await farmPx.getNamespace(), "0x01610001", 'namespace px')
-    assert.equal(await farmRemote.getNamespace(), "0x01610001", 'namespace remote')
+    assert.equal(await farmPx.getNamespace(), "0x013d0001", 'namespace px')
+    assert.equal(await farmRemote.getNamespace(), "0x013d0001", 'namespace remote')
 
     assert.deepEqual(await farmPx.getNBallots(), toBigNumber(0), "nballots - farm px");
     assert.deepEqual(await farmRemote.getNBallots(), toBigNumber(0), "nballots - farm remote");
@@ -420,39 +430,38 @@ const mkProxyVote = async ({ballotId, sequence = 4919, extra = '0x', privKey = n
 }
 
 
-const testProxyVote = async ({BB, accounts, doLog, farm}) => {
-    const [u0, u1, u2, u3] = accounts;
-    const bb = await BB.new(genRandomBytes32(), await genStdPacked(), zeroAddr, u0)
+const testProxyVote = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+    const [, u1, u2, u3] = accounts;
+    const ballotId = await genPxBB(farmPx);
 
-    const {proxyReq, extra, vote, sequence, address} = await mkProxyVote({ballotId: bb.ballotId})
+    const {proxyReq, extra, vote, sequence, address} = await mkProxyVote({ballotId})
 
     await doLog(`Generated proxyReq: ${toJson(proxyReq)}`)
 
     const b1 = await getBalance(u1)
-    await farm.submitProxyVote(proxyReq, extra, {from: u1, gasPrice: 1})
+    await farmRemote.submitProxyVote(proxyReq, extra, {from: u1, gasPrice: 1})
+    const {timestamp: v1Ts} = await getBlock('latest')
     const b2 = await getBalance(u1)
     console.log(`Cost of casting a vote by proxy: ${b1.minus(b2).toFixed()} gas`)
 
-    assert.deepEqual(await bb.getVote(0), [vote, address.toLowerCase(), extra], 'ballot submitted via proxy should match expected')
+    assert.deepEqual(await farmRemote.getVoteAndTime(ballotId, 0), [vote, address.toLowerCase(), extra, toBigN(v1Ts)], 'ballot submitted via proxy should match expected')
 
     const b3 = await getBalance(u3)
-    await bb.submitVote(vote, extra, {from: u3, gasPrice: 1})
+    await farmRemote.submitVote(ballotId, vote, extra, {from: u3, gasPrice: 1})
     const b4 = await getBalance(u3)
     console.log(`Cost of casting a vote directly: ${b3.minus(b4).toFixed()} gas`)
 
     const b5 = await getBalance(u2)
-    await bb.submitVote(vote, w3.utils.padRight("0x", 128, 'f'), {from: u2, gasPrice: 1})
+    await farmRemote.submitVote(ballotId, vote, w3.utils.padRight("0x", 128, 'f'), {from: u2, gasPrice: 1})
     const b6 = await getBalance(u2)
     console.log(`Cost of casting a vote directly w 64 bytes of extra: ${b5.minus(b6).toFixed()} gas`)
 }
 
 
-const testProxyVoteReplayProtection = async ({BB, farm, accounts, doLog}) => {
+const testProxyVoteReplayProtection = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     // also test sequence number props
-
     const [, u1, u2, u3] = accounts;
-    const bb = await genStdBB(BB);
-    const ballotId = bb.ballotId
+    const ballotId = await genPxBB(farmPx);
 
     const privKey = genRandomBytes32()
 
@@ -463,25 +472,25 @@ const testProxyVoteReplayProtection = async ({BB, farm, accounts, doLog}) => {
     const pxVoteOverMax = await mkProxyVote({ballotId, sequence: 0xffffffff + 1, privKey})
     const pxAddr = pxVote1.address;
 
-    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(0), 'seq = 0')
-    await farm.submitProxyVote(pxVote1.proxyReq, pxVote1.extra)
-    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(1), 'seq = 1')
-    await assertRevert(farm.submitProxyVote(pxVote1.proxyReq, pxVote1.extra), 'cannot submit vote twice')
+    assert.deepEqual(await farmRemote.getSequenceNumber(ballotId, pxAddr), toBigNumber(0), 'seq = 0')
+    await farmRemote.submitProxyVote(pxVote1.proxyReq, pxVote1.extra)
+    assert.deepEqual(await farmRemote.getSequenceNumber(ballotId, pxAddr), toBigNumber(1), 'seq = 1')
+    await assertRevert(farmRemote.submitProxyVote(pxVote1.proxyReq, pxVote1.extra), 'cannot submit vote twice')
     // submit vote 3
-    await farm.submitProxyVote(pxVote3.proxyReq, pxVote3.extra)
-    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(3), 'seq = 3')
-    await assertRevert(farm.submitProxyVote(pxVote2.proxyReq, pxVote2.extra), 'cannot submit vote with earlier sequence number')
+    await farmRemote.submitProxyVote(pxVote3.proxyReq, pxVote3.extra)
+    assert.deepEqual(await farmRemote.getSequenceNumber(ballotId, pxAddr), toBigNumber(3), 'seq = 3')
+    await assertRevert(farmRemote.submitProxyVote(pxVote2.proxyReq, pxVote2.extra), 'cannot submit vote with earlier sequence number')
 
-    await farm.submitProxyVote(pxVoteMax.proxyReq, pxVoteMax.extra)
-    assert.deepEqual(await farm.getSequenceNumber(ballotId, pxAddr), toBigNumber(0xffffffff), 'seq = 0xffffffff')
+    await farmRemote.submitProxyVote(pxVoteMax.proxyReq, pxVoteMax.extra)
+    assert.deepEqual(await farmRemote.getSequenceNumber(ballotId, pxAddr), toBigNumber(0xffffffff), 'seq = 0xffffffff')
 
-    await assertRevert(farm.submitProxyVote(pxVoteOverMax.proxyReq, pxVoteOverMax.extra), 'seq max is 0xffffffff - this should overflow to 0 and thus fail')
+    await assertRevert(farmRemote.submitProxyVote(pxVoteOverMax.proxyReq, pxVoteOverMax.extra), 'seq max is 0xffffffff - this should overflow to 0 and thus fail')
 
-    assert.deepEqual(await farm.getSequenceNumber(ballotId, u1), toBigNumber(0), 'seq = 0 for u1 init')
-    await bb.submitVote(genRandomBytes32(), '0x', {from: u1})
+    assert.deepEqual(await farmRemote.getSequenceNumber(ballotId, u1), toBigNumber(0), 'seq = 0 for u1 init')
+    await farmRemote.submitVote(ballotId, genRandomBytes32(), '0x', {from: u1})
     // can vote directly twice+
-    await bb.submitVote(genRandomBytes32(), '0x', {from: u1})
-    assert.deepEqual(await farm.getSequenceNumber(ballotId, u1), toBigNumber(0xffffffff), 'seq = 0xffffffff')
+    await farmRemote.submitVote(ballotId, genRandomBytes32(), '0x', {from: u1})
+    assert.deepEqual(await farmRemote.getSequenceNumber(ballotId, u1), toBigNumber(0xffffffff), 'seq = 0xffffffff')
 }
 
 
@@ -530,9 +539,9 @@ const _wrapTest = ({accounts}, f) => {
 
         await doLog("Starting test wrap")
 
-        const farmRemote = await RemoteBBFarm.new("0x01610001");
+        const farmRemote = await RemoteBBFarm.new("0x013d0001");
         await farmRemote.setPermissions(owner, true)
-        const farmPx = await RemoteBBFarmPx.new("0x01610001", 1, 61, farmRemote.address);
+        const farmPx = await RemoteBBFarmPx.new("0x013d0001", 1, 61, farmRemote.address);
         await farmPx.setPermissions(owner, true)
 
         await doLog("Finished wrap contract deployment")
@@ -545,13 +554,13 @@ const _wrapTest = ({accounts}, f) => {
 }
 
 
-contract("BallotBox", function(accounts) {
+contract("BBFarm Remote", function(accounts) {
     const tests = [
         ["should instantiate correctly", testInstantiation],
         // ["test bbFarmAux2", testBBFarmAux2],
         // ["test sponsorship", testSponsorship],
-        // ["test proxy vote", testProxyVote],
-        // ["test proxy vote replay attacks", testProxyVoteReplayProtection],
+        ["test proxy vote", testProxyVote],
+        ["test proxy vote replay attacks", testProxyVoteReplayProtection],
         // ["test getBallots*From", testGetVotes],
         // ["should allow setting owner", testSetOwner],
         // ["should enforce encryption based on PK submitted", testEncryptionBranching],

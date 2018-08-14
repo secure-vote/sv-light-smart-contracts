@@ -174,7 +174,7 @@ contract BBFarm is BBFarmIface {
 
     function initBallotProxy(uint8, bytes32, bytes32, bytes32[4]) external returns (uint256) {
         // this isn't supported on the deployed BBFarm
-        revert();
+        revert("initBallotProxy not implemented");
     }
 
     /* Sponsorship */
