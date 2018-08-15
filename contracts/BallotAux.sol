@@ -10,7 +10,7 @@ pragma solidity 0.4.24;
  */
 
 
-import "./BBLib.v6.sol";
+import "./BBLib.v7.sol";
 import "./BPackedUtils.sol";
 import { BBFarmIface } from "./BBFarm.sol";
 
@@ -71,19 +71,19 @@ contract BallotAux is BBAuxIface {
     address constant zeroAddr = address(0);
 
     function isTesting(BallotBoxIface bb) external view returns (bool) {
-        return BBLib.isTesting(getSubmissionBits(bb));
+        return BBLibV7.isTesting(getSubmissionBits(bb));
     }
 
     function isOfficial(BallotBoxIface bb) external view returns (bool) {
-        return BBLib.isOfficial(getSubmissionBits(bb));
+        return BBLibV7.isOfficial(getSubmissionBits(bb));
     }
 
     function isBinding(BallotBoxIface bb) external view returns (bool) {
-        return BBLib.isBinding(getSubmissionBits(bb));
+        return BBLibV7.isBinding(getSubmissionBits(bb));
     }
 
     function qualifiesAsCommunityBallot(BallotBoxIface bb) external view returns (bool) {
-        return BBLib.qualifiesAsCommunityBallot(getSubmissionBits(bb));
+        return BBLibV7.qualifiesAsCommunityBallot(getSubmissionBits(bb));
     }
 
     function isDeprecated(BallotBoxIface bb) external view returns (bool deprecated) {

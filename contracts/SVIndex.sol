@@ -12,7 +12,7 @@ import { owned, upgradePtr, payoutAllC, controlledIface } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import "./EnsOwnerProxy.sol";
 import "./BPackedUtils.sol";
-import "./BBLib.v6.sol";
+import "./BBLib.v7.sol";
 import { BBFarmIface, BBFarmEvents } from "./BBFarm.sol";
 import { CommAuctionIface } from "./CommunityAuction.sol";
 import "./SVBallotConsts.sol";
@@ -321,7 +321,7 @@ contract SVIndex is IxIface {
 
 
     function _deployBallot(bytes32 democHash, bytes32 specHash, bytes32 extraData, uint packed, bool checkLimit, bool alreadySentTx) internal returns (uint ballotId) {
-        require(BBLib.isTesting(BPackedUtils.packedToSubmissionBits(packed)) == false, "b-testing");
+        require(BBLibV7.isTesting(BPackedUtils.packedToSubmissionBits(packed)) == false, "b-testing");
 
         // the most significant byte of extraData signals the bbFarm to use.
         uint8 bbFarmId = uint8(extraData[0]);
