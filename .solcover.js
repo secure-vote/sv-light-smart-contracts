@@ -11,5 +11,6 @@ module.exports = {
              , '../dist'
              , '../distArchive'
              , '../archive'
+             , '../libs/BytesLib.sol'
              ]
 }
