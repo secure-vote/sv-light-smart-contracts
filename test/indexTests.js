@@ -230,7 +230,8 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
 
     await doLog("checking bIDToDetails")
     const bIdToDetails = await aux.ballotIdToDetails(svIx.address, ballotId)
-    const expBIdToDetails = [toBigNumber(0), zeroHash, getSB(packed), getStartTS(packed), getEndTS(packed), specHash, false]
+    const startTs = (await bbFarm.getDetails(ballotId, zeroAddr))[4]
+    const expBIdToDetails = [toBigNumber(0), zeroHash, getSB(packed), startTs, getEndTS(packed), specHash, false]
     assert.deepEqual(bIdToDetails, expBIdToDetails, 'bIdToDetails init matches')
 
     await doLog("checking getBBFarmAddressAndBallotId")

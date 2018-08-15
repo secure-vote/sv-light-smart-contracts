@@ -25,12 +25,13 @@ var hexPk = "0xba781ed1006bd7694282a210485265f1c503f4e6721858b4269ae6d745f7bb4b"
 var specHash = "0x418781fb172c2a30c072d58628f5df3f12052a0b785450fb0105f1b98b504561";
 
 
-const genPxBB = async (bbPx, owner = zeroAddr) => {
+const genBallot = async (farmPx, owner = zeroAddr, packed = null) => {
     const specHash = genRandomBytes32()
-    const txr = await bbPx.initBallot(specHash, await genStdPacked(), zeroAddr, owner, zeroAddr);
+    const txr = await farmPx.initBallot(specHash, packed || await genStdPacked(), zeroAddr, owner, zeroAddr);
     const {args: {ballotId}} = getEventFromTxR('BallotCreatedWithID', txr)
     return ballotId
 }
+
 
 const genStdPacked = async () => {
     const [s,e] = await genStartEndTimes();
@@ -63,21 +64,21 @@ async function testInstantiation({owner, accounts, farmPx, farmRemote, doLog}) {
 }
 
 
-async function testSetOwner({accounts, BB}) {
-    const acc = accounts;
+async function testSetOwner({owner, accounts, farmPx, farmRemote, doLog}) {
     const [start] = await genStartEndTimes();
-    const vc = await BB.new(specHash, mkPacked(start, start + 60, USE_ETH | USE_NO_ENC), zeroAddr);
-    const owner1 = await vc.owner();
-    assert.equal(acc[0], owner1, "owner should be acc[0]");
+    const [,u1,u2] = accounts
+    const ballotId = await genBallot(farmPx, owner, mkPacked(start, start + 60, USE_ETH | USE_NO_ENC));
+    const owner1 = (await farmPx.getDetails(ballotId, zeroAddr))[8];
+    assert.equal(owner, owner1, "owner should be acc[0]");
 
     // fraud set owner
-    await assert403(vc.setOwner(acc[2], {from: acc[1]}), "should throw if setOwner called by non-owner");
+    await assert403(farmPx.setBallotOwner(ballotId, u2, {from: u1}), "should throw if setOwner called by non-owner");
 
     // good set owner
-    const soTxr = await vc.setOwner(acc[1]);
+    const soTxr = await farmPx.setBallotOwner(ballotId, u1);
     assertNoErr(soTxr);
-    const owner2 = await vc.owner();
-    assert.equal(acc[1], owner2, "owner should change when legit req");
+    const owner2 = (await farmPx.getDetails(ballotId, zeroAddr))[8];
+    assert.equal(u1, owner2, "owner should change when legit req");
 }
 
 
@@ -89,56 +90,53 @@ async function testEncryptionBranching({owner, accounts, farmPx, farmRemote, doL
 
     // best BB with enc
     const _specHash1 = genRandomBytes32();
-    const vcEnc = await BB.new(_specHash1, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), zeroAddr);
-
-    const aux = mkBBPx(vcEnc, bbaux);
+    const bIdEnc = await genBallot(farmPx, owner, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING));
 
     // check we're using enc
-    assert.equal(await aux.getSubmissionBits(), USE_ETH | USE_ENC | USE_TESTING, "encryption should be enabled");
+    const _sb = (await farmPx.getDetails(bIdEnc, zeroAddr))[3]
+    assert.equal(_sb, USE_ETH | USE_ENC | USE_TESTING, "encryption should be enabled");
 
     // check submissions with enc
     const bData = hexPk;
-    assert.equal(await aux.getNVotesCast(), 0, "no votes yet");
+    assert.equal((await farmRemote.getDetails(bIdEnc, zeroAddr))[1], 0, "no votes yet");
 
     const tempPk = specHash;
-    const _wEnc = await vcEnc.submitVote(bData, tempPk);
+    const _wEnc = await farmRemote.submitVote(bIdEnc, bData, tempPk);
     const castTime = (await getBlock('latest')).timestamp
     assertNoErr(_wEnc);
-    assert.equal(await aux.getNVotesCast(), 1, "1 vote");
+    assert.equal((await farmRemote.getDetails(bIdEnc, zeroAddr))[1], 1, "1 vote");
     assertOnlyEvent("SuccessfulVote", _wEnc);
-    const ballot = await vcEnc.getVoteAndTime(0);
+    const ballot = await farmRemote.getVoteAndTime(bIdEnc, 0);
     assert.equal(ballot[0], bData, "ballot data stored");
-    assert.equal(ballot[1], accounts[0], "voter stored correctly");
+    assert.equal(ballot[1], owner, "voter stored correctly");
     assert.equal(ballot[2], tempPk, "pk stored matches");
     assert.reallyClose(ballot[3], toBigNumber(castTime), 'vote cast time matches expected')
 
     /* NO ENCRYPTION */
 
     // create ballot box with no enc
-    const _specHash2 = genRandomBytes32();
-    const vcNoEnc = await BB.new(_specHash2, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
-    const auxNoEnc = mkBBPx(vcNoEnc, bbaux);
+    const bIdNoEnc = await genBallot(farmPx, owner, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING));
 
     // assert useEnc is false with no enc
-    assert.equal(await auxNoEnc.getSubmissionBits(), USE_ETH | USE_NO_ENC | USE_TESTING, "encryption should be disabled");
+    assert.equal((await farmPx.getDetails(bIdNoEnc, zeroAddr))[3], USE_ETH | USE_NO_ENC | USE_TESTING, "encryption should be disabled");
     // test ballot submissions w no enc
     const _bData = genRandomBytes32();
-    const _noEnc = await vcNoEnc.submitVote(_bData, "");
+    const _noEnc = await farmRemote.submitVote(bIdNoEnc, _bData, "");
     assertNoErr(_noEnc);
     assertOnlyEvent("SuccessfulVote", _noEnc);
-    const _bReturned = await vcNoEnc.getVote(0);
+    const _bReturned = await farmRemote.getVoteAndTime(bIdNoEnc, 0);
     assert.equal(_bReturned[0], _bData, "ballot data matches");
     assert.equal(_bReturned[1], accounts[0], "voter acc matches")
     assert.equal(_bReturned[2], '0x', "pubkey is zero");
 
-    assert.equal(await auxNoEnc.getNVotesCast(), 1, "1 vote");
+    assert.equal((await farmRemote.getDetails(bIdEnc, zeroAddr))[1], 1, "1 vote");
 }
 
 
 async function testTestMode({owner, accounts, farmPx, farmRemote, doLog}) {
     const [s, e] = await genStartEndTimes();
-    var vc = await BB.new(specHash, mkPacked(s, e, USE_ETH | USE_NO_ENC), zeroAddr);
-    await assertErrStatus(ERR_TESTING_REQ, vc.setEndTime(0), "throws on set end time when not in testing");
+    var ballotId = await genBallot(farmPx, owner, mkPacked(s, e, USE_ETH | USE_NO_ENC))
+    await assertErrStatus(ERR_TESTING_REQ, farmPx.setEndTime(ballotId, 0), "throws on set end time when not in testing");
 }
 
 
@@ -182,57 +180,19 @@ const _genSigned = () => {
 
 async function testDeprecation({owner, accounts, farmPx, farmRemote, doLog}) {
     const [startTime, endTime] = await genStartEndTimes();
-    const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
-    const aux = mkBBPx(bb, bbaux);
+    const ballotId = await genBallot(farmPx, owner, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING));
 
-    assert.equal(await aux.isDeprecated(), false, "should not be deprecated");
-    await bb.setDeprecated();
-    assert.equal(await aux.isDeprecated(), true, "should be deprecated");
-
-    await assertRevert(bb.submitVote(genRandomBytes32(), ""), "submit ballot should throw after deprecation");
+    assert.equal((await farmPx.getDetails(ballotId, zeroAddr))[7], false, "should not be deprecated");
+    await farmPx.setDeprecated(ballotId);
+    assert.equal((await farmPx.getDetails(ballotId, zeroAddr))[7], true, "should be deprecated");
 }
 
 
-const testVersion = async ({BB, bbaux}) => {
-    const [startTime, endTime] = await genStartEndTimes();
-    const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC), zeroAddr);
-    assert.deepEqual(await bb.farm.getBBLibVersion(), toBigNumber(7), "version (BBLib) should be 7");
-    assert.deepEqual(await bb.farm.getVersion(), toBigNumber(3), "version (bbfarm) should be 3");
+const testVersion = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+    assert.deepEqual(await farmPx.getBBLibVersion(), toBigNumber(7), "version (BBLib) should be 7");
+    assert.deepEqual(await farmPx.getVersion(), toBigNumber(3), "version (bbfarm) should be 3");
 }
 
-
-const testSponsorship = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
-    const [, u1, u2, u3, u4, u5, u6, u7, u8, emergencyAdmin] = accounts;
-
-    const [startTime, endTime] = await genStartEndTimes();
-    const payments = await SvPayments.new(emergencyAdmin);
-    assert.equal(await payments.getPayTo(), owner, 'payto as expected')
-    // don't need to include the farm address here bc we inject ix.address into BB
-    const ix = await SvIndex.new(zeroAddr, payments.address, zeroAddr, zeroAddr, zeroAddr);
-    const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING), ix.address);
-
-    assert.deepEqual(toBigNumber(0), await bb.getTotalSponsorship(), "sponsorship should be 0 atm");
-
-    const balPre = await getBalance(owner);
-    await bb.sendTransaction({
-        from: u1,
-        value: toBigNumber(oneEth)
-    });
-    const balPost = await getBalance(owner);
-    assert.deepEqual(balPost, toBigNumber(oneEth).plus(balPre), "sponsorship balance (payTo) should match expected");
-
-    assert.deepEqual(await bb.getTotalSponsorship(), toBigNumber(oneEth), "getTotalSponsorship should match expected");
-
-    // make sponsorship fail via the tx failing
-
-    const testHelper = await TestHelper.new()
-    await payments.setPayTo(testHelper.address);
-
-    await assertRevert(bb.sendTransaction({
-        from: u1,
-        value: 1999  // special value that will cause testHelper to throw
-    }), 'should throw if payTo tx fails');
-}
 
 
 const testBadSubmissionBits = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
@@ -267,44 +227,44 @@ const testBadSubmissionBits = async ({owner, accounts, farmPx, farmRemote, doLog
 }
 
 
-const testCommStatus = async ({accounts, BB, bbaux, bbName}) => {
-    const [s,e] = await genStartEndTimes();
+// const testCommStatus = async ({accounts, BB, bbaux, bbName}) => {
+//     const [s,e] = await genStartEndTimes();
 
-    const std = USE_ETH | USE_NO_ENC;
-    const goodBits = [
-        std,
-    ]
+//     const std = USE_ETH | USE_NO_ENC;
+//     const goodBits = [
+//         std,
+//     ]
 
-    const badBits = [
-        std | IS_OFFICIAL,
-        std | IS_BINDING,
-        std | IS_OFFICIAL | IS_BINDING,
-        USE_ETH | USE_ENC,
-    ]
+//     const badBits = [
+//         std | IS_OFFICIAL,
+//         std | IS_BINDING,
+//         std | IS_OFFICIAL | IS_BINDING,
+//         USE_ETH | USE_ENC,
+//     ]
 
-    // console.log(bbName, goodBits, badBits)
+//     // console.log(bbName, goodBits, badBits)
 
-    const goodPacked = R.map(b => mkPacked(s,e,b), goodBits)
-    const badPacked = R.map(b => mkPacked(s,e,b), badBits)
+//     const goodPacked = R.map(b => mkPacked(s,e,b), goodBits)
+//     const badPacked = R.map(b => mkPacked(s,e,b), badBits)
 
-    await Promise.all(R.map(async p => {
-        const specHash = genRandomBytes32();
-        const bb = await BB.new(specHash, p, zeroAddr);
-        const aux = mkBBPx(bb, bbaux)
-        assert.equal(await aux.qualifiesAsCommunityBallot(), true, `${bbName} Ballot with packed ${p} should qualify as comm`)
-    }, goodPacked))
+//     await Promise.all(R.map(async p => {
+//         const specHash = genRandomBytes32();
+//         const bb = await BB.new(specHash, p, zeroAddr);
+//         const aux = mkBBPx(bb, bbaux)
+//         assert.equal(await aux.qualifiesAsCommunityBallot(), true, `${bbName} Ballot with packed ${p} should qualify as comm`)
+//     }, goodPacked))
 
-    await Promise.all(R.map(async p => {
-        const specHash = genRandomBytes32();
-        const bb = await BB.new(specHash, p, zeroAddr);
-        const aux = mkBBPx(bb, bbaux)
-        assert.equal(await aux.qualifiesAsCommunityBallot(), false, `${bbName} Ballot with packed ${p} should not qualify as community ballot`)
-    }, badPacked));
-}
+//     await Promise.all(R.map(async p => {
+//         const specHash = genRandomBytes32();
+//         const bb = await BB.new(specHash, p, zeroAddr);
+//         const aux = mkBBPx(bb, bbaux)
+//         assert.equal(await aux.qualifiesAsCommunityBallot(), false, `${bbName} Ballot with packed ${p} should not qualify as community ballot`)
+//     }, badPacked));
+// }
 
 
 const testOwner = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
-    const ballotId = await genPxBB(farmPx, owner)
+    const ballotId = await genBallot(farmPx, owner)
     assert.equal((await farmPx.getDetails(ballotId, zeroAddr))[8], owner, "owner should be as expected");
 
     await farmPx.setBallotOwner(ballotId, accounts[1], {from: owner});
@@ -432,7 +392,7 @@ const mkProxyVote = async ({ballotId, sequence = 4919, extra = '0x', privKey = n
 
 const testProxyVote = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     const [, u1, u2, u3] = accounts;
-    const ballotId = await genPxBB(farmPx);
+    const ballotId = await genBallot(farmPx);
 
     const {proxyReq, extra, vote, sequence, address} = await mkProxyVote({ballotId})
 
@@ -461,7 +421,7 @@ const testProxyVote = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
 const testProxyVoteReplayProtection = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     // also test sequence number props
     const [, u1, u2, u3] = accounts;
-    const ballotId = await genPxBB(farmPx);
+    const ballotId = await genBallot(farmPx);
 
     const privKey = genRandomBytes32()
 
@@ -559,13 +519,12 @@ contract("BBFarm Remote", function(accounts) {
         ["should instantiate correctly", testInstantiation],
         ["test proxy vote", testProxyVote],
         ["test proxy vote replay attacks", testProxyVoteReplayProtection],
-        // ["should allow setting owner", testSetOwner],
-        // ["should enforce encryption based on PK submitted", testEncryptionBranching],
-        // ["should not allow testing functions if testing mode is false", testTestMode],
-        // ["should throw on early ballot", testEarlyBallot],
-        // ["should allow deprecation", testDeprecation],
+        ["should allow setting owner", testSetOwner],
+        ["should enforce encryption based on PK submitted", testEncryptionBranching],
+        ["should not allow testing functions if testing mode is false", testTestMode],
+        ["should allow deprecation", testDeprecation],
         // ["test community status", testCommStatus],
-        // ["should have correct version", testVersion],
+        ["should have correct version", testVersion],
         ["test bad submission bits", testBadSubmissionBits],
         ["test owner", testOwner],
         ["test end time must be in future", testEndTimePast],

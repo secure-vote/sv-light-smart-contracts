@@ -168,16 +168,16 @@ contract RemoteBBFarmProxy is BBFarmIface {
     /* Getters */
 
     function getDetails(uint ballotId, address) external view returns
-            ( bool hasVoted
-            , uint nVotesCast
-            , bytes32 secKey
-            , uint16 submissionBits
-            , uint64 startTime
-            , uint64 endTime
-            , bytes32 specHash
-            , bool deprecated
-            , address ballotOwner
-            , bytes16 extraData) {
+            ( bool hasVoted             // 0
+            , uint nVotesCast           // 1
+            , bytes32 secKey            // 2
+            , uint16 submissionBits     // 3
+            , uint64 startTime          // 4
+            , uint64 endTime            // 5
+            , bytes32 specHash          // 6
+            , bool deprecated           // 7
+            , address ballotOwner       // 8
+            , bytes16 extraData) {      // 9
         BBLibV7.DB storage b = getDb(ballotId);
         uint packed = b.packed;
         return (

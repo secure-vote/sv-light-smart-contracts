@@ -51,6 +51,7 @@
     "c": "./bin/compile.sh -c",
     "diff": "git diff -- . ':(exclude)_solDist/*'",
     "manage-nodes:dev": "scripts/manage-nodes.sh",
-    "test:geth": "export GETH_CLIENT=geth; yarn manage-nodes:dev && truffle test --network rpc"
+    "test:geth": "export GETH_CLIENT=geth; yarn manage-nodes:dev && truffle test --network rpc",
+    "ganache": "ganache-cli -l 10000000 -g 1 -i 15 -e 100000 -a 20"
   }
 }
