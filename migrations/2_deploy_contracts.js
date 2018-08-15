@@ -13,7 +13,7 @@ module.exports = function(deployer) {
     // deployer.deploy(BPackedUtils);
 
     // deployer.link(BPackedUtils, SVIndex);
-    deployer.link(BBLib, SVIndex)
+    deployer.link(BBLibV7, SVIndex)
 
     deployer.link(BBLibV7, BBFarm)
 
