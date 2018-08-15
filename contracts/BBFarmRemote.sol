@@ -295,9 +295,10 @@ contract RemoteBBFarm is BBFarmIface {
 
     /* base SCs */
 
-    function _getPayTo() internal view returns (address) {
-        return owner;
-    }
+    // don't need this because no payable methods
+    // function _getPayTo() internal view returns (address) {
+    //     return owner;
+    // }
 
     function getVersion() external pure returns (uint) {
         return VERSION;
@@ -473,19 +474,19 @@ contract RemoteBBFarm is BBFarmIface {
     }
 
     function getTotalSponsorship(uint ballotId) external view returns (uint) {
-        return getDb(ballotId).getTotalSponsorship();
+        revert(noSponsorship);
     }
 
     function getSponsorsN(uint ballotId) external view returns (uint) {
-        return getDb(ballotId).sponsors.length;
+        revert(noSponsorship);
     }
 
     function getSponsor(uint ballotId, uint sponsorN) external view returns (address sender, uint amount) {
-        return getDb(ballotId).getSponsor(sponsorN);
+        revert(noSponsorship);
     }
 
     function getCreationTs(uint ballotId) external view returns (uint) {
-        return getDb(ballotId).creationTs;
+        revert("creationTs unk on remote");
     }
 
     /* ADMIN */

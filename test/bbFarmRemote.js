@@ -89,8 +89,11 @@ async function testEncryptionBranching({owner, accounts, farmPx, farmRemote, doL
     /* ENCRYPTION */
 
     // best BB with enc
-    const _specHash1 = genRandomBytes32();
     const bIdEnc = await genBallot(farmPx, owner, mkPacked(startTime, endTime, USE_ETH | USE_ENC | USE_TESTING));
+
+    // check cretionTs
+    const {timestamp: bEncCreationTs} = await getBlock('latest')
+    assert.deepEqual(await farmPx.getCreationTs(bIdEnc), toBigN(bEncCreationTs), 'creation ts matches')
 
     // check we're using enc
     const _sb = (await farmPx.getDetails(bIdEnc, zeroAddr))[3]
@@ -137,45 +140,48 @@ async function testTestMode({owner, accounts, farmPx, farmRemote, doLog}) {
     const [s, e] = await genStartEndTimes();
     var ballotId = await genBallot(farmPx, owner, mkPacked(s, e, USE_ETH | USE_NO_ENC))
     await assertErrStatus(ERR_TESTING_REQ, farmPx.setEndTime(ballotId, 0), "throws on set end time when not in testing");
+    var ballotId2 = await genBallot(farmPx, owner, mkPacked(s, e, USE_ETH | USE_NO_ENC | USE_TESTING))
+    // this works though
+    await farmPx.setEndTime(ballotId2, 0)
 }
 
 
-const testABallot = accounts => async (vc, account, msg = "no message provided") => {
-    const myAddr = account;
-    const encBallot = genRandomBytes32();
-    const vtrPubkey = genRandomBytes32();
+// const testABallot = accounts => async (vc, account, msg = "no message provided") => {
+//     const myAddr = account;
+//     const encBallot = genRandomBytes32();
+//     const vtrPubkey = genRandomBytes32();
 
-    const _submitVote = await asyncAssertDoesNotThrow(() => vc.submitVote(encBallot, vtrPubkey, {
-        from: myAddr
-    }), msg);
-    assertOnlyEvent("SuccessfulVote", _submitVote);
-    assertNoErr(_submitVote);
-    const {args} = getEventFromTxR("SuccessfulVote", _submitVote);
-    const {voteId} = args;
+//     const _submitVote = await asyncAssertDoesNotThrow(() => vc.submitVote(encBallot, vtrPubkey, {
+//         from: myAddr
+//     }), msg);
+//     assertOnlyEvent("SuccessfulVote", _submitVote);
+//     assertNoErr(_submitVote);
+//     const {args} = getEventFromTxR("SuccessfulVote", _submitVote);
+//     const {voteId} = args;
 
-    const [_ballotRet, _addr, _pkRet] = await vc.getVote(voteId);
+//     const [_ballotRet, _addr, _pkRet] = await vc.getVote(voteId);
 
-    assert.equal(_addr, myAddr, "account should match");
-    assert.equal(_pkRet, vtrPubkey, "pubkey should match");
-    assert.equal(_ballotRet, encBallot, "ballots should match");
+//     assert.equal(_addr, myAddr, "account should match");
+//     assert.equal(_pkRet, vtrPubkey, "pubkey should match");
+//     assert.equal(_ballotRet, encBallot, "ballots should match");
 
-    const badNamespaceBId = vc.ballotId.plus(toBigNumber(2).pow(230))
-    const badBallotId = vc.ballotId.plus(3)
-    await assertRevert(vc.farm.submitVote(badNamespaceBId, encBallot, vtrPubkey), 'cannot submit vote with bad namespace')
-    await assertRevert(vc.farm.submitVote(badBallotId, encBallot, vtrPubkey), 'cannot submit vote with bad ballotId')
+//     const badNamespaceBId = vc.ballotId.plus(toBigNumber(2).pow(230))
+//     const badBallotId = vc.ballotId.plus(3)
+//     await assertRevert(vc.farm.submitVote(badNamespaceBId, encBallot, vtrPubkey), 'cannot submit vote with bad namespace')
+//     await assertRevert(vc.farm.submitVote(badBallotId, encBallot, vtrPubkey), 'cannot submit vote with bad ballotId')
 
-    return true;
-};
+//     return true;
+// };
 
 
-const _genSigned = () => {
-    return {
-        ballot: genRandomBytes32(),
-        edPk: genRandomBytes32(),
-        sig: [genRandomBytes32(), genRandomBytes32()],
-        curvePk: genRandomBytes32()
-    }
-}
+// const _genSigned = () => {
+//     return {
+//         ballot: genRandomBytes32(),
+//         edPk: genRandomBytes32(),
+//         sig: [genRandomBytes32(), genRandomBytes32()],
+//         curvePk: genRandomBytes32()
+//     }
+// }
 
 
 async function testDeprecation({owner, accounts, farmPx, farmRemote, doLog}) {
@@ -274,102 +280,6 @@ const testOwner = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
 }
 
 
-const testGetVotes = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
-    const [s, e] = await genStartEndTimes();
-
-    const zeroSig = [bytes32zero, bytes32zero]
-    const testSig1 = [genRandomBytes32(), genRandomBytes32()];
-    const testSig2 = [genRandomBytes32(), genRandomBytes32()];
-
-    const _ballot1 = genRandomBytes32();
-    const _ballot2 = genRandomBytes32();
-
-    const _pk1 = genRandomBytes32();
-    const _pk2 = genRandomBytes32();
-
-    const bbNoEnc = await BB.new(genRandomBytes32(), mkPacked(s, e, (USE_ETH | USE_NO_ENC)), zeroAddr);
-    const bbEnc = await BB.new(genRandomBytes32(), mkPacked(s, e, (USE_ETH | USE_ENC)), zeroAddr);
-
-    const testBBFarmAux = async ({bb, useEnc}) => {
-        let aux, getVotesFrom, getVotes;
-        aux = await BBFarmAux.new();
-        getVotesFrom = acct => aux.getVotesFrom(bb.farm.address, bb.ballotId, acct)
-        getVotes = () => aux.getVotes(bb.farm.address, bb.ballotId)
-
-        // test getBallotsEthFrom
-        assert.deepEqual(await getVotesFrom(accounts[0]), [[], [], []], "getBallotsFrom should be empty before any votes");
-        assert.deepEqual(await getVotes(), [[], [], []], "getBallots should be empty before any votes");
-
-        await doLog(`submitting votes now ${toJson({useEnc})}`)
-        await bb.submitVote(_ballot1, useEnc ? _pk1 : "", {from: accounts[0]});
-        await bb.submitVote(_ballot2, useEnc ? _pk2 : "", {from: accounts[1]});
-
-        // we use ABIEncoderV2 here in the BBFarmAux
-        // I suspect there's a problem with web3 v0.20.x decoding these responses correctly
-        // so just yolo i guess...
-        // const mkExtraGVF = (i, _b) => `0x00000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000${i}0000000000000000000000000000000000000000000000000000000000000001${_b.slice(2)}`
-        // note: just going to ignore the `extras` response - it's the last one on all results
-
-        assert.deepEqual((await getVotesFrom(accounts[0])).slice(0,2),
-            [ [toBigNumber(0)]
-            , [_ballot1]
-            // , useEnc ? [_pk1] : [mkExtraGVF(0, _ballot1)
-            ], `getBallotsFrom (a0, useEnc: ${useEnc}, pk: ${_pk1}, b: ${_ballot1} should match expected`);
-
-        assert.deepEqual((await getVotesFrom(accounts[1])).slice(0,2),
-            [ [toBigNumber(1)]
-            , [_ballot2]
-            // , useEnc ? [_pk2] : [mkExtraGVF(1, _ballot2)
-            ], `getBallotsFrom (a1, useEnc: ${useEnc}) should match expected`);
-
-        assert.deepEqual((await getVotes()).slice(0,2),
-            [ [_ballot1, _ballot2]
-            , [accounts[0], accounts[1]]
-            //, useEnc ? [_pk1, _pk2] : [mkExtraGVF(0, _ballot1), mkExtraGVF(1, _ballot2)]
-            ], `getBallots (useEnc: ${useEnc}) should match`)
-
-        assert.deepEqual(await bb.getVote(0), [_ballot1, accounts[0], useEnc ? _pk1 : "0x"], 'vote 0 should match')
-        assert.deepEqual(await bb.getVote(1), [_ballot2, accounts[1], useEnc ? _pk2 : "0x"], 'vote 1 should match')
-    }
-
-    await testBBFarmAux({bb: bbNoEnc, useEnc: false});
-    await testBBFarmAux({bb: bbEnc, useEnc: true});
-}
-
-
-const testBBFarmAux2 = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
-    const [_, u1, u2, u3, u4] = accounts
-
-    let [s, e] = await genStartEndTimes();
-    const _ballot1 = genRandomBytes32();
-    const _ballot2 = genRandomBytes32();
-
-    const sb = (USE_ETH | USE_NO_ENC)
-    const packed = mkPacked(s, e, sb)
-    const specHash = genRandomBytes32();
-    const bb = await BB.new(specHash, packed, owner);
-    const aux = await BBFarmAux2.new()
-
-    const expInitGetBallotDetails = [false, toBigNumber(0), zeroHash, toBigNumber(sb), toBigNumber(s), toBigNumber(e), specHash, false, owner, zeroHash.slice(0, 34)]
-    const initGetBallotDetails = await aux.getBallotDetails(bb.farm.address, bb.ballotId, u1)
-    assert.deepEqual(initGetBallotDetails, expInitGetBallotDetails, 'init getBallotDetails matches')
-
-    await doLog(`submitting votes now`)
-    await bb.submitVote(_ballot1, "", {from: u1});
-    await doLog(`voted once`)
-    await bb.submitVote(_ballot2, "", {from: u2});
-    await doLog(`voted twice`)
-
-    await doLog(`getting ballot details`)
-    const expGetBallotDetails = [true, toBigNumber(2), zeroHash, toBigNumber(sb), toBigNumber(s), toBigNumber(e), specHash, false, owner, zeroHash.slice(0, 34)]
-    const getBallotDetails = await aux.getBallotDetails(bb.farm.address, bb.ballotId, u1)
-    assert.deepEqual(expGetBallotDetails, getBallotDetails, 'getBallotDetails after 2 votes matches')
-
-    // note: getBBFarmAddressAndBallotId and ballotIdToDetails tested in indexTests
-    await doLog("done")
-}
-
-
 const testEndTimePast = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     const [s, e] = await genStartEndTimes();
     const packed = mkPacked(s, s - 10, USE_ETH | USE_NO_ENC);
@@ -459,6 +369,7 @@ const testRevertConditions = async ({owner, accounts, farmPx, farmRemote, doLog}
     await assertRevert(farmPx.initBallotProxy(toBigN(0), zeroHash, zeroHash, R.repeat(zeroHash, 4)), 'no initBallotProxy on farmPx')
     await assertRevert(farmRemote.initBallotProxy(toBigN(0), zeroHash, zeroHash, R.repeat(zeroHash, 4)), 'no initBallotProxy on farmRemote')
     await assertRevert(farmRemote.initBallot(zeroHash, toBigN(0), zeroAddr, zeroAddr, zeroAddr + "00000000"), 'no initBallot on farmRemote')
+    await assertRevert(farmRemote.getCreationTs(zeroHash), 'no creationTs on farmRemote')
 
     await doLog("checking sponsor reverts")
     await assertRevert(farmPx.sponsor(toBigN(0)), 'no sponsor on farmPx')
@@ -476,12 +387,26 @@ const testRevertConditions = async ({owner, accounts, farmPx, farmRemote, doLog}
     await assertRevert(farmPx.getTotalSponsorship(0), 'no sponsorship in farmPx 1')
     await assertRevert(farmPx.getSponsorsN(0), 'no sponsorship in farmPx 2')
     await assertRevert(farmPx.getSponsor(0, 0), 'no sponsorship in farmPx 3')
+    await assertRevert(farmRemote.getTotalSponsorship(0), 'no sponsorship in farmRemote 1')
+    await assertRevert(farmRemote.getSponsorsN(0), 'no sponsorship in farmRemote 2')
+    await assertRevert(farmRemote.getSponsor(0, 0), 'no sponsorship in farmRemote 3')
 
     await doLog("checking set methods")
     await assertRevert(farmRemote.setBallotOwner(0, zeroAddr), 'cannot set owner on farmRemote')
     await assertRevert(farmRemote.setDeprecated(0), 'cannot set deprecated on farmRemote')
     await assertRevert(farmRemote.setEndTime(0, 0), 'cannot set endTime on farmRemote')
     await assertRevert(farmRemote.revealSeckey(0, zeroHash), 'cannot set secKey on farmRemote')
+}
+
+
+const testGetVotes = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+
+}
+
+
+const testMisc = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+    const [,u1] = accounts
+
 }
 
 
@@ -529,6 +454,8 @@ contract("BBFarm Remote", function(accounts) {
         ["test owner", testOwner],
         ["test end time must be in future", testEndTimePast],
         ["test revert conditions", testRevertConditions],
+        ["test getVotesBetween and getVotesBetweenFor", testGetVotes],
+        ["test misc", testMisc],
     ]
     R.map(([desc, f]) => {
         it("BBFarm: " + desc, _wrapTest({accounts}, f))
