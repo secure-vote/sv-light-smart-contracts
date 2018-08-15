@@ -25,9 +25,9 @@ var hexPk = "0xba781ed1006bd7694282a210485265f1c503f4e6721858b4269ae6d745f7bb4b"
 var specHash = "0x418781fb172c2a30c072d58628f5df3f12052a0b785450fb0105f1b98b504561";
 
 
-const genPxBB = async bbPx => {
+const genPxBB = async (bbPx, owner = zeroAddr) => {
     const specHash = genRandomBytes32()
-    const txr = await bbPx.initBallot(specHash, await genStdPacked(), zeroAddr, zeroAddr, zeroAddr);
+    const txr = await bbPx.initBallot(specHash, await genStdPacked(), zeroAddr, owner, zeroAddr);
     const {args: {ballotId}} = getEventFromTxR('BallotCreatedWithID', txr)
     return ballotId
 }
@@ -81,7 +81,7 @@ async function testSetOwner({accounts, BB}) {
 }
 
 
-async function testEncryptionBranching({accounts, BB, bbaux}) {
+async function testEncryptionBranching({owner, accounts, farmPx, farmRemote, doLog}) {
     var [startTime, endTime] = await genStartEndTimes();
     var shortEndTime = 0;
 
@@ -135,7 +135,7 @@ async function testEncryptionBranching({accounts, BB, bbaux}) {
 }
 
 
-async function testTestMode({accounts, BB, bbaux}) {
+async function testTestMode({owner, accounts, farmPx, farmRemote, doLog}) {
     const [s, e] = await genStartEndTimes();
     var vc = await BB.new(specHash, mkPacked(s, e, USE_ETH | USE_NO_ENC), zeroAddr);
     await assertErrStatus(ERR_TESTING_REQ, vc.setEndTime(0), "throws on set end time when not in testing");
@@ -180,7 +180,7 @@ const _genSigned = () => {
 }
 
 
-async function testDeprecation({accounts, BB, bbaux}) {
+async function testDeprecation({owner, accounts, farmPx, farmRemote, doLog}) {
     const [startTime, endTime] = await genStartEndTimes();
     const bb = await BB.new(specHash, mkPacked(startTime, endTime, USE_ETH | USE_NO_ENC | USE_TESTING), zeroAddr);
     const aux = mkBBPx(bb, bbaux);
@@ -201,8 +201,8 @@ const testVersion = async ({BB, bbaux}) => {
 }
 
 
-const testSponsorship = async ({accounts, BB, bbaux}) => {
-    const [owner, u1, u2, u3, u4, u5, u6, u7, u8, emergencyAdmin] = accounts;
+const testSponsorship = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+    const [, u1, u2, u3, u4, u5, u6, u7, u8, emergencyAdmin] = accounts;
 
     const [startTime, endTime] = await genStartEndTimes();
     const payments = await SvPayments.new(emergencyAdmin);
@@ -235,7 +235,7 @@ const testSponsorship = async ({accounts, BB, bbaux}) => {
 }
 
 
-const testBadSubmissionBits = async ({accounts, BB, bbaux}) => {
+const testBadSubmissionBits = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     const [s, e] = await genStartEndTimes();
 
     const flags = [USE_ENC, USE_NO_ENC];
@@ -246,23 +246,23 @@ const testBadSubmissionBits = async ({accounts, BB, bbaux}) => {
     const badPacked2 = [mkPacked(s, e, USE_ETH)];
 
     await Promise.all(R.map(p => {
-        return assertRevert(BB.new(specHash, p, zeroAddr), "bad submission bits (conflicting) should fail");
+        return assertRevert(farmPx.initBallot(specHash, p, zeroAddr, zeroAddr, "0x00"), "bad submission bits (conflicting) should fail");
     }, badPacked1));
 
     await Promise.all(R.map(p => {
-        return assertRevert(BB.new(specHash, p, zeroAddr), "bad submission bits (not enough) should fail");
+        return assertRevert(farmPx.initBallot(specHash, p, zeroAddr, zeroAddr, "0x00"), "bad submission bits (not enough) should fail");
     }, badPacked2));
 
-    await assertRevert(BB.new(specHash, mkPacked(s, e, 32 | USE_ETH | USE_ENC), zeroAddr), "sub bits in middle banned");
+    await assertRevert(farmPx.initBallot(specHash, mkPacked(s, e, 32 | USE_ETH | USE_ENC), zeroAddr, zeroAddr, "0x00"), "sub bits in middle banned");
     // make sure the ballot works excluding the `32` in subBits above
-    await BB.new(specHash, mkPacked(s, e, USE_ETH | USE_ENC), zeroAddr);
-    await assertRevert(BB.new(specHash, mkPacked(s, e, USE_SIGNED | USE_ENC), zeroAddr), "no signed ballots");
+    await farmPx.initBallot(specHash, mkPacked(s, e, USE_ETH | USE_ENC), zeroAddr, zeroAddr, "0x00");
+    await assertRevert(farmPx.initBallot(specHash, mkPacked(s, e, USE_SIGNED | USE_ENC), zeroAddr, zeroAddr, "0x00"), "no signed ballots");
 
     const bannedBits = R.map(i => 2 ** i, [1,4,5,6,7,8,9,10,11,12])
     const bannedPacked = R.map(i => mkPacked(s, e, i | USE_ETH | USE_NO_ENC), bannedBits)
 
     await Promise.all(R.map(p => {
-        return assertRevert(BB.new(specHash, p, zeroAddr), "banned submission bits should not be allowed")
+        return assertRevert(farmPx.initBallot(specHash, p, zeroAddr, zeroAddr, "0x00"), "banned submission bits should not be allowed")
     }, bannedPacked))
 }
 
@@ -303,18 +303,18 @@ const testCommStatus = async ({accounts, BB, bbaux, bbName}) => {
 }
 
 
-const testOwner = async ({accounts, BB, bbaux}) => {
-    const bb = await genStdBB(BB);
-    assert.equal(await bb.owner(), accounts[0], "owner should be as expected");
+const testOwner = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+    const ballotId = await genPxBB(farmPx, owner)
+    assert.equal((await farmPx.getDetails(ballotId, zeroAddr))[8], owner, "owner should be as expected");
 
-    await bb.setOwner(accounts[1], {from: accounts[0]});
-    assert.equal(await bb.owner(), accounts[1], "owner should be as expected after update");
+    await farmPx.setBallotOwner(ballotId, accounts[1], {from: owner});
+    assert.equal((await farmPx.getDetails(ballotId, zeroAddr))[8], accounts[1], "owner should be as expected after update");
 
-    await assertRevert(bb.setOwner(accounts[2], {from: accounts[0]}), "setOwner permissions okay");
+    await assertRevert(farmPx.setBallotOwner(ballotId, accounts[1], {from: owner}), "setOwner permissions okay");
 }
 
 
-const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
+const testGetVotes = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     const [s, e] = await genStartEndTimes();
 
     const zeroSig = [bytes32zero, bytes32zero]
@@ -377,7 +377,7 @@ const testGetVotes = async ({accounts, BB, bbaux, doLog}) => {
 }
 
 
-const testBBFarmAux2 = async ({accounts, BB, bbaux, doLog, owner}) => {
+const testBBFarmAux2 = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     const [_, u1, u2, u3, u4] = accounts
 
     let [s, e] = await genStartEndTimes();
@@ -410,10 +410,10 @@ const testBBFarmAux2 = async ({accounts, BB, bbaux, doLog, owner}) => {
 }
 
 
-const testEndTimeFuture = async ({BB, accounts}) => {
+const testEndTimePast = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     const [s, e] = await genStartEndTimes();
     const packed = mkPacked(s, s - 10, USE_ETH | USE_NO_ENC);
-    await assertRevert(BB.new(genRandomBytes32(), packed, accounts[0]), 'should throw on end time in past')
+    await assertRevert(farmPx.initBallot(genRandomBytes32(), packed, accounts[0], accounts[0], "0x00"), 'should throw on end time in past')
 }
 
 
@@ -557,21 +557,18 @@ const _wrapTest = ({accounts}, f) => {
 contract("BBFarm Remote", function(accounts) {
     const tests = [
         ["should instantiate correctly", testInstantiation],
-        // ["test bbFarmAux2", testBBFarmAux2],
-        // ["test sponsorship", testSponsorship],
         ["test proxy vote", testProxyVote],
         ["test proxy vote replay attacks", testProxyVoteReplayProtection],
-        // ["test getBallots*From", testGetVotes],
         // ["should allow setting owner", testSetOwner],
         // ["should enforce encryption based on PK submitted", testEncryptionBranching],
         // ["should not allow testing functions if testing mode is false", testTestMode],
         // ["should throw on early ballot", testEarlyBallot],
         // ["should allow deprecation", testDeprecation],
-        // ["should have correct version", testVersion],
-        // ["test bad submission bits", testBadSubmissionBits],
         // ["test community status", testCommStatus],
-        // ["test owner", testOwner],
-        // ["test end time must be in future", testEndTimeFuture],
+        // ["should have correct version", testVersion],
+        ["test bad submission bits", testBadSubmissionBits],
+        ["test owner", testOwner],
+        ["test end time must be in future", testEndTimePast],
         ["test revert conditions", testRevertConditions],
     ]
     R.map(([desc, f]) => {

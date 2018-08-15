@@ -36,6 +36,8 @@ library CalcBallotId {
  * deterministically calculate ballotId
  */
 contract RemoteBBFarmProxy is BBFarmIface {
+    using BBLibV7 for BBLibV7.DB;
+
     bytes4 namespace;
     bytes32 foreignNetworkDetails;
     uint constant VERSION = 3;
@@ -46,25 +48,25 @@ contract RemoteBBFarmProxy is BBFarmIface {
 
     /* storing info about ballots */
 
-    struct BallotPx {
-        bytes32 specHash;
-        uint256 packed;
-        IxIface index;
-        address bbOwner;
-        bytes16 extraData;
-        uint creationTs;
-        bool deprecated;
-        bytes32 secKey;
-    }
+    // struct BallotPx {
+    //     bytes32 specHash;
+    //     uint256 packed;
+    //     IxIface index;
+    //     address bbOwner;
+    //     bytes16 extraData;
+    //     uint creationTs;
+    //     bool deprecated;
+    //     bytes32 secKey;
+    // }
 
-    mapping(uint => BallotPx) ballots;
+    mapping(uint224 => BBLibV7.DB) dbs;
     mapping(uint => uint) ballotNToId;
     uint nBallots = 0;
 
     /* ballot owner modifier */
 
     modifier bOwner(uint ballotId) {
-        require(ballots[ballotId].bbOwner == msg.sender, "!owner");
+        require(getDb(ballotId).ballotOwner == msg.sender, "!owner");
         _;
     }
 
@@ -84,6 +86,12 @@ contract RemoteBBFarmProxy is BBFarmIface {
         // morden is: [0][2][62][<addr>] -- https://github.com/ethereumproject/go-ethereum/blob/74ab56ba00b27779b2bdbd1c3aef24bdeb941cd8/core/config/morden.json
         // rinkeby is: [0][4][4][<addr>] -- todo confirm
         foreignNetworkDetails = bytes32(uint(fNetworkId) << 192 | uint(fChainId) << 160 | uint(fBBFarm));
+    }
+
+    // helper
+    function getDb(uint ballotId) internal view returns (BBLibV7.DB storage) {
+        // cut off anything above 224 bits (where the namespace goes)
+        return dbs[uint224(ballotId)];
     }
 
     /* global getters */
@@ -122,16 +130,14 @@ contract RemoteBBFarmProxy is BBFarmIface {
                 ) only_editors() external returns (uint ballotId) {
         // calculate the ballotId based on the last 224 bits of the specHash.
         ballotId = ballotId = CalcBallotId.calc(namespace, specHash, packed, bbOwner, extraData);
+
+        // we need to call the init functions on our libraries
+        getDb(ballotId).init(specHash, packed, ix, bbOwner, bytes16(uint128(extraData)));
+
         // we just store a log of the ballot here; no additional logic
         uint bN = nBallots;
         nBallots = bN + 1;
         ballotNToId[bN] = ballotId;
-        ballots[ballotId].specHash = specHash;
-        ballots[ballotId].packed = packed;
-        ballots[ballotId].index = ix;
-        ballots[ballotId].bbOwner = bbOwner;
-        ballots[ballotId].extraData = bytes16(uint128(extraData));
-        ballots[ballotId].creationTs = now;
 
         emit BallotCreatedWithID(ballotId);
         emit BallotOnForeignNetwork(foreignNetworkDetails, ballotId);
@@ -172,20 +178,20 @@ contract RemoteBBFarmProxy is BBFarmIface {
             , bool deprecated
             , address ballotOwner
             , bytes16 extraData) {
-        BallotPx storage b = ballots[ballotId];
+        BBLibV7.DB storage b = getDb(ballotId);
         uint packed = b.packed;
         return (
             false,
             // this is a very big number (>2^255) that is obviously non arbitrary
             // - idea is to deliberately cause a failure case if using bbFarmPx incorrectly.
             113370313370313370313370313370313370313370313370313370313370313370313370313370,
-            b.secKey,
+            b.ballotEncryptionSeckey,
             BPackedUtils.packedToSubmissionBits(packed),
             BPackedUtils.packedToStartTime(packed),
             BPackedUtils.packedToEndTime(packed),
             b.specHash,
             b.deprecated,
-            b.bbOwner,
+            b.ballotOwner,
             b.extraData
         );
     }
@@ -215,33 +221,33 @@ contract RemoteBBFarmProxy is BBFarmIface {
     }
 
     function getCreationTs(uint ballotId) external view returns (uint) {
-        return ballots[ballotId].creationTs;
+        return getDb(ballotId).creationTs;
     }
 
     /* ADMIN */
 
     // Allow the owner to reveal the secret key after ballot conclusion
     function revealSeckey(uint ballotId, bytes32 secKey) external bOwner(ballotId) {
-        BallotPx storage b = ballots[ballotId];
+        BBLibV7.DB storage b = getDb(ballotId);
         require(BPackedUtils.packedToEndTime(b.packed) < now, "!ended");
-        b.secKey = secKey;
+        b.ballotEncryptionSeckey = secKey;
     }
 
     // note: testing only.
     function setEndTime(uint ballotId, uint64 newEndTime) external bOwner(ballotId) {
-        BallotPx storage b = ballots[ballotId];
+        BBLibV7.DB storage b = getDb(ballotId);
         require(BBLibV7.isTesting(BPackedUtils.packedToSubmissionBits(b.packed)), "!testing");
         b.packed = BPackedUtils.setEndTime(b.packed, newEndTime);
     }
 
     function setDeprecated(uint ballotId) external bOwner(ballotId) {
-        BallotPx storage b = ballots[ballotId];
+        BBLibV7.DB storage b = getDb(ballotId);
         b.deprecated = true;
     }
 
     function setBallotOwner(uint ballotId, address newOwner) external bOwner(ballotId) {
-        BallotPx storage b = ballots[ballotId];
-        b.bbOwner = newOwner;
+        BBLibV7.DB storage b = getDb(ballotId);
+        b.ballotOwner = newOwner;
     }
 }
 
