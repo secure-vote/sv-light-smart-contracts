@@ -7,5 +7,10 @@ module.exports = {
              , 'BBFarmAux.sol'
              , 'IxLib.sol'
              , 'TestHelper.sol'
+             , 'BBLib.v6.sol'
+             , '../dist'
+             , '../distArchive'
+             , '../archive'
+             , '../libs/BytesLib.sol'
              ]
 }

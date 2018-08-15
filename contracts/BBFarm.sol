@@ -5,7 +5,7 @@ pragma solidity ^0.4.24;
  * SVLightBallotBox within a centralised container (like the Index).
  */
 
-import "./BBLib.sol";
+import { BBLibV7 } from "./BBLib.v7.sol";
 import { permissioned, payoutAllC } from "./SVCommon.sol";
 import "./hasVersion.sol";
 import { IxIface } from "./SVIndex.sol";
@@ -18,6 +18,7 @@ contract BBFarmEvents {
     event BBFarmInit(bytes4 namespace);
     event Sponsorship(uint ballotId, uint value);
     event Vote(uint indexed ballotId, bytes32 vote, address voter, bytes extra);
+    event BallotOnForeignNetwork(bytes32 networkId, uint ballotId);  // added 2018-06-25 for BBFarmForeign support
 }
 
 
@@ -28,6 +29,11 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
     function getBBLibVersion() external view returns (uint256);
     function getNBallots() external view returns (uint256);
 
+    /* foreign network integration */
+
+    // requires version >= 3;
+    function getVotingNetworkDetails() external view returns (bytes32);
+
     /* init a ballot */
 
     // note that the ballotId returned INCLUDES the namespace.
@@ -37,6 +43,8 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
                        , address bbAdmin
                        , bytes24 extraData
                        ) external returns (uint ballotId);
+    // requires v3+; also isn't supported on all networks
+    function initBallotProxy(uint8 v, bytes32 r, bytes32 s, bytes32[4] params) external returns (uint256 ballotId);
 
     /* Sponsorship of ballots */
 
@@ -62,6 +70,8 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
             , bytes16 extraData);
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra);
+    // getVoteAndTime requires v3+
+    function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs);
     function getTotalSponsorship(uint ballotId) external view returns (uint);
     function getSponsorsN(uint ballotId) external view returns (uint);
     function getSponsor(uint ballotId, uint sponsorN) external view returns (address sender, uint amount);
@@ -77,7 +87,7 @@ contract BBFarmIface is BBFarmEvents, permissioned, hasVersion, payoutAllC {
 
 
 contract BBFarm is BBFarmIface {
-    using BBLib for BBLib.DB;
+    using BBLibV7 for BBLibV7.DB;
     using IxLib for IxIface;
 
     // namespaces should be unique for each bbFarm
@@ -85,9 +95,9 @@ contract BBFarm is BBFarmIface {
     // last 48 bits
     uint256 constant BALLOT_ID_MASK = 0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
-    uint constant VERSION = 2;
+    uint constant VERSION = 3;
 
-    mapping (uint224 => BBLib.DB) dbs;
+    mapping (uint224 => BBLibV7.DB) dbs;
     // note - start at 100 to avoid any test for if 0 is a valid ballotId
     // also gives us some space to play with low numbers if we want.
     uint nBallots = 0;
@@ -105,7 +115,7 @@ contract BBFarm is BBFarmIface {
     constructor() payoutAllC(msg.sender) public {
         // this bbFarm requires v5 of BBLib (note: v4 deprecated immediately due to insecure submitProxyVote)
         // note: even though we can't test for this in coverage, this has stopped me deploying to kovan with the wrong version tho, so I consider it tested :)
-        assert(BBLib.getVersion() == 6);
+        assert(BBLibV7.getVersion() == 7);
         emit BBFarmInit(NAMESPACE);
     }
 
@@ -126,16 +136,21 @@ contract BBFarm is BBFarmIface {
     }
 
     function getBBLibVersion() external view returns (uint256) {
-        return BBLib.getVersion();
+        return BBLibV7.getVersion();
     }
 
     function getNBallots() external view returns (uint256) {
         return nBallots;
     }
 
+    function getVotingNetworkDetails() external view returns (bytes32) {
+        // 0 in either chainId or networkId spot indicate the local chain
+        return bytes32(uint(0) << 192 | uint(0) << 160 | uint160(address(this)));
+    }
+
     /* db lookup helper */
 
-    function getDb(uint ballotId) internal view returns (BBLib.DB storage) {
+    function getDb(uint ballotId) internal view returns (BBLibV7.DB storage) {
         // cut off anything above 224 bits (where the namespace goes)
         return dbs[uint224(ballotId)];
     }
@@ -157,10 +172,15 @@ contract BBFarm is BBFarmIface {
         emit BallotCreatedWithID(ballotId);
     }
 
+    function initBallotProxy(uint8, bytes32, bytes32, bytes32[4]) external returns (uint256) {
+        // this isn't supported on the deployed BBFarm
+        revert("initBallotProxy not implemented");
+    }
+
     /* Sponsorship */
 
     function sponsor(uint ballotId) external payable {
-        BBLib.DB storage db = getDb(ballotId);
+        BBLibV7.DB storage db = getDb(ballotId);
         db.logSponsorship(msg.value);
         doSafeSend(db.index.getPayTo(), msg.value);
         emit Sponsorship(ballotId, msg.value);
@@ -197,7 +217,7 @@ contract BBFarm is BBFarmIface {
             , bool deprecated
             , address ballotOwner
             , bytes16 extraData) {
-        BBLib.DB storage db = getDb(ballotId);
+        BBLibV7.DB storage db = getDb(ballotId);
         uint packed = db.packed;
         return (
             db.getSequenceNumber(voter) > 0,
@@ -215,6 +235,10 @@ contract BBFarm is BBFarmIface {
 
     function getVote(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra) {
         (voteData, sender, extra, ) = getDb(ballotId).getVote(voteId);
+    }
+
+    function getVoteAndTime(uint ballotId, uint voteId) external view returns (bytes32 voteData, address sender, bytes extra, uint castTs) {
+        return getDb(ballotId).getVote(voteId);
     }
 
     function getSequenceNumber(uint ballotId, address voter) external view returns (uint32 sequence) {
@@ -241,7 +265,7 @@ contract BBFarm is BBFarmIface {
 
     // Allow the owner to reveal the secret key after ballot conclusion
     function revealSeckey(uint ballotId, bytes32 sk) external {
-        BBLib.DB storage db = getDb(ballotId);
+        BBLibV7.DB storage db = getDb(ballotId);
         db.requireBallotOwner();
         db.requireBallotClosed();
         db.revealSeckey(sk);
@@ -249,20 +273,20 @@ contract BBFarm is BBFarmIface {
 
     // note: testing only.
     function setEndTime(uint ballotId, uint64 newEndTime) external {
-        BBLib.DB storage db = getDb(ballotId);
+        BBLibV7.DB storage db = getDb(ballotId);
         db.requireBallotOwner();
         db.requireTesting();
         db.setEndTime(newEndTime);
     }
 
     function setDeprecated(uint ballotId) external {
-        BBLib.DB storage db = getDb(ballotId);
+        BBLibV7.DB storage db = getDb(ballotId);
         db.requireBallotOwner();
         db.deprecated = true;
     }
 
     function setBallotOwner(uint ballotId, address newOwner) external {
-        BBLib.DB storage db = getDb(ballotId);
+        BBLibV7.DB storage db = getDb(ballotId);
         db.requireBallotOwner();
         db.ballotOwner = newOwner;
     }

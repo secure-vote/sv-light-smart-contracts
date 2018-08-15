@@ -7,48 +7,65 @@ const { create, env } = require("sanctuary");
 const S = create({ checkTypes: true, env });
 l("init'd sactuary")
 
-const w3Utils = require('web3-utils')
+let provider = null
+const loadGanacheProvider = () => {
+  const w3Utils = require('web3-utils')
+  const ganache = require("ganache-cli");
 
-var ganache = require("ganache-cli");
+  l("Loaded ganache; declaring provider")
 
-l("Loaded ganache; declaring provider")
+  const accounts = S.map(i => ({ balance: "0xffffffffffffffffffffff", secretKey: w3Utils.padLeft(w3Utils.toHex(i+10), 64)}), S.range(0, 20))
+  // console.log("Development network accounts: ", accounts)
 
-const accounts = S.map(i => ({ balance: "0xffffffffffffffffffffff", secretKey: w3Utils.padLeft(w3Utils.toHex(i+10), 64)}), S.range(0, 20))
-// console.log("Development network accounts: ", accounts)
+  provider = ganache.provider({
+    port: 34839,
+    accounts,
+    gasLimit: 20000000,
+    db_path: "./db",
+  })
 
-let provider = ganache.provider({
-  port: 34839,
-  accounts,
-  gasLimit: 20000000,
-  db_path: "./db",
-})
+  l("provider init'd")
 
-l("provider init'd")
-
-// needed to make ganache-cli work...
-// curiously, if you don't have this AND don't have gasLimit high, then truffle
-// crashes with "exceeds block gas limit", so some communication must be going
-// on earlier. If you do have the gas limit, then the error msg becomes
-// "this.provider.sendAsync is not a function"
-provider = new Proxy(provider, {
-  get: (obj, method) => {
-    if(method in obj) {
+  // needed to make ganache-cli work...
+  // curiously, if you don't have this AND don't have gasLimit high, then truffle
+  // crashes with "exceeds block gas limit", so some communication must be going
+  // on earlier. If you do have the gas limit, then the error msg becomes
+  // "this.provider.sendAsync is not a function"
+  provider = new Proxy(provider, {
+    get: (obj, method) => {
+      if(method in obj) {
+        return obj[method]
+      }
+      if(method === "sendAsync"){
+          return provider.send
+          // // this pattern started breaking with ganache 6.1.6
+          // return (...args) => new Promise((resolve, reject) => {
+          // provider.send(...args, (err, val) => {
+          //   err ? reject(err) : resolve(val);
+          // })
+          // })
+      }
       return obj[method]
     }
-    if(method === "sendAsync"){
-        return provider.send
-        // // this pattern started breaking with ganache 6.1.6
-        // return (...args) => new Promise((resolve, reject) => {
-        // provider.send(...args, (err, val) => {
-        //   err ? reject(err) : resolve(val);
-        // })
-        // })
-    }
-    return obj[method]
-  }
-})
+  })
 
-l("Created provider + sendAsync shim")
+  l("Created provider + sendAsync shim")
+}
+
+// let's check if we need to load the ganache provider
+const devNetwork = "development"
+const networkArgM = S.head (S.filter (a => a.indexOf("--network") >= 0) (process.argv))
+
+// if we have a nothing the default is the dev network => provider needed
+S.maybe_ (loadGanacheProvider) (_netarg => {
+  // if this is triggered it means we have found the network arg
+  const networkNameFromArg = _netarg.split("=", 1)[1]
+  if (networkNameFromArg !== devNetwork || !process.argv.includes(devNetwork)) {
+    // in this case it's safe _NOT_ to load the ganache provider
+  } else {
+    loadGanacheProvider()
+  }
+}) (networkArgM)
 
 
 module.exports = {
@@ -71,10 +88,11 @@ module.exports = {
       gasPrice: 1,
     },
     rpc: {
-      network_id: 15,
+      network_id: "*",
       host: 'localhost',
       port: 8545,
-      gas: 6.5e6,
+      gas: 1e7,
+      gasPrice: 1,
     },
   }
 };

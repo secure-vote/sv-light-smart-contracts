@@ -19,7 +19,7 @@ interface CommAuctionIface {
 }
 
 
-contract CommunityAuctionSimple is owned {
+contract CommunityAuctionSimple is owned, CommAuctionIface {
     // about $1USD at $600usd/eth
     uint public commBallotPriceWei = 1666666666000000;
 

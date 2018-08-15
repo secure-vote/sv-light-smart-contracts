@@ -23,8 +23,10 @@
     "jq": "^1.7.2",
     "js-nacl": "^1.2.2",
     "node-clip": "^0.1.1",
+    "prompt": "^1.0.0",
     "prompt-confirm": "^1.2.0",
     "ramda": "^0.25.0",
+    "rlp": "^2.1.0",
     "sanctuary": "^0.14.1",
     "solidity-coverage": "^0.5.1",
     "solium": "^1.1.6",
@@ -32,6 +34,7 @@
     "truffle": "trufflesuite/truffle",
     "tweetnacl": "^1.0.0",
     "web3": "^1.0.0-beta.33",
+    "web3-eth-contract": "^1.0.0-beta.35",
     "yargs": "^11.0.0"
   },
   "scripts": {
@@ -49,6 +52,7 @@
     "c": "./bin/compile.sh -c",
     "diff": "git diff -- . ':(exclude)_solDist/*'",
     "manage-nodes:dev": "scripts/manage-nodes.sh",
-    "test:geth": "export GETH_CLIENT=geth; yarn manage-nodes:dev && truffle test --network rpc"
+    "test:geth": "export GETH_CLIENT=geth; yarn manage-nodes:dev && truffle test --network rpc",
+    "ganache": "ganache-cli -l 10000000 -g 1 -i 15 -e 100000 -a 20"
   }
 }

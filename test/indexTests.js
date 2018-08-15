@@ -223,14 +223,15 @@ const testInit = async ({ixPayments, owner, svIx, erc20, doLog, ixBackend, bbFar
     assert.deepEqual(await svIx.getVersion(), toBigNumber(2), 'ix ver')
     assert.deepEqual(await ixBackend.getVersion(), toBigNumber(2), 'ixBackend ver')
     assert.deepEqual(await ixPayments.getVersion(), toBigNumber(2), 'ixPayments ver')
-    assert.deepEqual(await bbFarm.getVersion(), toBigNumber(2), 'bbFarm ver')
+    assert.deepEqual(await bbFarm.getVersion(), toBigNumber(3), 'bbFarm ver')
 
     // test BBFarmAux2 w/ the ballot we created above
     const aux = await BBFarmAux2.new()
 
     await doLog("checking bIDToDetails")
     const bIdToDetails = await aux.ballotIdToDetails(svIx.address, ballotId)
-    const expBIdToDetails = [toBigNumber(0), zeroHash, getSB(packed), getStartTS(packed), getEndTS(packed), specHash, false]
+    const startTs = (await bbFarm.getDetails(ballotId, zeroAddr))[4]
+    const expBIdToDetails = [toBigNumber(0), zeroHash, getSB(packed), startTs, getEndTS(packed), specHash, false]
     assert.deepEqual(bIdToDetails, expBIdToDetails, 'bIdToDetails init matches')
 
     await doLog("checking getBBFarmAddressAndBallotId")

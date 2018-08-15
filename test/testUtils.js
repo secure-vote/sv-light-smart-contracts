@@ -20,6 +20,7 @@ module.exports = function () {
         // BigNumber as in Web3 0.20.x
         return web3.toBigNumber(i.toFixed ? i.toFixed() : i.toString());
     }
+    this.toBigN = this.toBigNumber
 
     this.R = R;
 
@@ -39,7 +40,7 @@ module.exports = function () {
     })
 
     assert.reallyClose = (a, b, msg, threshold = 3) => {
-        // a and b should be within ~2.9999 units of eachother (with default threshold)
+        // a and b should be within ~2.9999 units of each other (with default threshold)
         if (a.isBigNumber && b.isBigNumber && a.isBigNumber() && b.isBigNumber()) {
             assert.equal(a.minus(b).abs().lte(threshold), true, `assert.reallyClose BigNumbers (${a.toFixed()}) (${b.toFixed()}) :: ` + msg)
         } else {

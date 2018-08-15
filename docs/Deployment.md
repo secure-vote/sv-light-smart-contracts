@@ -24,13 +24,13 @@ You can use `./bin/deploy-ix-full.js` to deploy the contract. Be sure to check `
 * `--fresh`
 
 
-In order these are deployed:
+In order these are deployed: (construct args follow name)
 
-* SVIndexBackend
-* SVPayments
-* BBFarm
-* CommunityAuction
-* Index
+* SVIndexBackend - `()`
+* SVPayments - `(address _emergencyAdmin)`
+* BBFarm - `()`
+* CommunityAuction - `()`
+* Index - `(backend, payments, ensOwnerProxy, bbfarm, commAuciton)`
 
 Then you'll need to set permissions on:
 

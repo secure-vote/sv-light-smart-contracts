@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+
+const yargs = require('yargs')
+
+const args = yargs.option('dir', {
+    alias: 'd',
+    demandOption: true,
+    describe: "directory where ContractName.bin and ContractName.abi are stored.",
+    type: 'string'
+}).command('$0 <contractName>', 'Build a contract', (y) => {
+    y.positional('contractName', {
+        describe: "Name of the contract, both a .bin and .abi version of the file must exist.",
+        string: true,
+    })
+}).argv
+
+
+const logItem = (title, body) => {
+    console.log(`### --- ${title} --- ###\n\n${body}\n\n`)
+}
+
+
+const main = async () => {
+    const path = require('path')
+    const rawPath = path.join(args.dir, args.contractName)
+    const [fAbi, fBin] = [rawPath + ".abi", rawPath + ".bin"]
+    console.log("Loading files: ", [fAbi, fBin])
+
+    const fs = require('fs')
+    const abi = JSON.parse(fs.readFileSync(fAbi).toString())
+    const bin = fs.readFileSync(fBin).toString()
+
+    const Contract = require('web3-eth-contract')
+    const c = new Contract(abi)
+
+    const [constructor] = abi.filter(i => i.type === "constructor")
+    const schema = { properties: {} }
+    const paramNames = []
+
+    const R = require('ramda')
+    R.map(input => {
+        let pname = `${input.name} (${input.type})`
+        schema.properties[pname] = { require: true }
+        paramNames.push(pname)
+    }, constructor.inputs)
+
+    const prompt = require('prompt')
+    prompt.start()
+    const params = await new Promise((res, rej) => prompt.get(schema, (e, r) => e ? rej(e) : res(r)))
+
+    console.log("Got params", params)
+
+    const arguments = R.map(n => params[n], paramNames)
+    const _deploy = c.deploy({data: bin, arguments}).encodeABI()
+
+    logItem(`${args.contractName} Deploy Code`, "0x" + _deploy)
+    logItem(`Parameters Provided (Named)`, JSON.stringify(params, null, 2))
+    logItem(`Parameters Provided (Ordered)`, JSON.stringify(arguments))
+}
+main()
