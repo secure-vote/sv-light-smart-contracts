@@ -10,6 +10,7 @@ const naclJs = require("js-nacl")
 const crypto = require("crypto")
 const { mkSignedBallotForProxy } = require("sv-lib/lib/ballotBox")
 const Account = require("eth-lib/lib/account")
+const rlp = require('rlp')
 
 const R = require('ramda')
 
@@ -37,6 +38,23 @@ const genStdPacked = async () => {
     const [s,e] = await genStartEndTimes();
     const p = mkPacked(s, e, USE_ETH | USE_NO_ENC);
     return p;
+}
+
+const toRlp = (ethHex) => {
+    let toEnc = Buffer.from(ethHex.slice(2), 'hex')
+    if (Array.isArray(ethHex)) {
+        toEnc = R.map(h => Buffer.from(h.slice(2), 'hex'), ethHex)
+    }
+    return '0x' + rlp.encode(toEnc).toString('hex')
+}
+
+const fromRlp = ethHex => {
+    const decoded = rlp.decode(Buffer.from(ethHex.slice(2), 'hex'))
+
+    if (Array.isArray(decoded)) {
+        return R.map(i => '0x' + i.toString('hex'), decoded)
+    }
+    return '0x' + decoded.toString('hex')
 }
 
 
@@ -400,13 +418,69 @@ const testRevertConditions = async ({owner, accounts, farmPx, farmRemote, doLog}
 
 
 const testGetVotes = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
+    const ballotId = await genBallot(farmPx, owner)
 
+    const [,u1,u2,u3] = accounts
+    const getTs = async () => (await getBlock('latest')).timestamp
+
+    const exs = R.map(i => `0x000${i}`, R.range(1, 7))
+    const exsEncoded = R.map(toRlp, exs)
+
+    await doLog(`extras and encoded: ${exs} -- ${exsEncoded}`)
+
+    await farmRemote.submitVote(ballotId, "0x01", exs[0], {from: u1})
+    const ts1 = await getTs()
+
+    // allow us to check we can get votes after ts1
+    await (new Promise((res, rej) => setTimeout(res, 1000)))
+
+    await farmRemote.submitVote(ballotId, "0x02", exs[1], {from: u1})
+    const ts2 = await getTs()
+    await farmRemote.submitVote(ballotId, "0x01", exs[2], {from: u2})
+    const ts3 = await getTs()
+    await farmRemote.submitVote(ballotId, "0x02", exs[3], {from: u2})
+    const ts4 = await getTs()
+    await farmRemote.submitVote(ballotId, "0x01", exs[4], {from: u3})
+    const ts5 = await getTs()
+    await farmRemote.submitVote(ballotId, "0x02", exs[5], {from: u3})
+    const ts6 = await getTs()
+
+    // exclude first vote in vs1
+    const vs1 = await farmRemote.getVotesBetween(ballotId, ts1 + 1, 2e9)
+    // get only u1's votes in vs2
+    const vs2 = await farmRemote.getVotesBetweenFor(ballotId, 0, 2e9, u1)
+
+    const expectedVs1 = [
+        R.map(b => w3.utils.padRight(b, 64), ["0x02", "0x01", "0x02", "0x01", "0x02"]),
+        [u1, u2, u2, u3, u3],
+        toRlp(R.slice(1, 6, exs)),
+        R.map(toBigN, [ts2, ts3, ts4, ts5, ts6])
+    ]
+
+    const expectedVs2 = [
+        R.map(b => w3.utils.padRight(b, 64), ["0x01", "0x02"]),
+        toRlp(R.slice(0, 2, exs)),
+        R.map(toBigN, [ts1, ts2])
+    ]
+
+    assert.deepEqual(vs1, expectedVs1, "vs1 matches")
+    assert.deepEqual(vs2, expectedVs2, "vs2 matches")
+
+    assert.deepEqual(fromRlp(vs1[2]), R.slice(1,6,exs), 'rlp vs1 extras decoding matches')
+    assert.deepEqual(fromRlp(vs2[1]), R.slice(0,2,exs), 'rlp vs2 extras decoding matches')
 }
 
 
 const testMisc = async ({owner, accounts, farmPx, farmRemote, doLog}) => {
     const [,u1] = accounts
+    const ballotId = await genBallot(farmPx, owner, mkPacked(0, 2e9, USE_ETH | USE_TESTING | USE_NO_ENC))
 
+    await assertRevert(farmPx.revealSeckey(ballotId, zeroHash), "can't reveal seckey before end time")
+    await farmPx.setEndTime(ballotId, 0)
+    const sk = genRandomBytes32()
+    assert.equal((await farmPx.getDetails(ballotId, u1))[2], zeroHash, "seckey 0 before reveal")
+    await farmPx.revealSeckey(ballotId, sk)
+    assert.equal((await farmPx.getDetails(ballotId, u1))[2], sk, "seckey matches after reveal")
 }
 
 

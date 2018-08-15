@@ -26,6 +26,7 @@
     "prompt": "^1.0.0",
     "prompt-confirm": "^1.2.0",
     "ramda": "^0.25.0",
+    "rlp": "^2.1.0",
     "sanctuary": "^0.14.1",
     "solidity-coverage": "^0.5.1",
     "solium": "^1.1.6",
