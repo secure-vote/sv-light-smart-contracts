@@ -1,4 +1,6 @@
-pragma solidity ^0.4.13;
+pragma solidity 0.4.24;
+
+// (c) 2018 SecureVote (Exo One Pty Ltd)
 
 contract BBFarmEvents {
     event BallotCreatedWithID(uint ballotId);
@@ -1201,7 +1203,7 @@ contract BBFarm is BBFarmIface {
     }
 }
 
-contract RemoteBBFarmProxy is BBFarmIface {
+contract BBFarmRemoteProxy is BBFarmIface {
     using BBLibV7 for BBLibV7.DB;
 
     bytes4 namespace;
@@ -1417,7 +1419,7 @@ contract RemoteBBFarmProxy is BBFarmIface {
     }
 }
 
-contract RemoteBBFarm is BBFarmIface {
+contract BBFarmRemote is BBFarmIface {
     // libs
     using BBLibV7 for BBLibV7.DB;
     using MemArrApp for bytes32[];

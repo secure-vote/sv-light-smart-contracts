@@ -31,6 +31,7 @@ doSvCompile(){
 # doSvCompile SVPayments
 # doSvCompile BBFarm
 doSvCompile BBFarmRemote
+doSvCompile BBLib.v7
 # doSvCompile BBFarmProxy
 # doSvCompile CommunityAuction
 # doSvCompile EnsOwnerProxy

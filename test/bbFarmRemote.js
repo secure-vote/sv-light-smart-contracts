@@ -532,6 +532,6 @@ contract("BBFarm Remote", function(accounts) {
         ["test misc", testMisc],
     ]
     R.map(([desc, f]) => {
-        it("BBFarm: " + desc, _wrapTest({accounts}, f))
+        it("BBFRemote: " + desc, _wrapTest({accounts}, f))
     }, tests);
 });

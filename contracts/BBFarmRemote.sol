@@ -35,7 +35,7 @@ library CalcBallotId {
  * This contract is on mainnet - should not take votes but should
  * deterministically calculate ballotId
  */
-contract RemoteBBFarmProxy is BBFarmIface {
+contract BBFarmRemoteProxy is BBFarmIface {
     using BBLibV7 for BBLibV7.DB;
 
     bytes4 namespace;
@@ -257,7 +257,7 @@ contract RemoteBBFarmProxy is BBFarmIface {
  * (often / always by proxy) and calculates the same ballotId as
  * above. Does _not_ require init'ing the ballot first
  */
-contract RemoteBBFarm is BBFarmIface {
+contract BBFarmRemote is BBFarmIface {
     // libs
     using BBLibV7 for BBLibV7.DB;
     using MemArrApp for bytes32[];
