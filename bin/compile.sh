@@ -65,7 +65,11 @@ fi
 
 mkdir -p "./$OUTPUT_DIR"
 
-LIB_STR=$(cat ./bin/libs.txt | tr '\n' ' ')
+if [[ "$NO_SOLC_LIBS" == "" ]]; then
+  LIB_STR=$(cat ./bin/libs.txt | tr '\n' ' ')
+else
+  LIB_STR=""
+fi
 
 function solcCommon {
     solc "$@" -o "./$OUTPUT_DIR/" --overwrite --optimize "$CONTRACT_PATH" --libraries "$LIB_STR" --allow-paths './ens,./contracts,./libs,'
